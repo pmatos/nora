@@ -1,0 +1,91 @@
+# Version set according the the cmake versions available in Ubuntu/Bionic:
+# https://packages.ubuntu.com/bionic/cmake
+cmake_minimum_required(VERSION 3.10.2)
+
+project(nora LANGUAGES C CXX VERSION 102)
+include(GNUInstallDirs)
+include(CTest)
+include(FetchContent)
+
+if(POLICY CMP0077)
+  cmake_policy(SET CMP0077 NEW)
+endif()
+
+if(POLICY CMP0116)
+  cmake_policy(SET CMP0116 NEW)
+endif()
+
+# The C++ standard whose features are required to build nora.
+# Using C++20 to access goodies like wstring::starts_with.
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -flto")
+set(CMAKE_CXX_FLAGS_MINSIZEREL "-Oz -flto")
+
+set(CMAKE_BUILD_WITH_INSTALL_NAME_DIR ON)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+if(NOT CMAKE_BUILD_TYPE)
+  message(STATUS "No build type selected, default to Release")
+  set(CMAKE_BUILD_TYPE "Release")
+endif()
+
+# For git users, attempt to generate a more useful version string
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
+  find_package(Git QUIET REQUIRED)
+  execute_process(COMMAND
+    "${GIT_EXECUTABLE}" --git-dir=${CMAKE_CURRENT_SOURCE_DIR}/.git describe --always HEAD
+    RESULT_VARIABLE
+    GIT_VERSION_RESULT
+    OUTPUT_VARIABLE
+    GIT_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+  if(${GIT_VERSION_RESULT})
+    message(WARNING "Error running git describe to determine version")
+  else()
+    set(PROJECT_VERSION "${PROJECT_VERSION} (${GIT_VERSION})")
+  endif()
+endif()
+
+configure_file(config.h.in src/include/config.h)
+
+FetchContent_Declare(
+  plog GIT_REPOSITORY https://github.com/SergiusTheBest/plog GIT_TAG 1.1.9
+)
+
+FetchContent_MakeAvailable(plog)
+include_directories(${plog_SOURCE_DIR}/include)
+add_compile_definitions(PLOG_ENABLE_WCHAR_INPUT)
+
+# Look for Python3 for lit
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+# Configure GMP
+find_library(gmp gmp)
+
+if(NOT gmp)
+  message(FATAL_ERROR "GMP library not found!")
+endif()
+
+message(STATUS "Found GMP library")
+
+# Find and Configure ICU
+find_package(ICU REQUIRED COMPONENTS uc io)
+
+# Configure src
+add_subdirectory(src)
+
+# Configure lit tests
+add_subdirectory(test)
+
+# FIXME: From cmake 3.22 or so, we can set permissions with the configure_file command, which is more straightforward.
+configure_file(scripts/nora-lit.in ${CMAKE_BINARY_DIR}/nora-lit @ONLY)
+file(COPY ${CMAKE_BINARY_DIR}/nora-lit
+  FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ
+  DESTINATION ${CMAKE_BINARY_DIR}/bin
+)
+file(REMOVE ${CMAKE_BINARY_DIR}/nora-lit)

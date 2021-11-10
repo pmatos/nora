@@ -1,0 +1,23 @@
+[
+    {
+      "name": "Clang 13.0.1 x86_64-pc-linux-gnu",
+      "compilers": {
+        "C": "/bin/clang-13",
+        "CXX": "/bin/clang++-13"
+      }
+    },
+    {
+      "name": "GCC 10.3.0 x86_64-pc-linux-gnu",
+      "compilers": {
+        "C": "/bin/x86_64-pc-linux-gnu-gcc-10.3.0",
+        "CXX": "/bin/x86_64-pc-linux-gnu-g++-10.3.0"    
+      }
+    },
+    {
+      "name": "GCC 11.2.0 x86_64-pc-linux-gnu",
+      "compilers": {
+        "C": "/bin/x86_64-pc-linux-gnu-gcc-11.2.0",
+        "CXX": "/bin/x86_64-pc-linux-gnu-g++-11.2.0"
+      }
+    }
+  ]

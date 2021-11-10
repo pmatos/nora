@@ -1,0 +1,36 @@
+Makefile
+*.pyc
+*~
+*.diff
+TAGS
+tags
+
+# files related to building in-tree
+CMakeFiles
+*.cmake
+/CMakeCache.txt
+/Makefile
+/*.ninja
+/.ninja_deps
+/.ninja_log
+/bin/
+/lib/
+/config.h
+compile_commands.json
+test/lit/lit.site.cfg.py
+venv/ # virtualenv during dev
+out/  # where tests go to during dev
+
+# Clangd/ccls cache
+.cache/
+.ccls-cache/
+
+# Codechecker
+.codechecker/
+
+build/
+
+# Racket files
+compiled/
+*.rktl
+!expander.rktl
