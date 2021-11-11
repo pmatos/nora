@@ -30,7 +30,7 @@ jobs:
       - run: |
           mkdir -p expander
           cp racket/racket/src/expander/compiled/expander.rktl expander/
-      - if: ${{ env.ACT == "true" }}
+      - if: ${{ env.ACT == 'true' }}
         run: |
           curl -sL https://deb.nodesource.com/setup_16.x | bash
           apt-get install -y nodejs
