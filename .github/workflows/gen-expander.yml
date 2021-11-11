@@ -1,0 +1,41 @@
+name: Compile Rkt Expander Linklet
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+
+jobs:
+  gen-expander:
+    runs-on: ubuntu-18.04
+    container: racket/racket:latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - run: racket --version
+      - run: git clone --depth=1 https://github.com/racket/racket
+      - working-directory: ./racket/
+        run: make fetch-pb
+      - working-directory: ./racket/racket/src/
+        run: |
+          ./configure
+          make -j$(nproc)
+          make -j$(nproc) install
+      - working-directory: ./racket/racket/src/expander
+        run: ../../bin/racket -N raco -l- raco pkg install --auto compiler-lib
+      - working-directory: ./racket/racket/src/expander
+        run: make expander-src
+      - run: |
+          mkdir -p expander
+          cp racket/racket/src/expander/compiled/expander.rktl expander/
+      - if: ${{ env.ACT == "true" }}
+        run: |
+          curl -sL https://deb.nodesource.com/setup_16.x | bash
+          apt-get install -y nodejs
+      - uses: EndBug/add-and-commit@v7
+        with:
+          add: 'expander/expander.rktl'
+          author_name: 'GitHub Actions'
+          author_email: ''
+          message: 'Update expander linklet'
+          push: true
+        
