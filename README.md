@@ -21,7 +21,11 @@ So the MVP plan would be to have something that resembles:
                                 |                                                    |
 User Code ----------------------+(2)-----------> Expanded User Code (linklet) --(5)--|
                                                                                      |
-            Runtime (C/C++/Rust...) ------------------(3)----------------------> LLVM IR --(6)--> JIT/Binary
+            Runtime (C/C++/Rust...) ------------------(3)----------------------> LLVM IR
+                                                                                     |
+                                                                                    (6)
+                                                                                     |
+                                                                                JIT/Binary
 ```
 
 I have a feeling here that the linklet needs to be compiled and linked into the JIT/Binary as well but I am not 100% sure. I think this is required in case the user uses `eval` that triggers macro expansion... but, really, should we provide `eval` in the language? Isn't `eval` evil?
