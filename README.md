@@ -41,16 +41,30 @@ Steps:
 
 ## Expanding user code
 
+To be honest, at this point I am not sure how we execute a single linklet and call the expand function to generate a linklet from user code. It would be interesting to do some research here and come up with some examples.
+
+### Examples
+
 TODO
 
 ## Runtime
 
 The Runtime needs to compile to LLVM IR, so we can use any language supported by LLVM. C++ is the obvious choice but I think Rust would be an interesting possibility as well.
 
+###
+
+The runtime will most likely have to be implemented in C++ or Rust. Since I am not confident in Rust or that Rust is a good idea cause it might require its own runtime, it might be safer to get this done in C++.
+
 ## Compiling the Expander (do we need `eval`?)
 
-TODO
+Compiling the expander is not a problem _once_ our compiler proper compiles all forms used by the expander (see `expander.rktl`). Until then, I don't think we can compile it and therefore include it in compiled binaries.
 
 ## Compiler proper
 
-TODO
+### Language
+
+We could write the compiler proper in Racket. If we do so, then we can generate textual LLVM IR and then call `llc` to compile to bytecode. However, long term this is not a good idea so to avoid the I/O we would need to create `llvm-c` bindings (LLVM is written in C++ os trivial to use from C++ but from C one has to use LLVM-C library). `llvm-c` bindings are not complete so it is possible we would end contributing to `llvm-c` itself, which is what we would need to call from the Racket FFI. Also, we would in that case need to use Racket to compile  the sources until NORA is able to do it. Since we already depend on Racket for the expander, it would be no big deal to depend on Racket for this either.
+
+Alternatively, we could follow the trend and do it in C++ but I am not sure there's any advantage in that besides being able to easily use LLVM libraries. The downside is that parsing Racket needs to be implemented. Also pattern matching in Racket is much better and certainly a big plus for compilers. 
+
+
