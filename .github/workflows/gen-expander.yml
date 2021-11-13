@@ -14,6 +14,7 @@ jobs:
         with:
           token: ${{ secrets.GH_ACTION_TOKEN }}
       - run: racket --version
+      - run: apt-get update && apt-get install -y git
       - run: git clone --depth=1 https://github.com/racket/racket
       - working-directory: ./racket/
         run: make fetch-pb
