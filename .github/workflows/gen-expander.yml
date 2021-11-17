@@ -34,7 +34,8 @@ jobs:
         run: |
           curl -sL https://deb.nodesource.com/setup_16.x | bash
           apt-get install -y nodejs
-      - uses: EndBug/add-and-commit@v7
+      - if: ${{ env.ACT != 'true' }}
+        uses: EndBug/add-and-commit@v7
         with:
           add: 'expander/expander.rktl'
           author_name: 'GitHub Actions'
