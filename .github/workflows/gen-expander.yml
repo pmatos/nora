@@ -1,7 +1,6 @@
 name: Compile Rkt Expander Linklet
 
 on:
-  push:
   schedule:
     - cron: "0 0 * * *"
 
