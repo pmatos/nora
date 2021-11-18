@@ -1,6 +1,7 @@
 name: Compile Rkt Expander Linklet
 
 on:
+  push:
   schedule:
     - cron: "0 0 * * *"
 
@@ -30,16 +31,12 @@ jobs:
       - run: |
           mkdir -p expander
           cp racket/racket/src/expander/compiled/expander.rktl expander/
-      - if: ${{ env.ACT == 'true' }}
-        run: |
-          curl -sL https://deb.nodesource.com/setup_16.x | bash
-          apt-get install -y nodejs
       - if: ${{ env.ACT != 'true' }}
         uses: EndBug/add-and-commit@v7
         with:
           add: 'expander/expander.rktl'
-          author_name: 'GitHub Actions'
-          author_email: ''
+          author_name: 'Paulo Matos (via GH Action)'
+          author_email: 'p@ocmatos.com'
           message: 'Update expander linklet'
           push: true
         
