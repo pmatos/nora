@@ -11,11 +11,11 @@ jobs:
     container: racket/racket:latest
 
     steps:
+      - run: apt-get update && apt-get install -y git build-essential
       - uses: actions/checkout@v2
         with:
           token: ${{ secrets.GH_ACTION_TOKEN }}
       - run: racket --version
-      - run: apt-get update && apt-get install -y git build-essential
       - run: git clone --depth=1 https://github.com/racket/racket
       - working-directory: ./racket/
         run: make fetch-pb
