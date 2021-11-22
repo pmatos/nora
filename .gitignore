@@ -1,0 +1,20 @@
+Makefile
+*.pyc
+*~
+*.diff
+TAGS
+tags
+
+# files related to building in-tree
+CMakeFiles
+*.cmake
+/CMakeCache.txt
+/Makefile
+/*.ninja
+/.ninja_deps
+/.ninja_log
+/bin/
+/lib/
+/config.h
+compile_commands.json
+test/lit/lit.site.cfg.py

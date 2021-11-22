@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+
+import os
+from lit.main import main
+
+# A simple wrapper around `lit` test running.   Loosely based on
+# llvm's llvm-lit script
+
+builtin_parameters = {
+    'config_map': {
+        os.path.normcase(os.path.normpath('@CMAKE_SOURCE_DIR@/test/lit/lit.cfg.py')):
+        os.path.normcase(os.path.normpath('@CMAKE_BINARY_DIR@/test/lit/lit.site.cfg.py'))
+    }
+}
+
+if __name__ == '__main__':
+    main(builtin_parameters)
