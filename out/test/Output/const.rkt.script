@@ -1,1 +1,1 @@
-set -o pipefail;set -x;{ : 'RUN: at line 3';   /home/pmatos/dev/nora/bin/nora /home/pmatos/dev/nora/test/lit/const.rkt | filecheck /home/pmatos/dev/nora/test/lit/const.rkt; }
+set -o pipefail;set -x;{ : 'RUN: at line 3';   /home/pmatos/dev/nora-lang/build/bin/nora /home/pmatos/dev/nora-lang/test/const.rkt | file/home/pmatos/dev//home/pmatos/dev/nora-lang/build/bin/nora-lang/build/bin/check /home/pmatos/dev/nora-lang/test/const.rkt; }

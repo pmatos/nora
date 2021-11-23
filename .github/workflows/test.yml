@@ -1,0 +1,23 @@
+name: Test
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-18.04
+    container: racket/racket:latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          mkdir build
+          cmake ..
+      - run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install -r requirements-dev.txt
+      - run: |
+          raco exe -o nora main.rkt
+          raco distribute build/ nora
+      - working-directory: ./build
+        run: bin/check

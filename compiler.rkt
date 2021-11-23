@@ -4,13 +4,14 @@
 (require (for-syntax racket/base)
          racket/format
          racket/path
-         racket/pretty
          racket/runtime-path
          racket/set
          syntax/parse
          syntax/stx
          "logging.rkt")
-       
+
+(provide quick-expand)
+
 (define-runtime-path nora-main-module "main.rkt")
 
 (define nora-compiler-dir (path-only nora-main-module))
@@ -82,16 +83,3 @@
   (define full-path (path->complete-path (actual-module-path in-path)))
   (parameterize ([current-directory (path-only full-path)])
     (do-expand (open-read-module (file-name-from-path in-path)))))
-
-(module+ main
-  (require racket/cmdline)
-
-  (define source
-    (command-line
-     #:program "nora"
-     #:args (filename)
-     (string->path filename)))
-  
-  (define expanded-module (quick-expand source))
-  (pretty-write (syntax->datum expanded-module)))
-      
