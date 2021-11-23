@@ -12,8 +12,7 @@ config.test_exec_root = os.path.join(config.nora_src_root, 'out', 'test')
 bin_dir = os.path.join(config.nora_build_root, 'bin')
 for tool_file in os.listdir(bin_dir):
     tool_path = config.nora_build_root + '/bin/' + tool_file
-    tool = tool_file[:-4] if tool_file.endswith('.exe') else tool_file
-    config.substitutions.append((tool, tool_path))
+    config.substitutions.append((tool_file, tool_path))
 
 # Also make the `not` command available
 not_file = config.nora_src_root + '/scripts/not.py'

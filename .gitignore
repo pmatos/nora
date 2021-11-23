@@ -18,3 +18,4 @@ CMakeFiles
 /config.h
 compile_commands.json
 test/lit/lit.site.cfg.py
+venv/
