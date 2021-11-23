@@ -1,6 +1,6 @@
-# nora-lang
+# NORA
 
-NORA-lang is an experimental Racket implementation written with a LLVM backend. This is an experiment on how we can successfully create a different community around Racket. A community that's not based on a core-team making on the decisions but on a community driven by RFCs and user participation. 
+NORA is an experimental Racket implementation written with a LLVM backend. This is an experiment on how we can successfully create a different community around Racket. A community that's not based on a core-team making on the decisions but on a community driven by RFCs and user participation. 
 
 Community-wise there are surely many things to decide but I have been thinking about the technical and this is essential a possibility on how to proceed if one wanted to create an alternative implementation of Racket based on LLVM.
 
