@@ -47,9 +47,9 @@
 (define (actual-module-path in-path)
   (cond
     [(path? in-path) in-path]
-    [(and (symbol? in-path) (primitive-module? in-path))
-     (build-path nora-runtime-dir
-                 (~a (substring (symbol->string in-path) 2) ".rkt"))]
+;    [(and (symbol? in-path) (primitive-module? in-path))
+;     (build-path nora-runtime-dir
+;                 (~a (substring (symbol->string in-path) 2) ".rkt"))]
     [else (error 'actual-module-path "~a is not a primitive module" in-path)]))
 
 (define (read-module input)
