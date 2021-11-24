@@ -32,8 +32,14 @@ endif()
 configure_file(config.h.in config.h)
 
 # Look for racket and raco
-find_program (RACKET_BOOT racket REQUIRED)
 find_program (RACO_BOOT raco REQUIRED)
+
+# Build nora from racket
+add_custom_target(nora ALL
+  COMMAND raco exe -o nora main.rkt
+  COMMAND raco distribute ${CMAKE_BINARY_DIR} nora
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  DEPENDS main.rkt)
 
 # Look for Python3 for lit
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
