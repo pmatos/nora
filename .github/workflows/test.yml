@@ -16,8 +16,5 @@ jobs:
           cd build
           cmake ..
       - run: pip3 install -r requirements-dev.txt
-      - run: |
-          raco exe -o nora main.rkt
-          raco distribute build/ nora
       - working-directory: ./build
-        run: python3 bin/check
+        run: make check
