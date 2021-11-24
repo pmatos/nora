@@ -20,8 +20,8 @@ def path(p):
     if not p: return ''
     return str((Path(__file__).parent / p).resolve())
 
-map_config(path(r'@CMAKE_SOURCE_DIR@/test/lit/lit.cfg.py'),
-           path(r'@CMAKE_BINARY_DIR@/test/lit/lit.site.cfg.py'))
+map_config(path(r'@CMAKE_SOURCE_DIR@/test/lit.cfg.py'),
+           path(r'@CMAKE_BINARY_DIR@/test/lit.site.cfg.py'))
 
 builtin_parameters['config_map'] = config_map
 
