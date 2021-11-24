@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21.4)
+cmake_minimum_required(VERSION 3.18.4)
 
 project(nora LANGUAGES C CXX VERSION 102)
 include(GNUInstallDirs)
@@ -41,7 +41,11 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 # Configure lit tests
 add_subdirectory(test)
 
-configure_file(scripts/nora-lit.in ${CMAKE_BINARY_DIR}/bin/nora-lit
-  FILE_PERMISSIONS OWNER_READ OWNER_EXECUTE GROUP_READ
-  @ONLY)
+# FIXME: From cmake 3.22 or so, we can set permissions with the configure_file command, which is more straightforward.
+configure_file(scripts/nora-lit.in ${CMAKE_BINARY_DIR}/nora-lit @ONLY)
+file(COPY ${CMAKE_BINARY_DIR}/nora-lit
+  FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ
+  DESTINATION ${CMAKE_BINARY_DIR}/bin
+  )
+file(REMOVE ${CMAKE_BINARY_DIR}/nora-lit)
 
