@@ -22,7 +22,7 @@ not_file = config.nora_src_root + '/scripts/not.py'
 python = sys.executable.replace('\\', '/')
 config.substitutions.append(('not', python + ' ' + not_file))
 
-# and %nora - this will replace the %nora in the test headers by its proper path
-# such that lit can always find it.
-config.substitutions.append(('%nora',
-                             os.path.join(config.nora_tools_root, 'nora')))
+# and %norac - this will replace the %norac in the test headers by its proper
+# path such that lit can always find it.
+config.substitutions.append(('%norac',
+                             os.path.join(config.nora_tools_root, 'norac')))

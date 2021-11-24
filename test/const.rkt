@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; RUN: nora %s | filecheck %s
+;; RUN: norac %s | filecheck %s
 ;;      CHECK: (module const racket/base
 ;; CHECK-NEXT:  (#%module-begin
 ;; CHECK-NEXT:   (module configure-runtime '#%kernel
