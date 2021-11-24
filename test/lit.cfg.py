@@ -1,10 +1,15 @@
 import os
 import lit.formats
 
+import pprint
+
 config.name = "NORA lit tests"
 config.test_format = lit.formats.ShTest(True)
 
 config.suffixes = ['.rkt']
+
+pp = pprint.PrettyPrinter(indent=4)
+pp.pprint(config)
 
 config.test_source_root = os.path.dirname(__file__)
 config.test_exec_root = os.path.join(config.nora_build_root, 'test')

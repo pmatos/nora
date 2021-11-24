@@ -36,6 +36,7 @@ configure_file(config.h.in config.h)
 # Configure lit tests
 add_subdirectory(test)
 
-configure_file(scripts/nora-lit.in ${CMAKE_BINARY_DIR}/bin/nora-lit @ONLY)
-configure_file(scripts/check.in ${CMAKE_BINARY_DIR}/bin/check @ONLY)
+configure_file(scripts/nora-lit.in ${CMAKE_BINARY_DIR}/bin/nora-lit
+  FILE_PERMISSIONS OWNER_READ OWNER_EXECUTE GROUP_READ
+  @ONLY)
 
