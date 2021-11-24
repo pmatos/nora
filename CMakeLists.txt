@@ -1,6 +1,4 @@
-# Version set according the the cmake versions available in Ubuntu/Bionic:
-# https://packages.ubuntu.com/bionic/cmake
-cmake_minimum_required(VERSION 3.10.2)
+cmake_minimum_required(VERSION 3.21.4)
 
 project(nora LANGUAGES C CXX VERSION 102)
 include(GNUInstallDirs)
@@ -32,6 +30,13 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
 endif()
 
 configure_file(config.h.in config.h)
+
+# Look for racket and raco
+find_program (RACKET_BOOT racket REQUIRED)
+find_program (RACO_BOOT raco REQUIRED)
+
+# Look for Python3 for lit
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 # Configure lit tests
 add_subdirectory(test)
