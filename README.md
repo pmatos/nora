@@ -4,6 +4,24 @@ NORA is an experimental Racket implementation written with a LLVM backend. This 
 
 Community-wise there are surely many things to decide but I have been thinking about the technical and this is essential a possibility on how to proceed if one wanted to create an alternative implementation of Racket based on LLVM.
 
+# Building & Testing
+
+There's not much happening right now, but the right way to try this is by running a `cmake` configuration build and running the lit tests.
+
+```
+$ git clone https://github.com/pmatos/nora
+$ cd nora 
+$ mkdir build && cd build
+$ cmake -G Ninja ..
+$ ninja check
+```
+
+All tests should pass. If you do modifications, you can run the testing workflow with [act](https://github.com/nektos/act) inside the nora directory with the following command line:
+
+```
+$ act -P ubuntu-20.04=ghcr.io/catthehacker/ubuntu:act-20.04 -j test
+```
+
 # Linklets
 
 Everything in Racket land is compiled down into a linklet. The linklet uses the language of [Fully Expanded Programs (FEP)](https://docs.racket-lang.org/reference/syntax-model.html#%28part._fully-expanded%29), therefore to compile Racket one needs an expander, a compiler for FEP, and a FEP runtime. The runtime of FEP is responsible to implement access to OS specific stuff like threads, filesystem, etc (which is what in RacketCS is being done by [Rumble](https://github.com/racket/racket/tree/master/racket/src/cs/rumble)).
