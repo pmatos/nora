@@ -1,2 +1,2 @@
 #!/bin/sh
-exec racket @CMAKE_SOURCE_DIR@/main.rkt $@
+exec racket @CMAKE_SOURCE_DIR@/src/main.rkt $@
