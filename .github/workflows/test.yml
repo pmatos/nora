@@ -7,20 +7,20 @@ jobs:
     runs-on: ubuntu-20.04
 
     steps:
-      - run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake python3 python3-pip gcc g++ git
       - uses: actions/checkout@v2
-      - run: |
-          mkdir build
-          cd build
-          cmake ..
-      - run: pip3 install -r requirements-dev.txt
       - uses: Bogdanp/setup-racket@v1.7
         with:
           architecture: 'x64'
           distribution: 'full'
           variant: 'CS'
           version: 'stable'
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake python3 python3-pip gcc g++ git
+      - run: |
+          mkdir build
+          cd build
+          cmake ..
+      - run: pip3 install -r requirements-dev.txt
       - working-directory: ./build
         run: make check
