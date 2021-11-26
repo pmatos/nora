@@ -18,4 +18,5 @@ CMakeFiles
 /config.h
 compile_commands.json
 test/lit/lit.site.cfg.py
-venv/
+venv/ # virtualenv during dev
+out/  # where tests go to during dev
