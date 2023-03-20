@@ -16,17 +16,10 @@
 #include <utility>
 #include <vector>
 
-#include "ast/arithplus.h"
-#include "ast/definevalues.h"
-#include "ast/identifier.h"
-#include "ast/integer.h"
-#include "ast/lambda.h"
-#include "ast/linklet.h"
-#include "ast/values.h"
-#include "ast/void.h"
 #include "astnode.h"
 #include "exprnode.h"
 #include "parse.h"
+#include "toplevelnode_inc.h"
 #include "utils/idpool.h"
 #include "utils/upcast.h"
 

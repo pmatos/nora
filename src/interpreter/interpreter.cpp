@@ -6,14 +6,8 @@
 #include <plog/Log.h>
 #include <variant>
 
-#include "ast/arithplus.h"
-#include "ast/definevalues.h"
-#include "ast/identifier.h"
-#include "ast/integer.h"
-#include "ast/lambda.h"
 #include "ast/linklet.h"
-#include "ast/values.h"
-#include "ast/void.h"
+#include "toplevelnode_inc.h"
 #include "utils/overloaded.h"
 #include "utils/upcast.h"
 #include "valuenode.h"
