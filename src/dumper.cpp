@@ -3,15 +3,9 @@
 #include <gmp.h>
 #include <iostream>
 
-#include "ast/arithplus.h"
-#include "ast/definevalues.h"
 #include "ast/formal.h"
-#include "ast/identifier.h"
-#include "ast/integer.h"
-#include "ast/lambda.h"
 #include "ast/linklet.h"
-#include "ast/values.h"
-#include "ast/void.h"
+#include "toplevelnode_inc.h"
 
 void Dumper::operator()(nir::Identifier const &Id) {
   std::wcout << Id.getName();

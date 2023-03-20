@@ -2,11 +2,7 @@
 
 #include <utility>
 
-#include "ast/arithplus.h"
-#include "ast/integer.h"
-#include "ast/lambda.h"
-#include "ast/values.h"
-#include "ast/void.h"
+#include "toplevelnode_inc.h"
 
 using namespace nir;
 

@@ -1,10 +1,6 @@
 #include "ast/values.h"
 
-#include "ast/arithplus.h"
-#include "ast/identifier.h"
-#include "ast/integer.h"
-#include "ast/lambda.h"
-#include "ast/void.h"
+#include "exprnode_inc.h"
 
 using namespace nir;
 
