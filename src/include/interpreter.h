@@ -23,6 +23,7 @@ public:
   std::unique_ptr<nir::ValueNode> operator()(nir::ArithPlus const &AP);
   std::unique_ptr<nir::ValueNode> operator()(nir::Void const &Vd);
   std::unique_ptr<nir::ValueNode> operator()(nir::Lambda const &L);
+  std::unique_ptr<nir::ValueNode> operator()(nir::Begin const &L);
 
 private:
   // Environment map for identifiers.

@@ -59,7 +59,7 @@
 //       | (lambda <formals> <expr>)                        - parseLambda
 //       | (case-lambda (<formals> <expr>) ...)
 //       | (if <expr> <expr> <expr>)
-//       | (begin <expr> ...+)
+//       | (begin <expr> ...+)                              - parseBegin
 //       | (begin0 expr expr ...)
 //       | (let-values ([<id> ...) <expr>] ...) <expr>)
 //       | (letrec-values ([(<id> ...) <expr>] ...) <expr>)
@@ -840,8 +840,9 @@ std::unique_ptr<nir::Values> parseValues(Stream &S);
 std::unique_ptr<nir::ArithPlus> parseArithPlus(Stream &S);
 std::unique_ptr<nir::DefineValues> parseDefineValues(Stream &S);
 std::unique_ptr<nir::Formal> parseFormals(Stream &S);
-std::vector<nir::Linklet::idpair_t> parseLinkletExports(Stream &S) {
+std::unique_ptr<nir::Begin> parseBegin(Stream &S);
 
+std::vector<nir::Linklet::idpair_t> parseLinkletExports(Stream &S) {
   // parse a sequence of
   // (internal-exported-id external-exported-id)
   std::vector<nir::Linklet::idpair_t> Vec;
@@ -917,6 +918,8 @@ std::unique_ptr<nir::Integer> parseInteger(Stream &S) {
 // - an identifier
 // - a values
 // - an arithmetic plus
+// - a lambda
+// - a begin
 std::unique_ptr<nir::ExprNode> parseExpr(Stream &S) {
   std::unique_ptr<nir::Integer> I = parseInteger(S);
   if (I) {
@@ -936,6 +939,16 @@ std::unique_ptr<nir::ExprNode> parseExpr(Stream &S) {
   std::unique_ptr<nir::ArithPlus> P = parseArithPlus(S);
   if (P) {
     return std::make_unique<nir::ExprNode>(std::move(*P));
+  }
+
+  std::unique_ptr<nir::Lambda> L = parseLambda(S);
+  if (L) {
+    return std::make_unique<nir::ExprNode>(std::move(*L));
+  }
+
+  std::unique_ptr<nir::Begin> B = parseBegin(S);
+  if (B) {
+    return std::make_unique<nir::ExprNode>(std::move(*B));
   }
 
   return nullptr;
@@ -1250,4 +1263,46 @@ std::unique_ptr<nir::Formal> parseFormals(Stream &S) {
   }
 
   return std::make_unique<nir::ListFormal>(Ids);
+}
+
+// Parse lambda expression of the form:
+// (begin <expr>+)
+std::unique_ptr<nir::Begin> parseBegin(Stream &S) {
+  size_t Start = S.getPosition();
+
+  Tok T = gettok(S);
+  if (T.tok != Tok::TokType::LPAREN) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  T = gettok(S);
+  if (T.tok != Tok::TokType::BEGIN) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  // Lets create the begin node
+  std::unique_ptr<nir::Begin> Begin = std::make_unique<nir::Begin>();
+
+  while (true) {
+    std::unique_ptr<nir::ExprNode> Exp = parseExpr(S);
+    if (!Exp) {
+      break;
+    }
+    Begin->appendExpr(std::move(Exp));
+  }
+
+  T = gettok(S);
+  if (T.tok != Tok::TokType::RPAREN) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  if (Begin->bodyCount() == 0) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  return Begin;
 }

@@ -2,12 +2,7 @@
 
 #include <memory>
 
-#include "ast/arithplus.h"
-#include "ast/identifier.h"
-#include "ast/integer.h"
-#include "ast/lambda.h"
-#include "ast/values.h"
-#include "ast/void.h"
+#include "exprnode_inc.h"
 
 std::unique_ptr<nir::ExprNode> nir::ToExprNode::operator()(nir::Integer &&Int) {
   return std::make_unique<nir::ExprNode>(Int);

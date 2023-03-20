@@ -2,16 +2,9 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
-#include "ast/arithplus.h"
-#include "ast/definevalues.h"
-#include "ast/identifier.h"
-#include "ast/integer.h"
-#include "ast/lambda.h"
-#include "ast/linklet.h"
-#include "ast/values.h"
-#include "ast/void.h"
 #include "parse.h"
 #include "toplevelnode.h"
+#include "toplevelnode_inc.h"
 #include "utils/idpool.h"
 #include <optional>
 
@@ -293,4 +286,12 @@ TEST_CASE("Parsing lambdas", "[parser]") {
   const nir::ExprNode &B2 = L->getBody();
   const auto &Var = std::get<nir::Identifier>(B2);
   REQUIRE(Var == IdPool::instance().create(L"x"));
+}
+
+TEST_CASE("Parsing begin", "[parser]") {
+  Stream B1(L"(begin 1 2 3)");
+  std::unique_ptr<nir::Begin> B = parseBegin(B1);
+
+  REQUIRE(B);
+  REQUIRE(B->bodyCount() == 3);
 }

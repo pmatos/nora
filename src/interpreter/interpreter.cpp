@@ -145,3 +145,16 @@ Interpreter::operator()(nir::ArithPlus const &AP) {
 std::unique_ptr<nir::ValueNode> Interpreter::operator()(nir::Lambda const &L) {
   return nullptr; // TODO
 }
+
+std::unique_ptr<nir::ValueNode> Interpreter::operator()(nir::Begin const &B) {
+  PLOGD << "Interpreting Begin: " << std::endl;
+
+  // 1. Evaluate each expression in the body.
+  std::unique_ptr<nir::ValueNode> D;
+  for (const auto &BodyExpr : B.getBody()) {
+    D = std::visit(*this, *BodyExpr);
+  }
+
+  // 2. Return the value of the last one.
+  return D;
+}

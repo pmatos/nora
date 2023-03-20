@@ -11,8 +11,9 @@ class DefineValues;
 class Values;
 class Void;
 class Lambda;
+class Begin;
 
 using TLNode = std::variant<Identifier, Integer, ArithPlus, DefineValues,
-                            Values, Void, Lambda>;
+                            Values, Void, Lambda, Begin>;
 
 }; // namespace nir

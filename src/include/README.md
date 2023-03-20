@@ -14,6 +14,7 @@ ASTNodes
       |- +Identifier
       |- +ArithPlus
       |- +Lambda
+      |- +Begin
       |- Value
          |- +Integer
          |- +Values
