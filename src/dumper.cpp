@@ -101,3 +101,13 @@ void Dumper::operator()(nir::Linklet const &Linklet) {
 
   std::cout << ")" << std::endl;
 }
+
+void Dumper::operator()(nir::Begin const &B) {
+  Dumper Dump;
+  std::cout << "(begin ";
+  for (const auto &Expr : B.getBody()) {
+    std::visit(Dump, *Expr);
+    std::cout << " ";
+  }
+  std::cout << ")";
+}

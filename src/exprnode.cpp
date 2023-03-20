@@ -1,12 +1,6 @@
 #include "exprnode.h"
 
-#include "ast/arithplus.h"
-#include "ast/definevalues.h"
-#include "ast/identifier.h"
-#include "ast/integer.h"
-#include "ast/lambda.h"
-#include "ast/values.h"
-#include "ast/void.h"
+#include "toplevelnode_inc.h"
 
 std::unique_ptr<nir::TLNode>
 nir::ToTopLevelNode::operator()(nir::Identifier &&Id) {
@@ -28,4 +22,7 @@ std::unique_ptr<nir::TLNode> nir::ToTopLevelNode::operator()(nir::Void &&Vd) {
 }
 std::unique_ptr<nir::TLNode> nir::ToTopLevelNode::operator()(nir::Lambda &&L) {
   return std::make_unique<nir::TLNode>(std::move(L));
+}
+std::unique_ptr<nir::TLNode> nir::ToTopLevelNode::operator()(nir::Begin &&B) {
+  return std::make_unique<nir::TLNode>(std::move(B));
 }

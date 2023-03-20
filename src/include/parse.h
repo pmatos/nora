@@ -180,3 +180,4 @@ bool isDelimiter(Stream &S, size_t Offset = 0);
 // Parsing functions:
 std::unique_ptr<nir::Lambda> parseLambda(Stream &S);
 std::unique_ptr<nir::Linklet> parseLinklet(Stream &S);
+std::unique_ptr<nir::Begin> parseBegin(Stream &S);
