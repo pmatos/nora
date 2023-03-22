@@ -60,7 +60,7 @@
 //       | (case-lambda (<formals> <expr>) ...)
 //       | (if <expr> <expr> <expr>)
 //       | (begin <expr> ...+)                              - parseBegin
-//       | (begin0 expr expr ...)
+//       | (begin0 expr expr ...)                           - parseBegin
 //       | (let-values ([<id> ...) <expr>] ...) <expr>)
 //       | (letrec-values ([(<id> ...) <expr>] ...) <expr>)
 //       | (set! <id> <expr>)
@@ -1266,7 +1266,7 @@ std::unique_ptr<nir::Formal> parseFormals(Stream &S) {
 }
 
 // Parse lambda expression of the form:
-// (begin <expr>+)
+// (begin <expr>+) | (begin0 <expr>+)
 std::unique_ptr<nir::Begin> parseBegin(Stream &S) {
   size_t Start = S.getPosition();
 
@@ -1277,13 +1277,16 @@ std::unique_ptr<nir::Begin> parseBegin(Stream &S) {
   }
 
   T = gettok(S);
-  if (T.tok != Tok::TokType::BEGIN) {
+  if (T.tok != Tok::TokType::BEGIN && T.tok != Tok::TokType::BEGIN0) {
     S.rewindTo(Start);
     return nullptr;
   }
 
   // Lets create the begin node
   std::unique_ptr<nir::Begin> Begin = std::make_unique<nir::Begin>();
+  if (T.tok == Tok::TokType::BEGIN0) {
+    Begin->markAsBegin0();
+  }
 
   while (true) {
     std::unique_ptr<nir::ExprNode> Exp = parseExpr(S);

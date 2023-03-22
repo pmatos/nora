@@ -151,10 +151,21 @@ std::unique_ptr<nir::ValueNode> Interpreter::operator()(nir::Begin const &B) {
 
   // 1. Evaluate each expression in the body.
   std::unique_ptr<nir::ValueNode> D;
+  bool First = true;
   for (const auto &BodyExpr : B.getBody()) {
-    D = std::visit(*this, *BodyExpr);
+    if (B.isZero()) { // begin0 so only store result of first expression
+      if (First) {
+        D = std::visit(*this, *BodyExpr);
+      } else {
+        std::visit(*this, *BodyExpr);
+      }
+    } else { // normal begin
+      D = std::visit(*this, *BodyExpr);
+    }
+
+    First = false;
   }
 
-  // 2. Return the value of the last one.
+  // 2. Return the stored value.
   return D;
 }
