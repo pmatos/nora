@@ -4,6 +4,7 @@
 #include <iostream>
 #include <memory>
 #include <plog/Log.h>
+#include <ranges>
 #include <variant>
 
 #include "ast/linklet.h"
@@ -23,12 +24,16 @@ Interpreter::operator()(nir::Identifier const &Id) {
     PLOGD << Name << std::endl;
   }
 
-  if (Env.find(Id) != Env.end()) {
-    auto V = *(Env[Id]);
-    return std::make_unique<nir::ValueNode>(V);
-  } else {
-    return nullptr;
+  // FIXME: why is it that :
+  // for (auto &Env : Envs | std::ranges::reverse) {
+  // does not work here?
+  for (auto Env = Envs.rbegin(); Env != Envs.rend(); ++Env) {
+    auto V = Env->lookup(Id);
+    return V;
   }
+
+  // FIXME: error here UndefineIdentifier.
+  return nullptr;
 }
 
 std::unique_ptr<nir::ValueNode>
@@ -91,6 +96,7 @@ Interpreter::operator()(nir::DefineValues const &DV) {
   }
 
   // 2. Add bindings to the environment.
+  Environment Env;
   size_t Idx = 0;
   for (const auto &Id : DV.getIds()) {
     const nir::ExprNode &E = V.getExprs()[Idx++];
@@ -112,8 +118,10 @@ Interpreter::operator()(nir::DefineValues const &DV) {
                               }},
                    E);
 
-    Env[Id] = std::move(Val);
+    Env.add(Id, std::move(Val));
   }
+
+  Envs.push_back(Env);
 
   // Return void.
   return std::make_unique<nir::ValueNode>(nir::Void());

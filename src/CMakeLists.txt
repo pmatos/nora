@@ -44,6 +44,7 @@ add_llvm_executable(norac
         dumper.cpp
         exprnode.cpp
         valuenode.cpp
+        environment.cpp
         utils/idpool.cpp
         utils/upcast.cpp
         parser/parse.cpp
