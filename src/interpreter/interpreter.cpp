@@ -7,11 +7,14 @@
 #include <ranges>
 #include <variant>
 
+#include "ast/formal.h"
 #include "ast/linklet.h"
 #include "toplevelnode_inc.h"
 #include "utils/overloaded.h"
 #include "utils/upcast.h"
 #include "valuenode.h"
+
+#include <llvm/Support/ErrorHandling.h>
 
 std::unique_ptr<nir::ValueNode>
 Interpreter::operator()(nir::Identifier const &Id) {
@@ -151,7 +154,7 @@ Interpreter::operator()(nir::ArithPlus const &AP) {
 }
 
 std::unique_ptr<nir::ValueNode> Interpreter::operator()(nir::Lambda const &L) {
-  return nullptr; // TODO
+  return std::make_unique<nir::ValueNode>(L);
 }
 
 std::unique_ptr<nir::ValueNode> Interpreter::operator()(nir::Begin const &B) {
@@ -181,4 +184,82 @@ std::unique_ptr<nir::ValueNode> Interpreter::operator()(nir::Begin const &B) {
 std::unique_ptr<nir::ValueNode> Interpreter::operator()(nir::List const &L) {
   PLOGD << "Interpreting List" << std::endl;
   return std::make_unique<nir::ValueNode>(L);
+}
+
+std::unique_ptr<nir::ValueNode>
+Interpreter::operator()(nir::Application const &A) {
+  // 1. Evaluate the first expression.
+  // which should evaluate to a lambda expression.
+  std::unique_ptr<nir::ValueNode> D = std::visit(*this, A[0]);
+  // Error out if not a lambda expression.
+  if (!std::holds_alternative<nir::Lambda>(*D)) {
+    std::cerr << "Expected lambda expression in Application." << std::endl;
+    return nullptr;
+  }
+  auto L = std::make_unique<nir::Lambda>(std::get<nir::Lambda>(*D));
+
+  // 2. Evaluate each of the following expressions in order.
+  std::vector<std::unique_ptr<nir::ValueNode>> Args;
+  Args.reserve(A.length() - 1);
+  for (size_t Idx = 1; Idx < A.length(); ++Idx) {
+    Args.emplace_back(std::visit(*this, A[Idx]));
+  }
+  // If we have a list formals then, error out of args diff than formals.
+  // If we have a list rest formals then, error out if args less than formals.
+  // If it's identifier formals then it does not matter.
+  const nir::Formal &F = L->getFormals();
+  if (F.getType() == nir::Formal::Type::List) {
+    auto LF = static_cast<const nir::ListFormal &>(F);
+    if (Args.size() != LF.size()) {
+      std::cerr << "Expected " << LF.size() << " arguments, got " << Args.size()
+                << std::endl;
+      return nullptr;
+    }
+  } else if (F.getType() == nir::Formal::Type::ListRest) {
+    auto LRF = static_cast<const nir::ListRestFormal &>(F);
+    if (Args.size() < LRF.size()) {
+      std::cerr << "Expected at least " << LRF.size() << " arguments, got "
+                << Args.size() << std::endl;
+      return nullptr;
+    }
+  }
+
+  // 3. Apply the lambda expression to the evaluated expressions.
+  // Create an environment where each argument is bound to the corresponding
+  // value. Then evaluate the lambda body in this environment.
+  Environment Env;
+  if (F.getType() == nir::Formal::Type::List) {
+    auto LF = static_cast<const nir::ListFormal &>(F);
+    for (size_t Idx = 0; Idx < Args.size(); ++Idx) {
+      Env.add(LF[Idx], std::move(Args[Idx]));
+    }
+  } else if (F.getType() == nir::Formal::Type::ListRest) {
+    auto LRF = static_cast<const nir::ListRestFormal &>(F);
+    size_t Idx = 0;
+    for (; Idx < LRF.size(); ++Idx) {
+      Env.add(LRF[Idx], std::move(Args[Idx]));
+    }
+    // Create a list of the remaining arguments.
+    auto L = std::make_unique<nir::List>();
+    for (; Idx < Args.size(); ++Idx) {
+      L->appendExpr(std::move(Args[Idx]));
+    }
+    Env.add(LRF.getRestFormal(), std::make_unique<nir::ValueNode>(*L));
+  } else if (F.getType() == nir::Formal::Type::Identifier) {
+    auto IF = static_cast<const nir::IdentifierFormal &>(F);
+    auto L = std::make_unique<nir::List>();
+    for (size_t Idx = 0; Idx < Args.size(); ++Idx) {
+      L->appendExpr(std::move(Args[Idx]));
+    }
+    Env.add(IF.getIdentifier(), std::make_unique<nir::ValueNode>(*L));
+  } else {
+    llvm_unreachable("unknown formal type");
+  }
+
+  Envs.push_back(Env);
+  std::unique_ptr<nir::ValueNode> Result = std::visit(*this, L->getBody());
+  Envs.pop_back();
+
+  // 4. Return the result of the application.
+  return Result;
 }

@@ -25,6 +25,7 @@ add_executable(test_parse
   ${PROJECT_SOURCE_DIR}/src/ast/lambda.cpp
   ${PROJECT_SOURCE_DIR}/src/ast/begin.cpp
   ${PROJECT_SOURCE_DIR}/src/ast/list.cpp
+  ${PROJECT_SOURCE_DIR}/src/ast/application.cpp
   ${PROJECT_SOURCE_DIR}/src/utils/idpool.cpp
   ${PROJECT_SOURCE_DIR}/src/utils/upcast.cpp
   ${PROJECT_SOURCE_DIR}/src/exprnode.cpp

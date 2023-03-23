@@ -13,8 +13,9 @@ class Void;
 class Lambda;
 class Begin;
 class List;
+class Application;
 
 using TLNode = std::variant<Identifier, Integer, ArithPlus, DefineValues,
-                            Values, Void, Lambda, Begin, List>;
+                            Values, Void, Lambda, Begin, List, Application>;
 
 }; // namespace nir

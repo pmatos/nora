@@ -123,7 +123,19 @@ void Dumper::operator()(nir::List const &L) {
   std::cout << "(";
   for (size_t i = 0; i < L.length(); ++i) {
     std::visit(Dump, L[i]);
-    std::cout << " ";
+    if (i != L.length() - 1)
+      std::cout << " ";
+  }
+  std::cout << ")";
+}
+
+void Dumper::operator()(nir::Application const &A) {
+  Dumper Dump;
+  std::cout << "(";
+  for (size_t Idx = 0; Idx < A.length(); ++Idx) {
+    std::visit(Dump, A[Idx]);
+    if (Idx != A.length() - 1)
+      std::cout << " ";
   }
   std::cout << ")";
 }

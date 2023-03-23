@@ -15,9 +15,10 @@ class Void;
 class Lambda;
 class Begin;
 class List;
+class Application;
 
 using ExprNode = std::variant<Integer, Identifier, Values, ArithPlus, Void,
-                              Lambda, Begin, List>;
+                              Lambda, Begin, List, Application>;
 
 struct ToTopLevelNode {
   std::unique_ptr<TLNode> operator()(nir::Identifier &&Id);
@@ -28,6 +29,7 @@ struct ToTopLevelNode {
   std::unique_ptr<TLNode> operator()(nir::Lambda &&Vd);
   std::unique_ptr<TLNode> operator()(nir::Begin &&Vd);
   std::unique_ptr<TLNode> operator()(nir::List &&L);
+  std::unique_ptr<TLNode> operator()(nir::Application &&Vd);
 };
 
 }; // namespace nir
