@@ -6,9 +6,11 @@
 #include <cassert>
 #include <map>
 #include <memory>
+#include <vector>
 
 #include "ast/identifier.h"
 #include "astnode.h"
+#include "environment.h"
 #include "valuenode.h"
 
 // The interpreter class takes over ownership of the AST nodes.
@@ -27,5 +29,5 @@ public:
 
 private:
   // Environment map for identifiers.
-  std::map<nir::Identifier, std::unique_ptr<nir::ValueNode>> Env;
+  std::vector<Environment> Envs;
 };
