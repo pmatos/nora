@@ -117,3 +117,13 @@ void Dumper::operator()(nir::Begin const &B) {
   }
   std::cout << ")";
 }
+
+void Dumper::operator()(nir::List const &L) {
+  Dumper Dump;
+  std::cout << "(";
+  for (size_t i = 0; i < L.length(); ++i) {
+    std::visit(Dump, L[i]);
+    std::cout << " ";
+  }
+  std::cout << ")";
+}

@@ -57,5 +57,6 @@ add_llvm_executable(norac
         ast/linklet.cpp
         ast/lambda.cpp
         ast/begin.cpp
+        ast/list.cpp
 )
 target_link_libraries(norac PRIVATE ${LIBS})

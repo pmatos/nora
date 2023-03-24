@@ -14,6 +14,7 @@ struct Dumper {
   void operator()(nir::ArithPlus const &DV);
   void operator()(nir::Void const &Vd);
   void operator()(nir::Lambda const &L);
-  void operator()(nir::Formal const &L);
-  void operator()(nir::Begin const &L);
+  void operator()(nir::Formal const &F);
+  void operator()(nir::Begin const &B);
+  void operator()(nir::List const &L);
 };

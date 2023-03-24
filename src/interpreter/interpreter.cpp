@@ -177,3 +177,8 @@ std::unique_ptr<nir::ValueNode> Interpreter::operator()(nir::Begin const &B) {
   // 2. Return the stored value.
   return D;
 }
+
+std::unique_ptr<nir::ValueNode> Interpreter::operator()(nir::List const &L) {
+  PLOGD << "Interpreting List" << std::endl;
+  return std::make_unique<nir::ValueNode>(L);
+}
