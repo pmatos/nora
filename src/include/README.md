@@ -13,10 +13,10 @@ ASTNodes
    |- Expr
       |- +Identifier
       |- +ArithPlus
-      |- +Lambda
       |- +Begin
       |- Value
          |- +Integer
          |- +Values
          |- +Void
          |- +List
+         |- +Lambda

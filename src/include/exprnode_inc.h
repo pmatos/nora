@@ -6,5 +6,4 @@
 #include "ast/arithplus.h"
 #include "ast/begin.h"
 #include "ast/identifier.h"
-#include "ast/lambda.h"
 #include "valuenode_inc.h"
