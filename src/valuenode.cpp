@@ -13,3 +13,6 @@ std::unique_ptr<nir::ExprNode> nir::ToExprNode::operator()(nir::Values &&V) {
 std::unique_ptr<nir::ExprNode> nir::ToExprNode::operator()(nir::Void &&Vd) {
   return std::make_unique<nir::ExprNode>(std::move(Vd));
 }
+std::unique_ptr<nir::ExprNode> nir::ToExprNode::operator()(nir::List &&L) {
+  return std::make_unique<nir::ExprNode>(std::move(L));
+}
