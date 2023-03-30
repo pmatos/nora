@@ -2,6 +2,7 @@
 
 #include <cassert>
 
+#include "ast/booleanliteral.h"
 #include "ast/formal.h"
 #include "astnode.h"
 
@@ -19,4 +20,6 @@ struct Dumper {
   void operator()(nir::List const &L);
   void operator()(nir::Application const &A);
   void operator()(nir::SetBang const &SB);
+  void operator()(nir::IfCond const &If);
+  void operator()(nir::BooleanLiteral const &Bool);
 };

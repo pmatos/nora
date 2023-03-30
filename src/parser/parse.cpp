@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "ast/booleanliteral.h"
 #include "astnode.h"
 #include "exprnode.h"
 #include "parse.h"
@@ -58,7 +59,7 @@
 // expr := <id>                                             - parseIdentifier
 //       | (lambda <formals> <expr>)                        - parseLambda
 //       | (case-lambda (<formals> <expr>) ...)
-//       | (if <expr> <expr> <expr>)
+//       | (if <expr> <expr> <expr>)                        - parseIfCond
 //       | (begin <expr> ...+)                              - parseBegin
 //       | (begin0 <expr> ...+)                             - parseBegin
 //       | (let-values ([<id> ...) <expr>] ...) <expr>)
@@ -844,6 +845,8 @@ std::unique_ptr<nir::Formal> parseFormals(Stream &S);
 std::unique_ptr<nir::Begin> parseBegin(Stream &S);
 std::unique_ptr<nir::Application> parseApplication(Stream &S);
 std::unique_ptr<nir::SetBang> parseSetBang(Stream &S);
+std::unique_ptr<nir::IfCond> parseIfCond(Stream &S);
+std::unique_ptr<nir::BooleanLiteral> parseBooleanLiteral(Stream &S);
 
 std::vector<nir::Linklet::idpair_t> parseLinkletExports(Stream &S) {
   // parse a sequence of
@@ -929,6 +932,11 @@ std::unique_ptr<nir::ExprNode> parseExpr(Stream &S) {
     return std::make_unique<nir::ExprNode>(std::move(*I));
   }
 
+  std::unique_ptr<nir::BooleanLiteral> Bool = parseBooleanLiteral(S);
+  if (Bool) {
+    return std::make_unique<nir::ExprNode>(std::move(*Bool));
+  }
+
   std::unique_ptr<nir::Identifier> Id = parseIdentifier(S);
   if (Id) {
     return std::make_unique<nir::ExprNode>(std::move(*Id));
@@ -954,14 +962,19 @@ std::unique_ptr<nir::ExprNode> parseExpr(Stream &S) {
     return std::make_unique<nir::ExprNode>(std::move(*B));
   }
 
-  std::unique_ptr<nir::Application> A = parseApplication(S);
-  if (A) {
-    return std::make_unique<nir::ExprNode>(std::move(*A));
-  }
-
   std::unique_ptr<nir::SetBang> SB = parseSetBang(S);
   if (SB) {
     return std::make_unique<nir::ExprNode>(std::move(*SB));
+  }
+
+  std::unique_ptr<nir::IfCond> IC = parseIfCond(S);
+  if (IC) {
+    return std::make_unique<nir::ExprNode>(std::move(*IC));
+  }
+
+  std::unique_ptr<nir::Application> A = parseApplication(S);
+  if (A) {
+    return std::make_unique<nir::ExprNode>(std::move(*A));
   }
 
   return nullptr;
@@ -1403,4 +1416,67 @@ std::unique_ptr<nir::SetBang> parseSetBang(Stream &S) {
   }
 
   return Set;
+}
+
+std::unique_ptr<nir::IfCond> parseIfCond(Stream &S) {
+  size_t Start = S.getPosition();
+
+  Tok T = gettok(S);
+  if (T.tok != Tok::TokType::LPAREN) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  T = gettok(S);
+  if (T.tok != Tok::TokType::IF) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  auto If = std::make_unique<nir::IfCond>();
+
+  std::unique_ptr<nir::ExprNode> Cond = parseExpr(S);
+  if (!Cond) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+  If->setCond(std::move(Cond));
+
+  std::unique_ptr<nir::ExprNode> Then = parseExpr(S);
+  if (!Then) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+  If->setThen(std::move(Then));
+
+  std::unique_ptr<nir::ExprNode> Else = parseExpr(S);
+  if (!Else) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+  If->setElse(std::move(Else));
+
+  T = gettok(S);
+  if (T.tok != Tok::TokType::RPAREN) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  return If;
+}
+
+// Parse boolean literal
+std::unique_ptr<nir::BooleanLiteral> parseBooleanLiteral(Stream &S) {
+  size_t Start = S.getPosition();
+
+  Tok T = gettok(S);
+  if (T.tok == Tok::TokType::BOOL_TRUE) {
+    return std::make_unique<nir::BooleanLiteral>(true);
+  }
+  if (T.tok == Tok::TokType::BOOL_FALSE) {
+    return std::make_unique<nir::BooleanLiteral>(false);
+  }
+  S.rewindTo(Start);
+
+  return nullptr;
 }

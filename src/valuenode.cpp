@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "ast/booleanliteral.h"
 #include "exprnode_inc.h"
 
 std::unique_ptr<nir::ExprNode> nir::ToExprNode::operator()(nir::Integer &&Int) {
@@ -18,4 +19,8 @@ std::unique_ptr<nir::ExprNode> nir::ToExprNode::operator()(nir::List &&Lst) {
 }
 std::unique_ptr<nir::ExprNode> nir::ToExprNode::operator()(nir::Lambda &&L) {
   return std::make_unique<nir::ExprNode>(std::move(L));
+}
+std::unique_ptr<nir::ExprNode>
+nir::ToExprNode::operator()(nir::BooleanLiteral &&Bool) {
+  return std::make_unique<nir::ExprNode>(std::move(Bool));
 }

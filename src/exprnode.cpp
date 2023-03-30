@@ -1,5 +1,6 @@
 #include "exprnode.h"
 
+#include "ast/booleanliteral.h"
 #include "toplevelnode_inc.h"
 
 std::unique_ptr<nir::TLNode>
@@ -36,4 +37,11 @@ nir::ToTopLevelNode::operator()(nir::Application &&A) {
 std::unique_ptr<nir::TLNode>
 nir::ToTopLevelNode::operator()(nir::SetBang &&SB) {
   return std::make_unique<nir::TLNode>(std::move(SB));
+}
+std::unique_ptr<nir::TLNode> nir::ToTopLevelNode::operator()(nir::IfCond &&If) {
+  return std::make_unique<nir::TLNode>(std::move(If));
+}
+std::unique_ptr<nir::TLNode>
+nir::ToTopLevelNode::operator()(nir::BooleanLiteral &&Bool) {
+  return std::make_unique<nir::TLNode>(std::move(Bool));
 }
