@@ -17,9 +17,11 @@ ASTNodes
       |- +Begin0
       |- +Application
       |- +SetBang
+      |- +IfCond
       |- Value
          |- +Integer
          |- +Values
          |- +Void
          |- +List
          |- +Lambda
+         |- +BooleanLiteral

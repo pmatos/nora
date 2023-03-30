@@ -148,3 +148,18 @@ void Dumper::operator()(nir::SetBang const &SB) {
   std::visit(Dump, SB.getExpr());
   std::cout << ")";
 }
+
+void Dumper::operator()(nir::IfCond const &If) {
+  Dumper Dump;
+  std::cout << "(if ";
+  std::visit(Dump, If.getCond());
+  std::cout << " ";
+  std::visit(Dump, If.getThen());
+  std::cout << " ";
+  std::visit(Dump, If.getElse());
+  std::cout << ")";
+}
+
+void Dumper::operator()(nir::BooleanLiteral const &Bool) {
+  std::cout << (Bool.value() ? "#t" : "#f");
+}

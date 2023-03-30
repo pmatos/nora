@@ -7,6 +7,7 @@
 #include <ranges>
 #include <variant>
 
+#include "ast/booleanliteral.h"
 #include "ast/formal.h"
 #include "ast/linklet.h"
 #include "toplevelnode_inc.h"
@@ -116,6 +117,9 @@ Interpreter::operator()(nir::DefineValues const &DV) {
                               },
                               [](nir::Lambda const &L) {
                                 return std::make_unique<nir::ValueNode>(L);
+                              },
+                              [](nir::BooleanLiteral const &Bool) {
+                                return std::make_unique<nir::ValueNode>(Bool);
                               },
                               [](auto const &Err) {
                                 std::cerr << "Unexpected value in DefineValues."
@@ -288,4 +292,26 @@ Interpreter::operator()(nir::SetBang const &SB) {
 
   // 3. Return void.
   return std::make_unique<nir::ValueNode>(nir::Void());
+}
+
+std::unique_ptr<nir::ValueNode> Interpreter::operator()(nir::IfCond const &I) {
+  PLOGD << "Interpreting If"
+        << "\n";
+
+  // 1. Evaluate the predicate.
+  std::unique_ptr<nir::ValueNode> D = std::visit(*this, I.getCond());
+
+  // 2. If the predicate is false, evaluate the alternative.
+  if (std::holds_alternative<nir::BooleanLiteral>(*D) &&
+      !std::get<nir::BooleanLiteral>(*D).value()) {
+    return std::visit(*this, I.getElse());
+  }
+
+  // 3. Everything else evaluates to true, so evaluate the consequent.
+  return std::visit(*this, I.getThen());
+}
+
+std::unique_ptr<nir::ValueNode>
+Interpreter::operator()(nir::BooleanLiteral const &Bool) {
+  return std::make_unique<nir::ValueNode>(Bool);
 }
