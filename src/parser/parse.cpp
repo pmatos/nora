@@ -63,7 +63,7 @@
 //       | (begin0 <expr> ...+)                             - parseBegin
 //       | (let-values ([<id> ...) <expr>] ...) <expr>)
 //       | (letrec-values ([(<id> ...) <expr>] ...) <expr>)
-//       | (set! <id> <expr>)
+//       | (set! <id> <expr>)                               - parseSetBang
 //       | (quote <datum>)
 //       | (with-continuation-mark <expr> <expr> <expr>)
 //       | (<expr> ...+)                                    - parseApplication
@@ -257,6 +257,7 @@ std::optional<Tok> maybeLexIdOrNumber(Stream &S) {
       std::make_pair(L"letrec-values", Tok::TokType::LETREC_VALUES),
       std::make_pair(L"begin", Tok::TokType::BEGIN),
       std::make_pair(L"begin0", Tok::TokType::BEGIN0),
+      std::make_pair(L"set!", Tok::TokType::SETBANG),
       std::make_pair(L"case-lambda", Tok::TokType::CASE_LAMBDA),
       std::make_pair(L"if", Tok::TokType::IF),
       std::make_pair(L"void", Tok::TokType::VOID),
@@ -842,6 +843,7 @@ std::unique_ptr<nir::DefineValues> parseDefineValues(Stream &S);
 std::unique_ptr<nir::Formal> parseFormals(Stream &S);
 std::unique_ptr<nir::Begin> parseBegin(Stream &S);
 std::unique_ptr<nir::Application> parseApplication(Stream &S);
+std::unique_ptr<nir::SetBang> parseSetBang(Stream &S);
 
 std::vector<nir::Linklet::idpair_t> parseLinkletExports(Stream &S) {
   // parse a sequence of
@@ -956,6 +958,12 @@ std::unique_ptr<nir::ExprNode> parseExpr(Stream &S) {
   if (A) {
     return std::make_unique<nir::ExprNode>(std::move(*A));
   }
+
+  std::unique_ptr<nir::SetBang> SB = parseSetBang(S);
+  if (SB) {
+    return std::make_unique<nir::ExprNode>(std::move(*SB));
+  }
+
   return nullptr;
 }
 
@@ -1353,4 +1361,46 @@ std::unique_ptr<nir::Application> parseApplication(Stream &S) {
   }
 
   return App;
+}
+
+// Parse set!:
+// (set! <id> <expr>)
+std::unique_ptr<nir::SetBang> parseSetBang(Stream &S) {
+  size_t Start = S.getPosition();
+
+  Tok T = gettok(S);
+  if (T.tok != Tok::TokType::LPAREN) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  T = gettok(S);
+  if (T.tok != Tok::TokType::SETBANG) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  auto Set = std::make_unique<nir::SetBang>();
+
+  std::unique_ptr<nir::Identifier> Id = parseIdentifier(S);
+  if (!Id) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+  Set->setIdentifier(std::move(Id));
+
+  std::unique_ptr<nir::ExprNode> Exp = parseExpr(S);
+  if (!Exp) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+  Set->setExpr(std::move(Exp));
+
+  T = gettok(S);
+  if (T.tok != Tok::TokType::RPAREN) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  return Set;
 }

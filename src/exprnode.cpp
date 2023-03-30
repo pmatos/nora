@@ -33,3 +33,7 @@ std::unique_ptr<nir::TLNode>
 nir::ToTopLevelNode::operator()(nir::Application &&A) {
   return std::make_unique<nir::TLNode>(std::move(A));
 }
+std::unique_ptr<nir::TLNode>
+nir::ToTopLevelNode::operator()(nir::SetBang &&SB) {
+  return std::make_unique<nir::TLNode>(std::move(SB));
+}

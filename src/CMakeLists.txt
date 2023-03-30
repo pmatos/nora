@@ -59,5 +59,6 @@ add_llvm_executable(norac
         ast/begin.cpp
         ast/list.cpp
         ast/application.cpp
+        ast/setbang.cpp
 )
 target_link_libraries(norac PRIVATE ${LIBS})

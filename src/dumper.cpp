@@ -139,3 +139,12 @@ void Dumper::operator()(nir::Application const &A) {
   }
   std::cout << ")";
 }
+
+void Dumper::operator()(nir::SetBang const &SB) {
+  Dumper Dump;
+  std::cout << "(set! ";
+  Dump(SB.getIdentifier());
+  std::cout << " ";
+  std::visit(Dump, SB.getExpr());
+  std::cout << ")";
+}

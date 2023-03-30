@@ -114,6 +114,9 @@ Interpreter::operator()(nir::DefineValues const &DV) {
                               [](nir::Values const &V) {
                                 return std::make_unique<nir::ValueNode>(V);
                               },
+                              [](nir::Lambda const &L) {
+                                return std::make_unique<nir::ValueNode>(L);
+                              },
                               [](auto const &Err) {
                                 std::cerr << "Unexpected value in DefineValues."
                                           << std::endl;
@@ -262,4 +265,27 @@ Interpreter::operator()(nir::Application const &A) {
 
   // 4. Return the result of the application.
   return Result;
+}
+
+// To interpret a set! expression we set the value of the identifier in the
+// current environment and return void.
+std::unique_ptr<nir::ValueNode>
+Interpreter::operator()(nir::SetBang const &SB) {
+  PLOGD << "Interpreting SetBang"
+        << "\n";
+
+  // 1. Evaluate the expression.
+  std::unique_ptr<nir::ValueNode> D = std::visit(*this, SB.getExpr());
+
+  // 2. Set the value of the identifier in the current environment.
+  Environment &Env = Envs.back();
+  const nir::Identifier &Id = SB.getIdentifier();
+  if (!Env.lookup(Id)) {
+    std::cerr << "Cannot set undefined identifier." << std::endl;
+    return nullptr;
+  }
+  Env.add(Id, std::move(D));
+
+  // 3. Return void.
+  return std::make_unique<nir::ValueNode>(nir::Void());
 }

@@ -7,4 +7,5 @@
 #include "ast/arithplus.h"
 #include "ast/begin.h"
 #include "ast/identifier.h"
+#include "ast/setbang.h"
 #include "valuenode_inc.h"
