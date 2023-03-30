@@ -17,4 +17,5 @@ struct Dumper {
   void operator()(nir::Formal const &F);
   void operator()(nir::Begin const &B);
   void operator()(nir::List const &L);
+  void operator()(nir::Application const &A);
 };

@@ -60,13 +60,13 @@
 //       | (case-lambda (<formals> <expr>) ...)
 //       | (if <expr> <expr> <expr>)
 //       | (begin <expr> ...+)                              - parseBegin
-//       | (begin0 expr expr ...)                           - parseBegin
+//       | (begin0 <expr> ...+)                             - parseBegin
 //       | (let-values ([<id> ...) <expr>] ...) <expr>)
 //       | (letrec-values ([(<id> ...) <expr>] ...) <expr>)
 //       | (set! <id> <expr>)
 //       | (quote <datum>)
 //       | (with-continuation-mark <expr> <expr> <expr>)
-//       | (<expr> ...+)
+//       | (<expr> ...+)                                    - parseApplication
 //       | (%variable-reference <id>)
 //       | (%variable-reference (%top . id))  <- Allowed?
 //       | (%variable-reference)              <- Allowed?
@@ -841,6 +841,7 @@ std::unique_ptr<nir::ArithPlus> parseArithPlus(Stream &S);
 std::unique_ptr<nir::DefineValues> parseDefineValues(Stream &S);
 std::unique_ptr<nir::Formal> parseFormals(Stream &S);
 std::unique_ptr<nir::Begin> parseBegin(Stream &S);
+std::unique_ptr<nir::Application> parseApplication(Stream &S);
 
 std::vector<nir::Linklet::idpair_t> parseLinkletExports(Stream &S) {
   // parse a sequence of
@@ -951,6 +952,10 @@ std::unique_ptr<nir::ExprNode> parseExpr(Stream &S) {
     return std::make_unique<nir::ExprNode>(std::move(*B));
   }
 
+  std::unique_ptr<nir::Application> A = parseApplication(S);
+  if (A) {
+    return std::make_unique<nir::ExprNode>(std::move(*A));
+  }
   return nullptr;
 }
 
@@ -1017,16 +1022,17 @@ std::unique_ptr<nir::DefineValues> parseDefineValues(Stream &S) {
 // Parses an expression of the form:
 // (values expr ...)
 std::unique_ptr<nir::Values> parseValues(Stream &S) {
+  size_t Start = S.getPosition();
+
   Tok T = gettok(S);
   if (T.tok != Tok::TokType::LPAREN) {
-    S.rewind(T);
+    S.rewindTo(Start);
     return nullptr;
   }
 
   std::optional<Tok> IDTok = maybeLexIdOrNumber(S);
   if (!IDTok || IDTok->tok != Tok::TokType::VALUES) {
-    S.rewind(*IDTok);
-    S.rewind(T);
+    S.rewindTo(Start);
     return nullptr;
   }
 
@@ -1050,16 +1056,17 @@ std::unique_ptr<nir::Values> parseValues(Stream &S) {
 // Parses an expression of the form:
 // (+ expr ...)
 std::unique_ptr<nir::ArithPlus> parseArithPlus(Stream &S) {
+  size_t Start = S.getPosition();
+
   Tok T = gettok(S);
   if (T.tok != Tok::TokType::LPAREN) {
-    S.rewind(T);
+    S.rewindTo(Start);
     return nullptr;
   }
 
   std::optional<Tok> IDTok = maybeLexIdOrNumber(S);
   if (!IDTok || IDTok->tok != Tok::TokType::ARITH_PLUS) {
-    S.rewind(*IDTok);
-    S.rewind(T);
+    S.rewindTo(Start);
     return nullptr;
   }
 
@@ -1214,6 +1221,8 @@ std::unique_ptr<nir::Formal> parseFormals(Stream &S) {
 
   Tok T = gettok(S);
   if (T.tok != Tok::TokType::LPAREN) {
+    S.rewind(T);
+
     // If it's not a list, it's a single id
     std::unique_ptr<nir::Identifier> Id = parseIdentifier(S);
     if (Id) {
@@ -1230,6 +1239,7 @@ std::unique_ptr<nir::Formal> parseFormals(Stream &S) {
     if (T.tok == Tok::TokType::RPAREN || T.tok == Tok::TokType::DOT) {
       break;
     }
+    S.rewind(T); // put the token back
 
     std::unique_ptr<nir::Identifier> Id = parseIdentifier(S);
     if (!Id) {
@@ -1308,4 +1318,39 @@ std::unique_ptr<nir::Begin> parseBegin(Stream &S) {
   }
 
   return Begin;
+}
+
+// Parse application of the form:
+// (<expr> <expr>*)
+std::unique_ptr<nir::Application> parseApplication(Stream &S) {
+  size_t Start = S.getPosition();
+
+  Tok T = gettok(S);
+  if (T.tok != Tok::TokType::LPAREN) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  auto App = std::make_unique<nir::Application>();
+
+  while (true) {
+    std::unique_ptr<nir::ExprNode> Exp = parseExpr(S);
+    if (!Exp) {
+      break;
+    }
+    App->appendExpr(std::move(Exp));
+  }
+
+  T = gettok(S);
+  if (T.tok != Tok::TokType::RPAREN) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  if (App->length() == 0) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  return App;
 }

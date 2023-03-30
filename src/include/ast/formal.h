@@ -77,8 +77,10 @@ public:
   };
 
   IdRange getIds() const { return IdRange{Formals}; }
+  [[nodiscard]] size_t size() const { return Formals.size(); }
   [[nodiscard]] Type getType() const override { return Type::List; }
   void addFormal(const Identifier &I);
+  Identifier &operator[](size_t Index) { return Formals[Index]; }
 
 private:
   std::vector<Identifier> Formals;

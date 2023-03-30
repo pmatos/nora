@@ -27,6 +27,7 @@ public:
   std::unique_ptr<nir::ValueNode> operator()(nir::Lambda const &L);
   std::unique_ptr<nir::ValueNode> operator()(nir::Begin const &B);
   std::unique_ptr<nir::ValueNode> operator()(nir::List const &L);
+  std::unique_ptr<nir::ValueNode> operator()(nir::Application const &A);
 
 private:
   // Environment map for identifiers.

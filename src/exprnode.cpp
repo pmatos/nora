@@ -29,3 +29,7 @@ std::unique_ptr<nir::TLNode> nir::ToTopLevelNode::operator()(nir::Begin &&B) {
 std::unique_ptr<nir::TLNode> nir::ToTopLevelNode::operator()(nir::List &&L) {
   return std::make_unique<nir::TLNode>(std::move(L));
 }
+std::unique_ptr<nir::TLNode>
+nir::ToTopLevelNode::operator()(nir::Application &&A) {
+  return std::make_unique<nir::TLNode>(std::move(A));
+}
