@@ -18,4 +18,5 @@ struct Dumper {
   void operator()(nir::Begin const &B);
   void operator()(nir::List const &L);
   void operator()(nir::Application const &A);
+  void operator()(nir::SetBang const &SB);
 };

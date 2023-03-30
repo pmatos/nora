@@ -16,6 +16,7 @@ ASTNodes
       |- +Begin
       |- +Begin0
       |- +Application
+      |- +SetBang
       |- Value
          |- +Integer
          |- +Values

@@ -55,6 +55,7 @@ struct Tok {
     KEYWORD,
     VECTOR_START,
     VALUES,
+    SETBANG,
   };
   TokType tok;
   std::wstring value;
