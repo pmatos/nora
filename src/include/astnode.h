@@ -18,9 +18,11 @@ class Application;
 class SetBang;
 class IfCond;
 class BooleanLiteral;
+class LetValues;
 
-using ASTNode = std::variant<Linklet, Identifier, Integer, ArithPlus,
-                             DefineValues, Values, Void, Lambda, Begin, List,
-                             Application, SetBang, IfCond, BooleanLiteral>;
+using ASTNode =
+    std::variant<Linklet, Identifier, Integer, ArithPlus, DefineValues, Values,
+                 Void, Lambda, Begin, List, Application, SetBang, IfCond,
+                 BooleanLiteral, LetValues>;
 
 }; // namespace nir

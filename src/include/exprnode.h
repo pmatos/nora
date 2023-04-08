@@ -19,10 +19,11 @@ class Application;
 class SetBang;
 class IfCond;
 class BooleanLiteral;
+class LetValues;
 
 using ExprNode =
     std::variant<Integer, Identifier, Values, ArithPlus, Void, Lambda, Begin,
-                 List, Application, SetBang, IfCond, BooleanLiteral>;
+                 List, Application, SetBang, IfCond, BooleanLiteral, LetValues>;
 
 struct ToTopLevelNode {
   std::unique_ptr<TLNode> operator()(nir::Identifier &&Id);
@@ -37,6 +38,7 @@ struct ToTopLevelNode {
   std::unique_ptr<TLNode> operator()(nir::SetBang &&SB);
   std::unique_ptr<TLNode> operator()(nir::IfCond &&If);
   std::unique_ptr<TLNode> operator()(nir::BooleanLiteral &&Bool);
+  std::unique_ptr<TLNode> operator()(nir::LetValues &&LV);
 };
 
 }; // namespace nir

@@ -27,6 +27,7 @@ public:
         : BeginIt(Ids.cbegin()), EndIt(Ids.cend()) {}
     [[nodiscard]] auto begin() const { return BeginIt; }
     [[nodiscard]] auto end() const { return EndIt; }
+    const Identifier &operator[](size_t Idx) const { return *(BeginIt + Idx); }
 
   private:
     std::vector<Identifier>::const_iterator BeginIt, EndIt;

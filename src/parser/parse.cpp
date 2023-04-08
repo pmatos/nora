@@ -62,7 +62,7 @@
 //       | (if <expr> <expr> <expr>)                        - parseIfCond
 //       | (begin <expr> ...+)                              - parseBegin
 //       | (begin0 <expr> ...+)                             - parseBegin
-//       | (let-values ([<id> ...) <expr>] ...) <expr>)
+//       | (let-values ([<id> ...) <expr>] ...) <expr>)     - parseLetValues
 //       | (letrec-values ([(<id> ...) <expr>] ...) <expr>)
 //       | (set! <id> <expr>)                               - parseSetBang
 //       | (quote <datum>)
@@ -847,6 +847,7 @@ std::unique_ptr<nir::Application> parseApplication(Stream &S);
 std::unique_ptr<nir::SetBang> parseSetBang(Stream &S);
 std::unique_ptr<nir::IfCond> parseIfCond(Stream &S);
 std::unique_ptr<nir::BooleanLiteral> parseBooleanLiteral(Stream &S);
+std::unique_ptr<nir::LetValues> parseLetValues(Stream &S);
 
 std::vector<nir::Linklet::idpair_t> parseLinkletExports(Stream &S) {
   // parse a sequence of
@@ -970,6 +971,11 @@ std::unique_ptr<nir::ExprNode> parseExpr(Stream &S) {
   std::unique_ptr<nir::IfCond> IC = parseIfCond(S);
   if (IC) {
     return std::make_unique<nir::ExprNode>(std::move(*IC));
+  }
+
+  std::unique_ptr<nir::LetValues> LV = parseLetValues(S);
+  if (LV) {
+    return std::make_unique<nir::ExprNode>(std::move(*LV));
   }
 
   std::unique_ptr<nir::Application> A = parseApplication(S);
@@ -1479,4 +1485,102 @@ std::unique_ptr<nir::BooleanLiteral> parseBooleanLiteral(Stream &S) {
   S.rewindTo(Start);
 
   return nullptr;
+}
+
+// Parse a let-values form.
+// (let-values ([(id ...) val-expr] ...) body ...+)
+std::unique_ptr<nir::LetValues> parseLetValues(Stream &S) {
+  size_t Start = S.getPosition();
+
+  Tok T = gettok(S);
+  if (T.tok != Tok::TokType::LPAREN) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  T = gettok(S);
+  if (T.tok != Tok::TokType::LET_VALUES) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  auto Let = std::make_unique<nir::LetValues>();
+
+  T = gettok(S);
+  if (T.tok != Tok::TokType::LPAREN) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  while (true) {
+    T = gettok(S);
+    if (T.tok == Tok::TokType::RPAREN) {
+      break;
+    }
+
+    // Parse the binding.
+    if (T.tok != Tok::TokType::LPAREN) {
+      S.rewindTo(Start);
+      return nullptr;
+    }
+
+    // Parse list of identifiers.
+    T = gettok(S);
+    if (T.tok != Tok::TokType::LPAREN) {
+      S.rewindTo(Start);
+      return nullptr;
+    }
+
+    std::vector<nir::Identifier> Ids;
+    while (true) {
+      T = gettok(S);
+      if (T.tok == Tok::TokType::RPAREN) {
+        break;
+      }
+
+      S.rewind(T);
+      std::unique_ptr<nir::Identifier> Id = parseIdentifier(S);
+      if (!Id) {
+        S.rewindTo(Start);
+        return nullptr;
+      }
+      Ids.push_back(*Id);
+    }
+
+    // Parse the value expression.
+    std::unique_ptr<nir::ExprNode> Val = parseExpr(S);
+    if (!Val) {
+      S.rewindTo(Start);
+      return nullptr;
+    }
+
+    T = gettok(S);
+    if (T.tok != Tok::TokType::RPAREN) {
+      S.rewindTo(Start);
+      return nullptr;
+    }
+
+    Let->appendBinding(std::move(Ids), std::move(Val));
+  }
+
+  while (true) {
+    std::unique_ptr<nir::ExprNode> Exp = parseExpr(S);
+    if (!Exp) {
+      break;
+    }
+    Let->appendBody(std::move(Exp));
+  }
+
+  T = gettok(S);
+  if (T.tok != Tok::TokType::RPAREN) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  if (Let->bodyCount() == 0) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  return Let;
 }

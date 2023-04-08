@@ -45,3 +45,7 @@ std::unique_ptr<nir::TLNode>
 nir::ToTopLevelNode::operator()(nir::BooleanLiteral &&Bool) {
   return std::make_unique<nir::TLNode>(std::move(Bool));
 }
+std::unique_ptr<nir::TLNode>
+nir::ToTopLevelNode::operator()(nir::LetValues &&LV) {
+  return std::make_unique<nir::TLNode>(std::move(LV));
+}

@@ -20,9 +20,29 @@ void Dumper::operator()(nir::Values const &V) {
   }
 }
 
-void Dumper::operator()(nir::DefineValues const &DV) {}
+void Dumper::operator()(nir::DefineValues const &DV) {
+  Dumper Dump;
+  std::cout << "(define-values (";
 
-void Dumper::operator()(nir::ArithPlus const &AP) {}
+  for (const auto &Id : DV.getIds()) {
+    Dump(Id);
+    std::cout << " ";
+  }
+
+  std::cout << ") ";
+  std::visit(Dump, DV.getBody());
+  std::cout << ")";
+}
+
+void Dumper::operator()(nir::ArithPlus const &AP) {
+  Dumper Dump;
+  std::cout << "(+ ";
+  for (const auto &Arg : AP.getArgs()) {
+    std::visit(Dump, *Arg);
+    std::cout << " ";
+  }
+  std::cout << ")";
+}
 
 void Dumper::operator()(nir::Void const &Vd) {
   // do nothing
@@ -162,4 +182,40 @@ void Dumper::operator()(nir::IfCond const &If) {
 
 void Dumper::operator()(nir::BooleanLiteral const &Bool) {
   std::cout << (Bool.value() ? "#t" : "#f");
+}
+
+void Dumper::operator()(nir::LetValues const &Let) {
+  Dumper Dump;
+  std::cout << "(let-values (";
+
+  for (size_t I = 0; I < Let.bindingCount(); ++I) {
+    // Starts binding
+    std::cout << "[";
+
+    // Starts binding Id List
+    std::cout << "(";
+
+    for (const auto &Id : Let.getBindingIds(I)) {
+      Dump(Id);
+      std::cout << " ";
+    }
+
+    // Closes binding Id List
+    std::cout << ")";
+
+    std::cout << " ";
+    std::visit(Dump, Let.getBindingExpr(I));
+
+    // Closes binding
+    std::cout << "]";
+  }
+
+  // Close bindings
+  std::cout << ") ";
+
+  for (size_t I = 0; I < Let.bodyCount(); ++I) {
+    std::visit(Dump, Let.getBodyExpr(I));
+    std::cout << "\n";
+  }
+  std::cout << ")";
 }

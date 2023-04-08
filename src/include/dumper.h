@@ -22,4 +22,5 @@ struct Dumper {
   void operator()(nir::SetBang const &SB);
   void operator()(nir::IfCond const &If);
   void operator()(nir::BooleanLiteral const &Bool);
+  void operator()(nir::LetValues const &LV);
 };
