@@ -47,6 +47,7 @@ add_llvm_executable(norac
         environment.cpp
         utils/idpool.cpp
         utils/upcast.cpp
+        utils/downcast.cpp
         parser/parse.cpp
         interpreter/interpreter.cpp
         ast/arithplus.cpp
@@ -61,5 +62,6 @@ add_llvm_executable(norac
         ast/application.cpp
         ast/setbang.cpp
         ast/ifcond.cpp
+        ast/letvalues.cpp
 )
 target_link_libraries(norac PRIVATE ${LIBS})

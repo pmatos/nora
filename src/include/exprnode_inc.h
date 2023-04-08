@@ -8,5 +8,6 @@
 #include "ast/begin.h"
 #include "ast/identifier.h"
 #include "ast/ifcond.h"
+#include "ast/letvalues.h"
 #include "ast/setbang.h"
 #include "valuenode_inc.h"

@@ -17,9 +17,10 @@ class Application;
 class SetBang;
 class IfCond;
 class BooleanLiteral;
+class LetValues;
 
 using TLNode = std::variant<Identifier, Integer, ArithPlus, DefineValues,
                             Values, Void, Lambda, Begin, List, Application,
-                            SetBang, IfCond, BooleanLiteral>;
+                            SetBang, IfCond, BooleanLiteral, LetValues>;
 
 }; // namespace nir

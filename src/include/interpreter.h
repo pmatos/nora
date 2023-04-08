@@ -17,6 +17,8 @@
 
 class Interpreter {
 public:
+  Interpreter();
+
   std::unique_ptr<nir::ValueNode> operator()(nir::Identifier const &Id);
   std::unique_ptr<nir::ValueNode> operator()(nir::Integer const &Int);
   std::unique_ptr<nir::ValueNode> operator()(nir::Linklet const &Linklet);
@@ -31,6 +33,7 @@ public:
   std::unique_ptr<nir::ValueNode> operator()(nir::SetBang const &SB);
   std::unique_ptr<nir::ValueNode> operator()(nir::IfCond const &If);
   std::unique_ptr<nir::ValueNode> operator()(nir::BooleanLiteral const &Bool);
+  std::unique_ptr<nir::ValueNode> operator()(nir::LetValues const &LV);
 
 private:
   // Environment map for identifiers.

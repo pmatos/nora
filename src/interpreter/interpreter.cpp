@@ -10,12 +10,20 @@
 #include "ast/booleanliteral.h"
 #include "ast/formal.h"
 #include "ast/linklet.h"
+#include "dumper.h"
 #include "toplevelnode_inc.h"
+#include "utils/downcast.h"
 #include "utils/overloaded.h"
 #include "utils/upcast.h"
 #include "valuenode.h"
 
 #include <llvm/Support/ErrorHandling.h>
+
+// Constructor for interpreter sets up initial environment.
+Interpreter::Interpreter() {
+  // Add initial environment.
+  Envs.emplace_back();
+}
 
 std::unique_ptr<nir::ValueNode>
 Interpreter::operator()(nir::Identifier const &Id) {
@@ -33,10 +41,13 @@ Interpreter::operator()(nir::Identifier const &Id) {
   // does not work here?
   for (auto Env = Envs.rbegin(); Env != Envs.rend(); ++Env) {
     auto V = Env->lookup(Id);
-    return V;
+    if (V) {
+      return V;
+    }
   }
 
   // FIXME: error here UndefineIdentifier.
+  std::wcerr << "Undefined Identifier: " << Id.getName() << std::endl;
   return nullptr;
 }
 
@@ -68,6 +79,14 @@ std::unique_ptr<nir::ValueNode> Interpreter::operator()(nir::Values const &V) {
     std::unique_ptr<nir::ValueNode> D = std::visit(*this, *Expr);
     ValuesVec.emplace_back(upcastNode(D));
   }
+
+  // If values contains a single value, it evaluates to that value.
+  if (ValuesVec.size() == 1) {
+    std::unique_ptr<nir::ValueNode> V =
+        downcastExprToValueNode(std::move(ValuesVec[0]));
+    return V;
+  }
+
   std::unique_ptr<nir::ValueNode> Values =
       std::make_unique<nir::ValueNode>(nir::Values(std::move(ValuesVec)));
   return Values;
@@ -84,6 +103,11 @@ Interpreter::operator()(nir::DefineValues const &DV) {
   }
 
   // 2. Check number of values and number of identifiers match.
+  // If there's only one identifier, the variable is assigned the value.
+  if (DV.countIds() == 1) {
+    Envs.back().add(DV.getIds()[0], std::move(D));
+    return std::make_unique<nir::ValueNode>(nir::Void());
+  }
 
   // Check if the expression is a Values.
   if (!std::holds_alternative<nir::Values>(*D)) {
@@ -100,7 +124,6 @@ Interpreter::operator()(nir::DefineValues const &DV) {
   }
 
   // 2. Add bindings to the environment.
-  Environment Env;
   size_t Idx = 0;
   for (const auto &Id : DV.getIds()) {
     const nir::ExprNode &E = V.getExprs()[Idx++];
@@ -128,10 +151,8 @@ Interpreter::operator()(nir::DefineValues const &DV) {
                               }},
                    E);
 
-    Env.add(Id, std::move(Val));
+    Envs.back().add(Id, std::move(Val));
   }
-
-  Envs.push_back(Env);
 
   // Return void.
   return std::make_unique<nir::ValueNode>(nir::Void());
@@ -161,6 +182,7 @@ Interpreter::operator()(nir::ArithPlus const &AP) {
 }
 
 std::unique_ptr<nir::ValueNode> Interpreter::operator()(nir::Lambda const &L) {
+  PLOGD << "Interpreting Lambda: " << std::endl;
   return std::make_unique<nir::ValueNode>(L);
 }
 
@@ -275,13 +297,13 @@ Interpreter::operator()(nir::Application const &A) {
 // current environment and return void.
 std::unique_ptr<nir::ValueNode>
 Interpreter::operator()(nir::SetBang const &SB) {
-  PLOGD << "Interpreting SetBang"
-        << "\n";
+  PLOGD << "Interpreting SetBang\n";
 
   // 1. Evaluate the expression.
   std::unique_ptr<nir::ValueNode> D = std::visit(*this, SB.getExpr());
 
   // 2. Set the value of the identifier in the current environment.
+  assert(Envs.size() > 0);
   Environment &Env = Envs.back();
   const nir::Identifier &Id = SB.getIdentifier();
   if (!Env.lookup(Id)) {
@@ -295,8 +317,7 @@ Interpreter::operator()(nir::SetBang const &SB) {
 }
 
 std::unique_ptr<nir::ValueNode> Interpreter::operator()(nir::IfCond const &I) {
-  PLOGD << "Interpreting If"
-        << "\n";
+  PLOGD << "Interpreting If\n";
 
   // 1. Evaluate the predicate.
   std::unique_ptr<nir::ValueNode> D = std::visit(*this, I.getCond());
@@ -313,5 +334,107 @@ std::unique_ptr<nir::ValueNode> Interpreter::operator()(nir::IfCond const &I) {
 
 std::unique_ptr<nir::ValueNode>
 Interpreter::operator()(nir::BooleanLiteral const &Bool) {
+  PLOGD << "Interpreting BooleanLiteral\n";
   return std::make_unique<nir::ValueNode>(Bool);
+}
+
+std::unique_ptr<nir::ValueNode>
+Interpreter::operator()(nir::LetValues const &L) {
+  PLOGD << "Interpreting LetValues"
+        << "\n";
+  IF_PLOG(plog::debug) {
+    Dumper Dump;
+    Dump(L);
+    PLOGD << "\n";
+  }
+
+  // 1. Evaluate each of the expressions in order.
+  std::vector<std::unique_ptr<nir::ValueNode>> ExprValues;
+  ExprValues.reserve(L.exprsCount());
+  for (size_t Idx = 0; Idx < L.exprsCount(); ++Idx) {
+    ExprValues.emplace_back(std::visit(*this, L.getBindingExpr(Idx)));
+  }
+
+  // 2. Create an environment where each identifier is bound to the
+  // corresponding value. Then evaluate the body in this environment.
+  // If the binding variable list has a single identifier, it's simply assigned
+  // to the value of the expression. If on the other hand, it's a list of
+  // identifiers, then it should have the same length as the values list and
+  // each identifier is assigned to the corresponding value.
+  PLOGD << "Creating environment for LetValues\n";
+  Environment Env;
+  for (size_t Idx = 0; Idx < ExprValues.size(); ++Idx) {
+    if (std::ranges::size(L.getBindingIds(Idx)) == 1) {
+      Env.add(*L.getBindingIds(Idx).begin(), std::move(ExprValues[Idx]));
+    } else {
+      std::unique_ptr<nir::ValueNode> V = std::move(ExprValues[Idx]);
+
+      if (nir::Values *VsPtr = std::get_if<nir::Values>(V.get())) {
+        std::unique_ptr<nir::Values> Vs(VsPtr);
+        V.release();
+
+        if (std::ranges::size(L.getBindingIds(Idx)) != Vs->countExprs()) {
+          std::cerr << "Expected " << std::ranges::size(L.getBindingIds(Idx))
+                    << " values, got " << ExprValues.size() << std::endl;
+          return nullptr;
+        }
+
+        const auto &IdsExprRange = L.getBindingIds(Idx);
+        const auto &ValuesExprRange = Vs->getExprs();
+
+        for (size_t Idx = 0; Idx < Vs->countExprs(); ++Idx) {
+          // All the elements in ValuesExprRange are Value, not Expr but we
+          // need to downcast them to add them to the environment.
+          const auto &E = ValuesExprRange[Idx];
+          std::unique_ptr<nir::ValueNode> Val = std::visit(
+              overloaded{
+                  [](nir::Void const &V) {
+                    return std::make_unique<nir::ValueNode>(V);
+                  },
+                  [](nir::Integer const &I) {
+                    return std::make_unique<nir::ValueNode>(I);
+                  },
+                  [](nir::Values const &V) {
+                    return std::make_unique<nir::ValueNode>(V);
+                  },
+                  [](nir::Lambda const &L) {
+                    return std::make_unique<nir::ValueNode>(L);
+                  },
+                  [](nir::BooleanLiteral const &Bool) {
+                    return std::make_unique<nir::ValueNode>(Bool);
+                  },
+                  [](auto const &Err) {
+                    std::cerr
+                        << "Unexpected value in interpretation of let-values."
+                        << std::endl;
+                    return std::unique_ptr<nir::ValueNode>();
+                  }},
+              E);
+
+          PLOGD << "Adding " << std::wstring(IdsExprRange[Idx].getName())
+                << " to environment\n";
+          Env.add(IdsExprRange[Idx], std::move(Val));
+        }
+
+      } else {
+        Dumper Dump;
+        std::cerr << "Expected a values node, got ";
+        std::visit(Dump, *V);
+        return nullptr;
+      }
+    }
+  }
+  PLOGD << " Pushing new environment for LetValues\n";
+  Envs.push_back(Env);
+
+  PLOGD << "Evaluating body of LetValues\n";
+  std::unique_ptr<nir::ValueNode> Result = nullptr;
+  for (size_t I = 0; I < L.exprsCount(); ++I) {
+    Result = std::visit(*this, L.getBodyExpr(I));
+  }
+
+  Envs.pop_back();
+
+  // 3. Return the result of the let-values expression.
+  return Result;
 }

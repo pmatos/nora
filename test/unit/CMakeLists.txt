@@ -28,8 +28,10 @@ add_executable(test_parse
   ${PROJECT_SOURCE_DIR}/src/ast/application.cpp
   ${PROJECT_SOURCE_DIR}/src/ast/setbang.cpp
   ${PROJECT_SOURCE_DIR}/src/ast/ifcond.cpp
+  ${PROJECT_SOURCE_DIR}/src/ast/letvalues.cpp
   ${PROJECT_SOURCE_DIR}/src/utils/idpool.cpp
   ${PROJECT_SOURCE_DIR}/src/utils/upcast.cpp
+  ${PROJECT_SOURCE_DIR}/src/utils/downcast.cpp
   ${PROJECT_SOURCE_DIR}/src/exprnode.cpp
   ${PROJECT_SOURCE_DIR}/src/valuenode.cpp
 )
