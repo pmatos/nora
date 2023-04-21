@@ -10,11 +10,8 @@
 #include <variant>
 
 #include "config.h"
-#include "dumper.h"
 #include "interpreter.h"
 #include "parse.h"
-#include "toplevelnode_inc.h"
-#include "valuenode.h"
 
 namespace fs = std::filesystem;
 
@@ -37,7 +34,7 @@ int main(int argc, char *argv[]) {
     std::cout << "Parsing linklet in file " << Path << std::endl;
 
   Stream Input(Path);
-  std::unique_ptr<nir::Linklet> AST = parseLinklet(Input);
+  std::unique_ptr<ast::Linklet> AST = parseLinklet(Input);
 
   if (!AST) {
     std::cerr << "Parsing failed!" << std::endl;
@@ -47,12 +44,12 @@ int main(int argc, char *argv[]) {
   if (Verbose) {
     std::cout << "Parsing successful!" << std::endl;
     std::cout << "Dumping AST:" << std::endl;
-    Dumper Dump;
-    Dump(*AST);
+    AST->dump();
   }
 
   Interpreter I;
-  std::unique_ptr<nir::ValueNode> Result = I(*AST);
+  AST->accept(I);
+  auto const &Result = I.getResult();
 
   if (!Result) {
     std::cerr << "Interpretation failed!" << std::endl;
@@ -61,7 +58,7 @@ int main(int argc, char *argv[]) {
   if (Verbose)
     std::cout << "Interpretation successful!" << std::endl;
 
-  std::visit(Dumper{}, *Result);
+  Result->write();
   std::cout << std::endl;
 
   return 0;

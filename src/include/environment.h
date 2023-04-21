@@ -3,8 +3,7 @@
 #include <map>
 #include <memory>
 
-#include "ast/identifier.h"
-#include "valuenode.h"
+#include "ast.h"
 
 class Environment {
 
@@ -16,12 +15,12 @@ public:
   Environment &operator=(Environment &&) = delete;
 
   // Add a new identifier to the environment.
-  void add(nir::Identifier const &Id, std::unique_ptr<nir::ValueNode> Val);
+  void add(ast::Identifier const &Id, std::unique_ptr<ast::ValueNode> Val);
 
   // Lookup an identifier in the environment.
-  std::unique_ptr<nir::ValueNode> lookup(nir::Identifier const &Id);
+  std::unique_ptr<ast::ValueNode> lookup(ast::Identifier const &Id);
 
 private:
   // Environment map for identifiers.
-  std::map<nir::Identifier, std::shared_ptr<nir::ValueNode>> Env;
+  std::map<ast::Identifier, std::shared_ptr<ast::ValueNode>> Env;
 };

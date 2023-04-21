@@ -1,0 +1,20 @@
+#pragma once
+
+namespace ast {
+class Identifier;
+class Integer;
+class Linklet;
+class DefineValues;
+class Values;
+class ArithPlus;
+class Void;
+class Lambda;
+class Begin;
+class List;
+class Application;
+class SetBang;
+class IfCond;
+class BooleanLiteral;
+class LetValues;
+class ValueNode;
+}; // namespace ast

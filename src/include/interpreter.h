@@ -8,34 +8,38 @@
 #include <memory>
 #include <vector>
 
-#include "ast/identifier.h"
-#include "astnode.h"
+#include "ASTVisitor.h"
+#include "ast.h"
 #include "environment.h"
-#include "valuenode.h"
 
-// The interpreter class takes over ownership of the AST nodes.
+// The interpreter class uses a visitor pattern to access the nodes.
 
-class Interpreter {
+class Interpreter : public ASTVisitor {
 public:
   Interpreter();
 
-  std::unique_ptr<nir::ValueNode> operator()(nir::Identifier const &Id);
-  std::unique_ptr<nir::ValueNode> operator()(nir::Integer const &Int);
-  std::unique_ptr<nir::ValueNode> operator()(nir::Linklet const &Linklet);
-  std::unique_ptr<nir::ValueNode> operator()(nir::DefineValues const &DV);
-  std::unique_ptr<nir::ValueNode> operator()(nir::Values const &V);
-  std::unique_ptr<nir::ValueNode> operator()(nir::ArithPlus const &AP);
-  std::unique_ptr<nir::ValueNode> operator()(nir::Void const &Vd);
-  std::unique_ptr<nir::ValueNode> operator()(nir::Lambda const &L);
-  std::unique_ptr<nir::ValueNode> operator()(nir::Begin const &B);
-  std::unique_ptr<nir::ValueNode> operator()(nir::List const &L);
-  std::unique_ptr<nir::ValueNode> operator()(nir::Application const &A);
-  std::unique_ptr<nir::ValueNode> operator()(nir::SetBang const &SB);
-  std::unique_ptr<nir::ValueNode> operator()(nir::IfCond const &If);
-  std::unique_ptr<nir::ValueNode> operator()(nir::BooleanLiteral const &Bool);
-  std::unique_ptr<nir::ValueNode> operator()(nir::LetValues const &LV);
+  virtual void visit(ast::Identifier const &Id) override;
+  virtual void visit(ast::Integer const &Int) override;
+  virtual void visit(ast::Linklet const &Linklet) override;
+  virtual void visit(ast::DefineValues const &DV) override;
+  virtual void visit(ast::Values const &V) override;
+  virtual void visit(ast::ArithPlus const &AP) override;
+  virtual void visit(ast::Void const &Vd) override;
+  virtual void visit(ast::Lambda const &L) override;
+  virtual void visit(ast::Begin const &B) override;
+  virtual void visit(ast::List const &L) override;
+  virtual void visit(ast::Application const &A) override;
+  virtual void visit(ast::SetBang const &SB) override;
+  virtual void visit(ast::IfCond const &If) override;
+  virtual void visit(ast::BooleanLiteral const &Bool) override;
+  virtual void visit(ast::LetValues const &LV) override;
+
+  // Get the current saved result.
+  std::unique_ptr<ast::ValueNode> getResult() const {
+    return std::unique_ptr<ast::ValueNode>(Result->clone());
+  };
 
 private:
-  // Environment map for identifiers.
-  std::vector<Environment> Envs;
+  std::vector<Environment> Envs;          /// Environment map for identifiers.
+  std::unique_ptr<ast::ValueNode> Result; /// Result of the last evaluation.
 };

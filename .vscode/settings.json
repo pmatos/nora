@@ -17,4 +17,5 @@
         "editor.formatOnSave": true
     },
     "cSpell.enabled": false,
+    "editor.tabSize": 2,
 }
