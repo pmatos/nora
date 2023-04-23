@@ -4,7 +4,7 @@
 #include <string>
 #include <string_view>
 
-#include "ast/identifier.h"
+#include "ast.h"
 
 // Identifier nodes are kept in a Pool and handles
 // are passed around
@@ -19,7 +19,8 @@ public:
     return *Inst;
   }
 
-  nir::Identifier create(const std::wstring &Name);
+  ast::Identifier create(const std::wstring &Name);
+  ast::Identifier create(const ast::Identifier &Id);
 
 private:
   static IdPool *Inst;

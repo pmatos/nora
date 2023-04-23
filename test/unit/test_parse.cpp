@@ -2,10 +2,9 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
+#include "idpool.h"
 #include "parse.h"
-#include "toplevelnode.h"
-#include "toplevelnode_inc.h"
-#include "utils/idpool.h"
+#include <llvm/Support/Casting.h>
 #include <optional>
 
 // TESTS
@@ -256,41 +255,42 @@ TEST_CASE("Lexing Regex Literals", "[parser]") {
 
 TEST_CASE("Parsing linklets", "[parser]") {
   Stream Linklet(L"(linklet () () 2)");
-  std::unique_ptr<nir::Linklet> L = parseLinklet(Linklet);
+  std::unique_ptr<ast::Linklet> L = parseLinklet(Linklet);
   REQUIRE(L);
 
   REQUIRE(L->exportsCount() == 0);
   REQUIRE(L->importsCount() == 0);
 
-  const nir::TLNode &B = L->getBody()[0];
-  const auto &Integer = std::get<nir::Integer>(B);
+  const ast::TLNode &B = L->getBody()[0];
+  REQUIRE(llvm::isa<ast::Integer>(B));
+  const auto &Integer = llvm::cast<ast::Integer>(B);
   REQUIRE(Integer == 2);
 }
 
 TEST_CASE("Parsing lambdas", "[parser]") {
 
   Stream L1(L"(lambda () 2)");
-  std::unique_ptr<nir::Lambda> L = parseLambda(L1);
+  std::unique_ptr<ast::Lambda> L = parseLambda(L1);
   REQUIRE(L);
 
-  REQUIRE(L->getFormalsType() == nir::Formal::Type::List);
-  const nir::ExprNode &B = L->getBody();
-  const auto &Integer = std::get<nir::Integer>(B);
+  REQUIRE(L->getFormalsType() == ast::Formal::Type::List);
+  const ast::ExprNode &B = L->getBody();
+  const auto &Integer = llvm::cast<ast::Integer>(B);
   REQUIRE(Integer == 2);
 
   Stream L2(L"(lambda (x y) x)");
   L = parseLambda(L2);
   REQUIRE(L);
 
-  REQUIRE(L->getFormalsType() == nir::Formal::Type::List);
-  const nir::ExprNode &B2 = L->getBody();
-  const auto &Var = std::get<nir::Identifier>(B2);
-  REQUIRE(Var == IdPool::instance().create(L"x"));
+  REQUIRE(L->getFormalsType() == ast::Formal::Type::List);
+  const ast::ExprNode &B2 = L->getBody();
+  const auto &Var = llvm::cast<ast::Identifier>(B2);
+  REQUIRE(Var.getName() == L"x");
 }
 
 TEST_CASE("Parsing begin", "[parser]") {
   Stream B1(L"(begin 1 2 3)");
-  std::unique_ptr<nir::Begin> B = parseBegin(B1);
+  std::unique_ptr<ast::Begin> B = parseBegin(B1);
 
   REQUIRE(B);
   REQUIRE(B->bodyCount() == 3);

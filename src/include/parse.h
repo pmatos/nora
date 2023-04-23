@@ -8,7 +8,7 @@
 #include <string>
 #include <string_view>
 
-#include "ast/linklet.h"
+#include "ast.h"
 
 namespace fs = std::filesystem;
 
@@ -179,6 +179,6 @@ size_t isPeculiarIdentifier(Stream &S, size_t Offset = 0);
 bool isDelimiter(Stream &S, size_t Offset = 0);
 
 // Parsing functions:
-std::unique_ptr<nir::Lambda> parseLambda(Stream &S);
-std::unique_ptr<nir::Linklet> parseLinklet(Stream &S);
-std::unique_ptr<nir::Begin> parseBegin(Stream &S);
+std::unique_ptr<ast::Lambda> parseLambda(Stream &S);
+std::unique_ptr<ast::Linklet> parseLinklet(Stream &S);
+std::unique_ptr<ast::Begin> parseBegin(Stream &S);
