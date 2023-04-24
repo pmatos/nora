@@ -32,7 +32,6 @@ public:
     AST_DefineValues,
     First_ExprNode, // all ExprNodes must be after this
     AST_Application,
-    AST_ArithPlus,
     AST_Begin,
     AST_Identifier,
     AST_IfCond,
@@ -45,6 +44,7 @@ public:
     AST_List,
     AST_Values,
     AST_Void,
+    AST_RuntimeFunction,
   };
 
   ASTNode(ASTNodeKind Kind) : Kind(Kind) {}
@@ -222,27 +222,6 @@ public:
 
 private:
   std::vector<std::unique_ptr<ExprNode>> Exprs;
-};
-
-class ArithPlus : public ClonableNode<ArithPlus, ExprNode> {
-public:
-  ArithPlus() : ClonableNode(ASTNodeKind::AST_ArithPlus) {}
-  ArithPlus(const ArithPlus &AP);
-  ArithPlus(ArithPlus &&AP) = default;
-  ArithPlus &operator=(const ArithPlus &AP) = delete;
-  ~ArithPlus() = default;
-
-  void appendArg(std::unique_ptr<ExprNode> &&Arg);
-  [[nodiscard]] const std::vector<std::unique_ptr<ExprNode>> &getArgs() const;
-
-  void dump() const override;
-
-  static bool classof(const ASTNode *N) {
-    return N->getKind() == ASTNodeKind::AST_ArithPlus;
-  }
-
-private:
-  std::vector<std::unique_ptr<ExprNode>> Args;
 };
 
 // AST Node representing a begin or begin0 expression.
@@ -473,7 +452,7 @@ class Integer : public ClonableNode<Integer, ValueNode> {
 public:
   explicit Integer(const std::string &V);
   explicit Integer(int64_t V);
-  Integer(const Integer &Int) = default;
+  Integer(const Integer &I);
   Integer(Integer &&Int) = default;
   Integer &operator=(const Integer &Int);
   ~Integer() = default;
@@ -485,6 +464,7 @@ public:
 
   void dump() const override;
   void write() const override;
+  std::string asString() const;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_Integer;
@@ -678,4 +658,33 @@ public:
 
 private:
 };
+
+class RuntimeFunction : public ValueNode {
+public:
+  RuntimeFunction(const std::wstring &Name)
+      : ValueNode(ASTNodeKind::AST_RuntimeFunction), Name(Name) {}
+
+  virtual ~RuntimeFunction() = default;
+  virtual std::unique_ptr<ast::ValueNode>
+  operator()(const std::vector<const ast::ValueNode *> &Args) const = 0;
+
+  void dump() const override {
+    std::wcerr << L"#<runtime:" << getName() << L">";
+  }
+  void write() const override {
+    std::wcout << L"#<runtime:" << getName() << L">";
+  }
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == ASTNodeKind::AST_RuntimeFunction;
+  }
+
+  virtual RuntimeFunction *clone() const override = 0;
+
+  const std::wstring &getName() const { return Name; }
+
+private:
+  std::wstring Name;
+};
+
 }; // namespace ast

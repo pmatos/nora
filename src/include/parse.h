@@ -18,7 +18,6 @@ struct Tok {
   enum TokType {
     INVALID,
     DOT,
-    ARITH_PLUS,
     LPAREN,
     RPAREN,
     BOOL_TRUE,

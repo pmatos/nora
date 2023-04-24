@@ -8,11 +8,24 @@
 #include <ranges>
 
 #include "Casting.h"
+#include "ast_fwd.h"
 
 // Constructor for interpreter sets up initial environment.
 Interpreter::Interpreter() {
   // Add initial environment.
   Envs.emplace_back();
+}
+
+bool Interpreter::isBound(const ast::Identifier &Id) const {
+  // FIXME: the same questions as in Interpreter::visit(ast::Identifier const
+  // &Id) regarding the use of std::ranges::reverse applies.
+  for (auto Env = Envs.rbegin(); Env != Envs.rend(); ++Env) {
+    auto V = Env->lookup(Id);
+    if (V) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void Interpreter::visit(ast::Identifier const &Id) {
@@ -36,18 +49,30 @@ void Interpreter::visit(ast::Identifier const &Id) {
     }
   }
 
+  // It's not in the environment, but is it an identifier that's
+  // part of the runtime?
+  const std::wstring Name(Id.getName());
+  if (Runtime::getInstance().isRuntimeFunction(Name)) {
+    PLOGD << "Identifier is runtime function\n";
+    std::unique_ptr<ast::RuntimeFunction> RF =
+        Runtime::getInstance().lookupRuntimeFunction(Name);
+    Result = std::move(RF);
+    return;
+  }
+
   // FIXME: error here UndefineIdentifier.
   std::wcerr << "Undefined Identifier: " << Id.getName() << std::endl;
+  Result = nullptr;
+}
+
+void Interpreter::visit(ast::RuntimeFunction const &LV) {
+  Result = std::unique_ptr<ast::ValueNode>(LV.clone());
 }
 
 void Interpreter::visit(ast::Integer const &Int) {
-  PLOGD << "Interpreting Integer: ";
-  IF_PLOG(plog::debug) {
-    Int.dump();
-    PLOGD << std::endl;
-  }
-
+  PLOGD << "Interpreting Integer: " << Int.asString() << std::endl;
   Result = std::unique_ptr<ast::ValueNode>(Int.clone());
+  assert(llvm::dyn_cast<ast::Integer>(Result.get()));
 }
 
 void Interpreter::visit(ast::Linklet const &Linklet) {
@@ -138,24 +163,6 @@ void Interpreter::visit(ast::Void const &Vd) {
   Result = std::unique_ptr<ast::ValueNode>(new ast::Void());
 }
 
-void Interpreter::visit(ast::ArithPlus const &AP) {
-  PLOGD << "Interpreting ArithPlus: " << std::endl;
-
-  ast::Integer Sum(0);
-
-  for (auto const &Arg : AP.getArgs()) {
-    Arg->accept(*this);
-    std::unique_ptr<ast::ValueNode> D = std::move(Result);
-    if (auto const &Int = dyn_castU<ast::Integer>(D)) {
-      Sum += *Int;
-    } else {
-      std::cerr << "Unexpected value in ArithPlus." << std::endl;
-      return;
-    }
-  }
-  Result = std::unique_ptr<ast::ValueNode>(Sum.clone());
-}
-
 void Interpreter::visit(ast::Lambda const &L) {
   PLOGD << "Interpreting Lambda: " << std::endl;
   Result = std::unique_ptr<ast::ValueNode>(L.clone());
@@ -198,10 +205,49 @@ void Interpreter::visit(ast::Application const &A) {
   A[0].accept(*this);
   std::unique_ptr<ast::ValueNode> D = std::move(Result);
 
-  // Error out if not a lambda expression.
+  // Error out if not a lambda expression or runtime expression.
   std::unique_ptr<ast::Lambda> L = dyn_castU<ast::Lambda>(D);
   if (!L) {
-    std::cerr << "Expected lambda expression in Application." << std::endl;
+    // maybe a runtime function?
+    std::unique_ptr<ast::RuntimeFunction> RF =
+        dyn_castU<ast::RuntimeFunction>(D);
+    if (!RF) {
+      std::cerr << "Expected lambda expression in Application." << std::endl;
+      return;
+    }
+
+    // OK - it's a runtime function. Lets prepare the arguments to call it.
+    // This is a weird situation where we need two vectors although it doesn't
+    // make much sense. We need to move the Results out of Result and into
+    // ArgHolder. ArgHolder will keep the ownership of all results. Then we need
+    // to create another vector to pass to the runtime function. This vector
+    // will contain pointers to the results in ArgHolder. This sucks a bit but
+    // at this point, I am not sure if there's a point in focusing on optimizing
+    // this.
+    std::vector<std::unique_ptr<ast::ValueNode>> ArgHolder;
+    std::vector<const ast::ValueNode *> Args;
+    ArgHolder.reserve(A.length() - 1);
+    Args.reserve(A.length() - 1);
+    for (size_t Idx = 1; Idx < A.length(); ++Idx) {
+      A[Idx].accept(*this);
+      assert(Result && "Expected result from expression.");
+      ArgHolder.emplace_back(std::move(Result));
+      Args.emplace_back(ArgHolder.back().get());
+    }
+
+    IF_PLOG(plog::debug) {
+      std::wcerr << "Calling runtime function: " << RF->getName() << std::endl;
+      for (const ast::ValueNode *Arg : Args) {
+        assert(llvm::dyn_cast<ast::Integer>(Arg) &&
+               "Expected Integer in runtime function call.");
+        std::cerr << "  Arg: ";
+        Arg->dump();
+        std::cerr << std::endl;
+      }
+    }
+
+    // Call the runtime function.
+    Result = Runtime::getInstance().callFunction(RF->getName(), Args);
     return;
   }
 
@@ -362,8 +408,9 @@ void Interpreter::visit(ast::LetValues const &L) {
         const auto &ValuesExprRange = Vs->getExprs();
 
         for (size_t Idx = 0; Idx < Vs->countExprs(); ++Idx) {
-          // All the elements in ValuesExprRange are Value, not Expr but we
-          // need to downcast them to add them to the environment.
+          // All the elements in ValuesExprRange are Value,
+          // not Expr but we need to downcast them to add
+          // them to the environment.
           const auto &E = ValuesExprRange[Idx];
           std::unique_ptr<ast::ExprNode> EPtr(E.clone());
           std::unique_ptr<ast::ValueNode> Val = dyn_castU<ast::ValueNode>(EPtr);

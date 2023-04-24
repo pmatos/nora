@@ -12,6 +12,7 @@
 #include "config.h"
 #include "interpreter.h"
 #include "parse.h"
+#include "plog/Severity.h"
 
 namespace fs = std::filesystem;
 

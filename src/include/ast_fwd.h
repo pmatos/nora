@@ -6,7 +6,6 @@ class Integer;
 class Linklet;
 class DefineValues;
 class Values;
-class ArithPlus;
 class Void;
 class Lambda;
 class Begin;
@@ -17,4 +16,5 @@ class IfCond;
 class BooleanLiteral;
 class LetValues;
 class ValueNode;
+class RuntimeFunction;
 }; // namespace ast

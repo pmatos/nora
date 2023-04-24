@@ -21,5 +21,6 @@ add_llvm_executable(norac
         idpool.cpp
         parse.cpp
         interpreter.cpp
+        runtime.cpp
 )
 target_link_libraries(norac PRIVATE ${LIBS})

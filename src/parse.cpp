@@ -246,7 +246,6 @@ std::optional<Tok> maybeLexIdOrNumber(Stream &S) {
 
   // Transform token
   std::array KnownTokens = {
-      std::make_pair(L"+", Tok::TokType::ARITH_PLUS),
       std::make_pair(L"lambda", Tok::TokType::LAMBDA),
       std::make_pair(L"quote", Tok::TokType::QUOTE),
       std::make_pair(L"define-values", Tok::TokType::DEFINE_VALUES),
@@ -836,7 +835,6 @@ std::unique_ptr<ast::TLNode> parseDefn(Stream &S);
 std::unique_ptr<ast::ExprNode> parseExpr(Stream &S);
 std::unique_ptr<ast::Identifier> parseIdentifier(Stream &S);
 std::unique_ptr<ast::Values> parseValues(Stream &S);
-std::unique_ptr<ast::ArithPlus> parseArithPlus(Stream &S);
 std::unique_ptr<ast::DefineValues> parseDefineValues(Stream &S);
 std::unique_ptr<ast::Formal> parseFormals(Stream &S);
 std::unique_ptr<ast::Begin> parseBegin(Stream &S);
@@ -943,11 +941,6 @@ std::unique_ptr<ast::ExprNode> parseExpr(Stream &S) {
   std::unique_ptr<ast::Values> V = parseValues(S);
   if (V) {
     return V;
-  }
-
-  std::unique_ptr<ast::ArithPlus> P = parseArithPlus(S);
-  if (P) {
-    return P;
   }
 
   std::unique_ptr<ast::Lambda> L = parseLambda(S);
@@ -1075,40 +1068,6 @@ std::unique_ptr<ast::Values> parseValues(Stream &S) {
   }
 
   return std::make_unique<ast::Values>(std::move(Exprs));
-}
-
-// Parses an expression of the form:
-// (+ expr ...)
-std::unique_ptr<ast::ArithPlus> parseArithPlus(Stream &S) {
-  size_t Start = S.getPosition();
-
-  Tok T = gettok(S);
-  if (T.tok != Tok::TokType::LPAREN) {
-    S.rewindTo(Start);
-    return nullptr;
-  }
-
-  std::optional<Tok> IDTok = maybeLexIdOrNumber(S);
-  if (!IDTok || IDTok->tok != Tok::TokType::ARITH_PLUS) {
-    S.rewindTo(Start);
-    return nullptr;
-  }
-
-  auto Plus = std::make_unique<ast::ArithPlus>();
-  while (true) {
-    std::unique_ptr<ast::ExprNode> Expr = parseExpr(S);
-    if (!Expr) {
-      break;
-    }
-    Plus->appendArg(std::move(Expr));
-  }
-
-  T = gettok(S);
-  if (T.tok != Tok::TokType::RPAREN) {
-    return nullptr;
-  }
-
-  return Plus;
 }
 
 std::unique_ptr<ast::Linklet> parseLinklet(Stream &S) {
