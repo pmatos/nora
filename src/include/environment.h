@@ -18,7 +18,7 @@ public:
   void add(ast::Identifier const &Id, std::unique_ptr<ast::ValueNode> Val);
 
   // Lookup an identifier in the environment.
-  std::unique_ptr<ast::ValueNode> lookup(ast::Identifier const &Id);
+  std::unique_ptr<ast::ValueNode> lookup(ast::Identifier const &Id) const;
 
 private:
   // Environment map for identifiers.

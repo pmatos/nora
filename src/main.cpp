@@ -12,6 +12,7 @@
 #include "config.h"
 #include "interpreter.h"
 #include "parse.h"
+#include "plog/Severity.h"
 
 namespace fs = std::filesystem;
 
@@ -27,7 +28,7 @@ int main(int argc, char *argv[]) {
 
   // Initialize logger
   static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
-  plog::init(plog::none, &consoleAppender);
+  plog::init(plog::debug, &consoleAppender);
 
   fs::path Path = argv[1];
   if (Verbose)

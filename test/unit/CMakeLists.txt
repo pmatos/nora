@@ -22,6 +22,7 @@ add_executable(test_parse
   ${PROJECT_SOURCE_DIR}/src/parse.cpp
   ${PROJECT_SOURCE_DIR}/src/ast.cpp
   ${PROJECT_SOURCE_DIR}/src/idpool.cpp
+  ${PROJECT_SOURCE_DIR}/src/runtime.cpp
 )
 target_link_libraries(test_parse PRIVATE Catch2::Catch2 gmp gmpxx ${LLVM_LIBS})
 

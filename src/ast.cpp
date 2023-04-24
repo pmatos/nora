@@ -1,6 +1,7 @@
 #include "ast.h"
 
 #include <llvm/Support/Casting.h>
+#include <plog/Log.h>
 
 using namespace ast;
 
@@ -28,36 +29,6 @@ void Application::dump() const {
   for (const auto &Expr : Exprs) {
     Expr->dump();
     std::wcout << L" ";
-  }
-  std::wcout << L")";
-}
-
-//
-// Implementation of ArithPlus node.
-//
-
-// Copy Constructor for ArithPlus.
-ArithPlus::ArithPlus(const ArithPlus &AP)
-    : ClonableNode(ASTNodeKind::AST_ArithPlus) {
-  for (const auto &Arg : AP.getArgs()) {
-    std::unique_ptr<ExprNode> Ptr(Arg->clone());
-    Args.emplace_back(std::move(Ptr));
-  }
-}
-
-const std::vector<std::unique_ptr<ExprNode>> &ArithPlus::getArgs() const {
-  return Args;
-}
-
-void ArithPlus::appendArg(std::unique_ptr<ExprNode> &&Arg) {
-  Args.emplace_back(std::move(Arg));
-}
-
-void ArithPlus::dump() const {
-  std::wcout << L"(+";
-  for (const auto &Arg : Args) {
-    std::wcout << L" ";
-    Arg->dump();
   }
   std::wcout << L")";
 }
@@ -141,6 +112,13 @@ Integer::Integer(int64_t V) : ClonableNode(ASTNodeKind::AST_Integer) {
   mpz_init_set_si(Value, V);
 }
 
+Integer::Integer(const Integer &I) : ClonableNode(ASTNodeKind::AST_Integer) {
+  PLOGD << "Integer copy constructor" << std::endl;
+  PLOGD << "source: " << I.asString() << std::endl;
+  mpz_init_set(Value, I.Value);
+  PLOGD << "target: " << asString() << std::endl;
+}
+
 Integer &Integer::operator=(const Integer &Int) {
   mpz_set(Value, Int.Value);
   return *this;
@@ -157,10 +135,18 @@ Integer &Integer::operator+=(const Integer &Int) {
 
 void Integer::dump() const {
   // FIXME: print to err using llvm::dbgs()
-  gmp_printf("%Zd", Value);
+  // gmp_fprintf(stderr, "%Zd", Value);
+  std::cerr << asString();
 }
 
 void Integer::write() const { gmp_printf("%Zd", Value); }
+
+std::string Integer::asString() const {
+  char *Str = mpz_get_str(nullptr, 10, Value);
+  std::string S(Str);
+  free(Str);
+  return S;
+}
 
 //
 // Implementation of Lambda node.
