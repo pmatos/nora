@@ -6,7 +6,9 @@
     "C_Cpp.codeAnalysis.runAutomatically": false,
     "cmake.configureEnvironment": {},
     "cmake.configureArgs": [
-        "-DCMAKE_PREFIX_PATH=/home/pmatos/dev/llvm-project/build/lib/cmake"
+        "-DCMAKE_PREFIX_PATH=/home/pmatos/dev/llvm-project/build/lib/cmake",
+        "-DWITH_UBSAN=True",
+        "-DWITH_ASAN=True"
     ],
     "C_Cpp.intelliSenseEngine": "disabled",
     "C_Cpp.autocomplete": "disabled",
