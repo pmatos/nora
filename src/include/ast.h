@@ -458,6 +458,7 @@ public:
   ~Integer() = default;
 
   Integer &operator+=(const Integer &Int);
+  Integer &operator-=(const Integer &Int);
 
   bool operator==(int64_t X) const;
   bool operator==(const Integer &Int) const;

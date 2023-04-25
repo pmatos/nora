@@ -130,6 +130,11 @@ Integer &Integer::operator+=(const Integer &Int) {
   return *this;
 }
 
+Integer &Integer::operator-=(const Integer &Int) {
+  mpz_sub(Value, Value, Int.Value);
+  return *this;
+}
+
 void Integer::dump() const {
   // FIXME: print to err using llvm::dbgs()
   // FIXME: why doesn't this work properly ? gmp_fprintf(stderr, "%Zd", Value);
