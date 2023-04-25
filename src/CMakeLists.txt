@@ -24,3 +24,20 @@ add_llvm_executable(norac
         runtime.cpp
 )
 target_link_libraries(norac PRIVATE ${LIBS})
+
+# Enable sanitizers
+if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
+        if(WITH_UBSAN OR WITH_ASAN)
+                message(FATAL_ERROR "Undefined behavior sanitizer and address sanitizer can only be enabled in Debug mode.")
+        endif()
+else()
+        if(WITH_UBSAN)
+                set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror -fsanitize=undefined")
+                target_link_options(norac BEFORE PUBLIC -fsanitize=undefined)
+        endif()
+
+        if(WITH_ASAN)
+                set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
+                target_link_options(norac BEFORE PUBLIC -fsanitize=address)
+        endif()
+endif()
