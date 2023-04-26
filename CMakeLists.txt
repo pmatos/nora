@@ -15,6 +15,8 @@ if(POLICY CMP0116)
   cmake_policy(SET CMP0116 NEW)
 endif()
 
+set(CMAKE_CXX_OUTPUT_EXTENSION_REPLACE ON)
+
 # The C++ standard whose features are required to build nora.
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
@@ -22,6 +24,38 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -Werror")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -flto -Werror")
 set(CMAKE_CXX_FLAGS_MINSIZEREL "-Oz -flto -Werror")
+
+# Add new build type COVERAGE
+message("* Adding build type COVERAGE...")
+SET(CMAKE_CXX_FLAGS_COVERAGE
+  "${CMAKE_CXX_FLAGS_DEBUG} --coverage"
+  CACHE STRING "Flags used by the C++ compiler during coverage builds."
+  FORCE)
+SET(CMAKE_C_FLAGS_COVERAGE
+  "${CMAKE_C_FLAGS_DEBUG} --coverage"
+  CACHE STRING "Flags used by the C compiler during coverage builds."
+  FORCE)
+SET(CMAKE_EXE_LINKER_FLAGS_COVERAGE
+  "${CMAKE_EXE_LINKER_FLAGS_DEBUG} --coverage"
+  CACHE STRING "Flags used for linking binaries during coverage builds."
+  FORCE)
+SET(CMAKE_SHARED_LINKER_FLAGS_COVERAGE
+  "${CMAKE_SHARED_LINKER_FLAGS_DEBUG}"
+  CACHE STRING "Flags used by the shared libraries linker during coverage builds."
+  FORCE)
+MARK_AS_ADVANCED(
+  CMAKE_CXX_FLAGS_COVERAGE
+  CMAKE_C_FLAGS_COVERAGE
+  CMAKE_EXE_LINKER_FLAGS_COVERAGE
+  CMAKE_SHARED_LINKER_FLAGS_COVERAGE)
+
+IF(NOT CMAKE_BUILD_TYPE)
+  SET(CMAKE_BUILD_TYPE Debug
+    CACHE STRING "Choose the type of build : None Debug Release RelWithDebInfo MinSizeRel Coverage."
+    FORCE)
+ENDIF(NOT CMAKE_BUILD_TYPE)
+
+message("* Current build type is : ${CMAKE_BUILD_TYPE}")
 
 set(CMAKE_BUILD_WITH_INSTALL_NAME_DIR ON)
 
@@ -37,7 +71,7 @@ endif()
 # From cmake 2.24 onwards we can use CMAKE_COMPILE_WARNING_AS_ERROR
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   set(FLAGS_TO_REMOVE "-Werror")
-  foreach(TYPE "" "_DEBUG" "_RELEASE" "_RELWITHDEBINFO" "_MINSIZEREL")
+  foreach(TYPE "" "_DEBUG" "_RELEASE" "_RELWITHDEBINFO" "_MINSIZEREL" "_COVERAGE")
     set(CURRENT_FLAG_VAR "CMAKE_CXX_FLAGS${TYPE}")
     if(${CURRENT_FLAG_VAR} MATCHES ${FLAGS_TO_REMOVE})
         string(REPLACE ${FLAGS_TO_REMOVE} "" ${CURRENT_FLAG_VAR} "${${CURRENT_FLAG_VAR}}")

@@ -1,0 +1,46 @@
+name: Codecov
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+jobs:
+  test-with-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lcov cmake gcc g++ clang-15 llvm-15-dev llvm-15-tools mlir-15-tools libmlir-15-dev git ninja-build python3-pip
+      - name: Install FileCheck alternative
+        run: sudo update-alternatives --install /usr/bin/FileCheck FileCheck /usr/bin/FileCheck-15 1
+      - name: Install lit
+        run: pip3 install lit
+      - name: Configure
+        run: |
+          mkdir build
+          cd build
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=Coverage -DCMAKE_PREFIX_PATH="/usr/lib/llvm-15/cmake;/usr/lib/llvm-15/lib/cmake/mlir/" -DCMAKE_VERBOSE_MAKEFILE=1 -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ ..
+      - name: Build
+        working-directory: ./build
+        run: ninja norac
+      - name: Integration Testing
+        working-directory: ./build
+        run: bin/nora-lit ../test/integration -v
+      - name: Run lcov
+        working-directory: ./build
+        run: |
+          lcov --capture --directory . --output-file coverage.info
+          lcov --remove coverage.info '/usr/*' --output-file coverage.info
+          lcov --list coverage.info
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          flags: integration
+          verbose: true
+          file: ./build/coverage.info
