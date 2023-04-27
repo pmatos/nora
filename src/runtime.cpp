@@ -69,12 +69,40 @@ public:
   virtual void accept(ASTVisitor &V) const override { V.visit(*this); }
 };
 
+class MultiplyFunction : public ast::RuntimeFunction {
+public:
+  MultiplyFunction(const std::wstring &Name) : RuntimeFunction(Name) {}
+
+  virtual std::unique_ptr<ast::ValueNode>
+  operator()(const std::vector<const ast::ValueNode *> &Args) const override {
+    auto Mul = std::make_unique<ast::Integer>(1);
+
+    for (const auto *Arg : Args) {
+      if (auto const *I = llvm::dyn_cast<ast::Integer>(Arg)) {
+        *Mul *= *I;
+      } else {
+        // FIXME: Throw an error. Unsupported type for -.
+        return nullptr;
+      }
+    }
+
+    return Mul;
+  }
+
+  virtual ast::RuntimeFunction *clone() const override {
+    return new MultiplyFunction(*this);
+  }
+
+  virtual void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
 #define RUNTIME_FUNC(Identifier, Name)                                         \
   RuntimeFunctions[Identifier] = std::make_shared<Name>(Identifier);
 Runtime::Runtime() {
   // List of runtime functions.
   RUNTIME_FUNC(L"+", AddFunction);
   RUNTIME_FUNC(L"-", SubtractFunction);
+  RUNTIME_FUNC(L"*", MultiplyFunction);
 }
 
 std::unique_ptr<ast::ValueNode>
