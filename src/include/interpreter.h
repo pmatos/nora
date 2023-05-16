@@ -21,6 +21,7 @@ public:
 
   virtual void visit(ast::Identifier const &Id) override;
   virtual void visit(ast::Integer const &Int) override;
+  virtual void visit(ast::Rational const &Int) override;
   virtual void visit(ast::Linklet const &Linklet) override;
   virtual void visit(ast::DefineValues const &DV) override;
   virtual void visit(ast::Values const &V) override;

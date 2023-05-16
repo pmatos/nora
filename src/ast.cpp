@@ -1,5 +1,6 @@
 #include "ast.h"
 
+#include <gmp.h>
 #include <llvm/Support/Casting.h>
 #include <plog/Log.h>
 
@@ -153,6 +154,64 @@ std::string Integer::asString() const {
   std::string S(Str);
   free(Str);
   return S;
+}
+
+//
+// Implementation of Rational node.
+//
+
+Rational::Rational(const Integer &N, const Integer &D)
+    : ClonableNode(ASTNodeKind::AST_Rational) {
+  mpq_init(Value);
+  mpq_set_num(Value, N.Value);
+  mpq_set_den(Value, D.Value);
+  mpq_canonicalize(Value);
+}
+
+Rational::Rational(const Rational &Rat)
+    : ClonableNode(ASTNodeKind::AST_Rational) {
+  mpq_init(Value);
+  mpq_set(Value, Rat.Value);
+}
+
+Rational::~Rational() { mpq_clear(Value); }
+
+Rational &Rational::operator=(const Rational &Rat) {
+  mpq_set(Value, Rat.Value);
+  return *this;
+}
+
+bool Rational::operator==(const Rational &Rat) const {
+  return mpq_cmp(Value, Rat.Value) == 0;
+}
+Rational &Rational::operator+=(const Rational &Rat) {
+  mpq_add(Value, Value, Rat.Value);
+  return *this;
+}
+
+Rational &Rational::operator-=(const Rational &Rat) {
+  mpq_sub(Value, Value, Rat.Value);
+  return *this;
+}
+
+Rational &Rational::operator*=(const Rational &Rat) {
+  mpq_mul(Value, Value, Rat.Value);
+  return *this;
+}
+
+void Rational::dump() const {
+  // FIXME: print to err using llvm::dbgs()
+  std::cerr << asString();
+}
+
+void Rational::write() const { gmp_printf("%Qd", Value); }
+
+std::string Rational::asString() const {
+  char *Str = nullptr;
+  gmp_asprintf(&Str, "%Qd", Value);
+  std::string Result(Str);
+  free(Str);
+  return Result;
 }
 
 //

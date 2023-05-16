@@ -779,9 +779,10 @@ bool isDelimiter(Stream &S, size_t Offset) {
 // Symbols are sort of the catch all situation where if
 // we cannot tokenize as anything else, then it's most likely
 // a symbol unless it's a delimiter or whitespace, or etc, etc.
-Tok gettok(Stream &S) {
+Tok gettok(Stream &S, bool SkipWhitespace) {
   // We start by skipping whitespace which is not part of a token
-  S.skipWhitespace();
+  if (SkipWhitespace)
+    S.skipWhitespace();
 
   switch (S.peekChar()) {
   case '(':
@@ -900,8 +901,8 @@ std::unique_ptr<ast::TLNode> parseDefnOrExpr(Stream &S) {
   return dyn_castU<ast::TLNode>(E);
 }
 
-std::unique_ptr<ast::Integer> parseInteger(Stream &S) {
-  std::optional<Tok> Num = gettok(S);
+std::unique_ptr<ast::Integer> parseInteger(Stream &S, bool skipws = true) {
+  std::optional<Tok> Num = gettok(S, skipws);
   if (Num->tok != Tok::TokType::NUM) {
     S.rewind(*Num);
     return nullptr;
@@ -913,6 +914,27 @@ std::unique_ptr<ast::Integer> parseInteger(Stream &S) {
   std::string NumStr(V.cbegin(), V.cend());
 
   return std::make_unique<ast::Integer>(NumStr);
+}
+
+std::unique_ptr<ast::Rational> parseRational(Stream &S) {
+  // A rational is an Integer followed by a forward slash followed
+  // by a number without spaces in between.
+  std::unique_ptr<ast::Integer> I = parseInteger(S);
+  if (!I) {
+    return nullptr;
+  }
+
+  if (S.peekChar() != '/') {
+    return nullptr;
+  }
+  S.skipPrefix(1);
+
+  std::unique_ptr<ast::Integer> J = parseInteger(S, false);
+  if (!J) {
+    return nullptr;
+  }
+
+  return std::make_unique<ast::Rational>(*I, *J);
 }
 
 // An expression is either:

@@ -40,6 +40,7 @@ public:
     First_ValueNode, // all ValueNodes must be after this
     AST_BooleanLiteral,
     AST_Integer,
+    AST_Rational,
     AST_Lambda,
     AST_List,
     AST_Values,
@@ -473,7 +474,34 @@ public:
   }
 
 private:
+  friend class Rational;
   mpz_t Value;
+};
+
+class Rational : public ClonableNode<Rational, ValueNode> {
+public:
+  explicit Rational(const Integer &N, const Integer &D);
+  Rational(const Rational &R);
+  Rational &operator=(const Rational &Rat);
+  ~Rational();
+
+  Rational &operator+=(const Rational &Rat);
+  Rational &operator-=(const Rational &Rat);
+  Rational &operator*=(const Rational &Rat);
+
+  bool operator==(int64_t X) const;
+  bool operator==(const Rational &Rat) const;
+
+  void dump() const override;
+  void write() const override;
+  std::string asString() const;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == ASTNodeKind::AST_Rational;
+  }
+
+private:
+  mpq_t Value;
 };
 
 class Lambda : public ClonableNode<Lambda, ValueNode> {

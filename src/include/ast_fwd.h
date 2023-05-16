@@ -3,6 +3,7 @@
 namespace ast {
 class Identifier;
 class Integer;
+class Rational;
 class Linklet;
 class DefineValues;
 class Values;

@@ -9,6 +9,7 @@ public:
   virtual ~ASTVisitor() = default;
   virtual void visit(ast::Identifier const &Id) = 0;
   virtual void visit(ast::Integer const &Int) = 0;
+  virtual void visit(ast::Rational const &Int) = 0;
   virtual void visit(ast::Linklet const &Linklet) = 0;
   virtual void visit(ast::DefineValues const &DV) = 0;
   virtual void visit(ast::Values const &V) = 0;

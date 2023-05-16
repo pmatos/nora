@@ -150,7 +150,7 @@ private:
   ParseWindow Win; /// Window into the string currently seen by the parser.
 };
 
-Tok gettok(Stream &S);
+Tok gettok(Stream &S, bool SkipWhitespace = true);
 std::optional<Tok> maybeLexIdOrNumber(Stream &S);
 std::optional<Tok> maybeLexSymbolMark(Stream &S);
 std::optional<Tok> maybeLexString(Stream &S);

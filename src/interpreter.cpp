@@ -75,6 +75,12 @@ void Interpreter::visit(ast::Integer const &Int) {
   assert(llvm::dyn_cast<ast::Integer>(Result.get()));
 }
 
+void Interpreter::visit(ast::Rational const &Rat) {
+  PLOGD << "Interpreting Rational: " << Rat.asString() << std::endl;
+  Result = std::unique_ptr<ast::ValueNode>(Rat.clone());
+  assert(llvm::dyn_cast<ast::Integer>(Result.get()));
+}
+
 void Interpreter::visit(ast::Linklet const &Linklet) {
   PLOGD << "Interpreting Linklet" << std::endl;
 
