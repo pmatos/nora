@@ -121,8 +121,9 @@ public:
   static std::wstring readFile(const fs::path &Path);
 
   explicit Stream(const fs::path &Path);
+  explicit Stream(const std::string &Path);
   explicit Stream(const wchar_t *View);
-  explicit Stream(const char *View);
+
   [[nodiscard]] wchar_t peekChar(size_t n = 0) const;
   void skipPrefix(size_t N) { Win.skipPrefix(N); }
   [[nodiscard]] std::wstring_view getSubview(size_t N) const {

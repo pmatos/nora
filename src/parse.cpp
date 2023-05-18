@@ -99,6 +99,8 @@ ParseWindow::ParseWindow(const std::wstring &Str)
 Stream::Stream(const fs::path &Path)
     : Path(Path), Contents(Stream::readFile(Path)), Win(Contents) {}
 Stream::Stream(const wchar_t *View) : Path(), Contents(View), Win(Contents) {}
+Stream::Stream(const std::string &Path)
+    : Path(), Contents(Stream::readFile(Path)), Win(Contents) {}
 
 /// Read the file pointed to by \param path and returns its contents as a
 /// string.

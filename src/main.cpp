@@ -3,6 +3,9 @@
 #include <filesystem>
 #include <iostream>
 #include <iterator>
+#include <llvm/Support/CommandLine.h>
+#include <mlir/IR/AsmState.h>
+#include <mlir/IR/MLIRContext.h>
 #include <plog/Appenders/ColorConsoleAppender.h>
 #include <plog/Formatters/TxtFormatter.h>
 #include <plog/Init.h>
@@ -14,27 +17,41 @@
 #include "parse.h"
 #include "plog/Severity.h"
 
-namespace fs = std::filesystem;
+namespace cl = llvm::cl;
 
-static bool Verbose = false;
+static cl::opt<std::string> InputFilename(cl::Positional,
+                                          cl::desc("<input file>"),
+                                          cl::value_desc("filename"),
+                                          cl::Required);
+
+static cl::opt<bool> Verbose("v", cl::desc("Enable verbose output"),
+                             cl::init(false));
+
+namespace {
+enum Action { None, DumpAST };
+} // namespace
+
+static cl::opt<enum Action>
+    EmitAction("emit", cl::desc("Select the kind of output desired"),
+               cl::values(clEnumValN(DumpAST, "ast", "output the AST dump")));
 
 int main(int argc, char *argv[]) {
+  mlir::registerAsmPrinterCLOptions();
+  mlir::registerMLIRContextCLOptions();
+  cl::ParseCommandLineOptions(argc, argv, "norac\n");
+
   if (Verbose)
     std::cout << "Nora pre-release " << PROJECT_VERSION << std::endl;
-
-  if (argc != 2) {
-    exit(EXIT_FAILURE);
-  }
 
   // Initialize logger
   static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
   plog::init(plog::none, &consoleAppender);
 
-  fs::path Path = argv[1];
-  if (Verbose)
-    std::cout << "Parsing linklet in file " << Path << std::endl;
+  if (Verbose) {
+    std::cout << "Parsing linklet in file " << InputFilename << std::endl;
+  }
 
-  Stream Input(Path);
+  Stream Input(InputFilename);
   std::unique_ptr<ast::Linklet> AST = parseLinklet(Input);
 
   if (!AST) {
@@ -44,6 +61,9 @@ int main(int argc, char *argv[]) {
 
   if (Verbose) {
     std::cout << "Parsing successful!" << std::endl;
+  }
+
+  if (EmitAction == Action::DumpAST) {
     std::cout << "Dumping AST:" << std::endl;
     AST->dump();
   }
