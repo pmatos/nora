@@ -64,6 +64,10 @@ Steps:
 6. [ ] LLVM compiles the LLVM IR modules to Binary or we JIT them;
 7. [ ] NIR is lowered to LLVM IR;
 
+# Nora Videos
+
+* [Nora Announcement @ Racketfest 2023](https://www.youtube.com/watch?v=8YE6kJXvuaQ)
+
 # Other related projects using MLIR-C
  
 * [Brutus](https://github.com/JuliaLabs/brutus/)
