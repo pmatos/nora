@@ -161,11 +161,8 @@ std::optional<Tok> maybeLexKeyword(Stream &S);
 std::optional<Tok> maybeLexRegexpLiteral(Stream &S);
 std::optional<Tok> maybeLexVector(Stream &S);
 bool isExplicitSign(Stream &S, size_t Offset = 0);
-bool isSpecialSubsequent(Stream &S, size_t Offset = 0);
 bool isSubsequent(Stream &S, size_t Offset = 0);
 bool isDigit(Stream &S, size_t Offset = 0);
-bool isInitial(Stream &S, size_t Offset = 0);
-bool isSignSubsequent(Stream &S, size_t Offset = 0);
 bool isSymbolElement(Stream &S, size_t Offset = 0);
 bool isHexDigit(Stream &S, size_t Offset = 0);
 size_t isHexScalarValue(Stream &S, size_t Offset = 0);
@@ -173,8 +170,6 @@ bool isMnemonicEscape(Stream &S, size_t Offset = 0);
 size_t isInlineHexEscape(Stream &S, size_t Offset = 0);
 bool isLetter(Stream &S, size_t Offset = 0);
 bool isSpecialInitial(Stream &S, size_t Offset = 0);
-bool isDotSubsequent(Stream &S, size_t Offset = 0);
-size_t isPeculiarIdentifier(Stream &S, size_t Offset = 0);
 bool isDelimiter(Stream &S, size_t Offset = 0);
 
 // Parsing functions:

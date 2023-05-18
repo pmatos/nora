@@ -595,36 +595,6 @@ bool isExplicitSign(Stream &S, size_t Offset) {
   }
 }
 
-bool isSpecialSubsequent(Stream &S, size_t Offset) {
-  if (isExplicitSign(S, Offset)) {
-    return true;
-  }
-
-  switch (S.peekChar(Offset)) {
-  case '.':
-  case '@':
-    return true;
-  default:
-    return false;
-  }
-}
-
-bool isSubsequent(Stream &S, size_t Offset) {
-  if (isInitial(S, Offset) || isDigit(S, Offset) ||
-      isSpecialSubsequent(S, Offset)) {
-    return true;
-  }
-  return false;
-}
-
-bool isSignSubsequent(Stream &S, size_t Offset) {
-  if (isInitial(S, Offset) || isExplicitSign(S, Offset) ||
-      S.peekChar(Offset) == '@') {
-    return true;
-  }
-  return false;
-}
-
 bool isSymbolElement(Stream &S, size_t Offset) {
   // a symbol element is either:
   // <inline hex escape> | <mnemonic escape> | \|
@@ -702,53 +672,6 @@ size_t isInlineHexEscape(Stream &S, size_t Offset) {
     }
   }
   return 0;
-}
-
-size_t isPeculiarIdentifier(Stream &S, size_t Offset) {
-  // a peculiar identifier is
-  // <explicit sign> <sign subsequent> <subsequent>*
-  if (isExplicitSign(S, Offset) && isSignSubsequent(S, Offset + 1)) {
-    size_t Count = 2;
-    while (isSubsequent(S, Offset + Count)) {
-      Count++;
-    }
-    return Count;
-  }
-
-  // or:
-  // <explicit sign> . <dot subsequent> <subsequent>*
-  if (isExplicitSign(S, Offset) && S.peekChar(Offset + 1) == '.' &&
-      isDotSubsequent(S, Offset + 2)) {
-    size_t Count = 3;
-    while (isSubsequent(S, Offset + Count)) {
-      Count++;
-    }
-    return Count;
-  }
-
-  // or:
-  // . <dot subsequent> <subsequent>*
-  if (S.peekChar(Offset) == '.' && isDotSubsequent(S, Offset + 1)) {
-    size_t Count = 2;
-    while (isSubsequent(S, Offset + Count)) {
-      Count++;
-    }
-    return Count;
-  }
-
-  // or:
-  // <explicit sign>
-  if (isExplicitSign(S, Offset)) {
-    return 1;
-  }
-  return 0;
-}
-
-bool isDotSubsequent(Stream &S, size_t Offset) {
-  if (isSignSubsequent(S, Offset) || S.peekChar(Offset) == '.') {
-    return true;
-  }
-  return false;
 }
 
 bool isDelimiter(Stream &S, size_t Offset) {
