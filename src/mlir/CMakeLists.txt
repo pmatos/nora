@@ -1,5 +1,5 @@
 add_mlir_dialect_library(nirLib
-    nora.cpp
+    MLIRGen.cpp
     Dialect.cpp
 
     ADDITIONAL_HEADER_DIRS 
