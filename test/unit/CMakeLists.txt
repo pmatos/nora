@@ -19,7 +19,10 @@ llvm_map_components_to_libnames(LLVM_LIBS support)
 
 add_executable(test_parse
   test_parse.cpp
-  ${PROJECT_SOURCE_DIR}/src/parse.cpp
+  ${PROJECT_SOURCE_DIR}/src/Lex.cpp
+  ${PROJECT_SOURCE_DIR}/src/Parse.cpp
+  ${PROJECT_SOURCE_DIR}/src/UTF8.cpp
+  ${PROJECT_SOURCE_DIR}/src/SourceStream.cpp
   ${PROJECT_SOURCE_DIR}/src/ast.cpp
   ${PROJECT_SOURCE_DIR}/src/idpool.cpp
   ${PROJECT_SOURCE_DIR}/src/runtime.cpp

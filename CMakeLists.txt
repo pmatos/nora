@@ -16,7 +16,6 @@ if(POLICY CMP0116)
 endif()
 
 # The C++ standard whose features are required to build nora.
-# Using C++20 to access goodies like wstring::starts_with.
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
@@ -65,14 +64,6 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
 endif()
 
 configure_file(config.h.in src/include/config.h)
-
-FetchContent_Declare(
-  plog GIT_REPOSITORY https://github.com/SergiusTheBest/plog GIT_TAG 1.1.9
-)
-
-FetchContent_MakeAvailable(plog)
-include_directories(${plog_SOURCE_DIR}/include)
-add_compile_definitions(PLOG_ENABLE_WCHAR_INPUT)
 
 # Look for Python3 for lit
 find_package(Python3 REQUIRED COMPONENTS Interpreter)

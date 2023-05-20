@@ -126,7 +126,7 @@ public:
 
   std::strong_ordering operator<=>(const Identifier &I) const;
 
-  [[nodiscard]] const std::wstring_view getName() const;
+  [[nodiscard]] const llvm::StringRef getName() const;
   void dump() const override;
 
   static bool classof(const ASTNode *N) {
@@ -135,8 +135,8 @@ public:
 
 private:
   friend class ::IdPool;
-  explicit Identifier(std::wstring_view Id);
-  std::wstring_view Id;
+  explicit Identifier(llvm::StringRef Id);
+  llvm::StringRef Id;
 };
 
 class Linklet : public ClonableNode<Linklet, ASTNode> {
@@ -664,19 +664,15 @@ private:
 
 class RuntimeFunction : public ValueNode {
 public:
-  RuntimeFunction(const std::wstring &Name)
+  RuntimeFunction(const std::string &Name)
       : ValueNode(ASTNodeKind::AST_RuntimeFunction), Name(Name) {}
 
   virtual ~RuntimeFunction() = default;
   virtual std::unique_ptr<ast::ValueNode>
   operator()(const std::vector<const ast::ValueNode *> &Args) const = 0;
 
-  void dump() const override {
-    std::wcerr << L"#<runtime:" << getName() << L">";
-  }
-  void write() const override {
-    std::wcout << L"#<runtime:" << getName() << L">";
-  }
+  void dump() const override { std::cerr << "#<runtime:" << getName() << ">"; }
+  void write() const override { std::cout << "#<runtime:" << getName() << ">"; }
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_RuntimeFunction;
@@ -684,10 +680,10 @@ public:
 
   virtual RuntimeFunction *clone() const override = 0;
 
-  const std::wstring &getName() const { return Name; }
+  const std::string &getName() const { return Name; }
 
 private:
-  std::wstring Name;
+  std::string Name;
 };
 
 }; // namespace ast

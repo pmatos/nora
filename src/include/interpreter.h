@@ -43,7 +43,7 @@ public:
     return std::unique_ptr<ast::ValueNode>(Result->clone());
   };
   std::unique_ptr<ast::ValueNode>
-  callFunction(const std::wstring &Name,
+  callFunction(const std::string &Name,
                const std::vector<const ast::ValueNode *> &Args) {
     return Runtime::getInstance().callFunction(Name, Args);
   }

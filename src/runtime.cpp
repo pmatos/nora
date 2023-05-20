@@ -4,7 +4,7 @@
 
 class AddFunction : public ast::RuntimeFunction {
 public:
-  AddFunction(const std::wstring &Name) : RuntimeFunction(Name) {}
+  AddFunction(const std::string &Name) : RuntimeFunction(Name) {}
 
   virtual std::unique_ptr<ast::ValueNode>
   operator()(const std::vector<const ast::ValueNode *> &Args) const override {
@@ -30,7 +30,7 @@ public:
 
 class SubtractFunction : public ast::RuntimeFunction {
 public:
-  SubtractFunction(const std::wstring &Name) : RuntimeFunction(Name) {}
+  SubtractFunction(const std::string &Name) : RuntimeFunction(Name) {}
 
   virtual std::unique_ptr<ast::ValueNode>
   operator()(const std::vector<const ast::ValueNode *> &Args) const override {
@@ -71,7 +71,7 @@ public:
 
 class MultiplyFunction : public ast::RuntimeFunction {
 public:
-  MultiplyFunction(const std::wstring &Name) : RuntimeFunction(Name) {}
+  MultiplyFunction(const std::string &Name) : RuntimeFunction(Name) {}
 
   virtual std::unique_ptr<ast::ValueNode>
   operator()(const std::vector<const ast::ValueNode *> &Args) const override {
@@ -100,13 +100,13 @@ public:
   RuntimeFunctions[Identifier] = std::make_shared<Name>(Identifier);
 Runtime::Runtime() {
   // List of runtime functions.
-  RUNTIME_FUNC(L"+", AddFunction);
-  RUNTIME_FUNC(L"-", SubtractFunction);
-  RUNTIME_FUNC(L"*", MultiplyFunction);
+  RUNTIME_FUNC("+", AddFunction);
+  RUNTIME_FUNC("-", SubtractFunction);
+  RUNTIME_FUNC("*", MultiplyFunction);
 }
 
 std::unique_ptr<ast::ValueNode>
-Runtime::callFunction(const std::wstring &Name,
+Runtime::callFunction(const std::string &Name,
                       const std::vector<const ast::ValueNode *> &Args) {
   assert(RuntimeFunctions.find(Name) != RuntimeFunctions.end() &&
          "Function not found in runtime.");
