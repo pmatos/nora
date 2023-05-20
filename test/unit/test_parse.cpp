@@ -2,7 +2,6 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
-#include "idpool.h"
 #include "parse.h"
 #include <llvm/Support/Casting.h>
 #include <optional>
@@ -129,20 +128,20 @@ TEST_CASE("Lexing Number or Identifier Tokens", "[parser]") {
 }
 
 TEST_CASE("Lexing String tokens", "[parser]") {
-  Stream str1(LR"("Hello World")");
-  Tok Tok = gettok(str1);
+  Stream Str1(LR"("Hello World")");
+  Tok Tok = gettok(Str1);
   REQUIRE(Tok.tok == Tok::TokType::STRING);
   REQUIRE(Tok.value == LR"("Hello World")");
-  Stream str2(LR"("hello \"but also this\"")");
-  Tok = gettok(str2);
+  Stream Str2(LR"("hello \"but also this\"")");
+  Tok = gettok(Str2);
   REQUIRE(Tok.tok == Tok::TokType::STRING);
   REQUIRE(Tok.value == LR"("hello \"but also this\"")");
-  Stream str3(LR"("\\")");
-  Tok = gettok(str3);
+  Stream Str3(LR"("\\")");
+  Tok = gettok(Str3);
   REQUIRE(Tok.tok == Tok::TokType::STRING);
   REQUIRE(Tok.value == LR"("\\")");
-  Stream str4(LR"("Hello World")");
-  Tok = gettok(str4);
+  Stream Str4(LR"("Hello World")");
+  Tok = gettok(Str4);
   REQUIRE(Tok.tok == Tok::TokType::STRING);
   REQUIRE(Tok.value == LR"("Hello World")");
 
@@ -153,88 +152,88 @@ TEST_CASE("Lexing String tokens", "[parser]") {
 }
 
 TEST_CASE("Lexing Symbol tokens", "[parser]") {
-  Stream sym(L"'racket-sym");
-  Tok Tok = gettok(sym);
+  Stream Sym(L"'racket-sym");
+  Tok Tok = gettok(Sym);
   REQUIRE(Tok.tok == Tok::TokType::SYMBOLMARK);
-  Tok = gettok(sym);
+  Tok = gettok(Sym);
   REQUIRE(Tok.tok == Tok::TokType::ID);
   REQUIRE(Tok.value == L"racket-sym");
 
-  Stream sym1(L"'  foo");
-  Tok = gettok(sym1);
+  Stream Sym1(L"'  foo");
+  Tok = gettok(Sym1);
   REQUIRE(Tok.tok == Tok::TokType::SYMBOLMARK);
-  Tok = gettok(sym1);
+  Tok = gettok(Sym1);
   REQUIRE(Tok.tok == Tok::TokType::ID);
   REQUIRE(Tok.value == L"foo");
 
-  Stream sym2(LR"('#\\)");
-  Tok = gettok(sym2);
+  Stream Sym2(LR"('#\\)");
+  Tok = gettok(Sym2);
   REQUIRE(Tok.tok == Tok::TokType::SYMBOLMARK);
-  Tok = gettok(sym2);
+  Tok = gettok(Sym2);
   REQUIRE(Tok.tok == Tok::TokType::CHAR);
   REQUIRE(Tok.value == LR"(\)");
 }
 
 TEST_CASE("Lexing identifiers starting with numbers", "[parser]") {
-  Stream sym(L"1/bound-identifier=?");
-  Tok Tok = gettok(sym);
+  Stream Sym(L"1/bound-identifier=?");
+  Tok Tok = gettok(Sym);
   REQUIRE(Tok.tok == Tok::TokType::ID);
   REQUIRE(Tok.value == L"1/bound-identifier=?");
 }
 
 TEST_CASE("Lexing booleans", "[parser]") {
-  Stream boolt(L"#t");
-  Tok Tok = gettok(boolt);
+  Stream Boolt(L"#t");
+  Tok Tok = gettok(Boolt);
   REQUIRE(Tok.tok == Tok::TokType::BOOL_TRUE);
-  Stream boolf(L"#f 2");
-  Tok = gettok(boolf);
+  Stream Boolf(L"#f 2");
+  Tok = gettok(Boolf);
   REQUIRE(Tok.tok == Tok::TokType::BOOL_FALSE);
 }
 
 TEST_CASE("Lexing full expressions", "[parser]") {
-  Stream lambda(L"(lambda () (void))");
-  Tok Tok = gettok(lambda);
+  Stream Lambda(L"(lambda () (void))");
+  Tok Tok = gettok(Lambda);
   REQUIRE(Tok.tok == Tok::TokType::LPAREN);
-  Tok = gettok(lambda);
+  Tok = gettok(Lambda);
   REQUIRE(Tok.tok == Tok::TokType::LAMBDA);
-  Tok = gettok(lambda);
+  Tok = gettok(Lambda);
   REQUIRE(Tok.tok == Tok::TokType::LPAREN);
-  Tok = gettok(lambda);
+  Tok = gettok(Lambda);
   REQUIRE(Tok.tok == Tok::TokType::RPAREN);
-  Tok = gettok(lambda);
+  Tok = gettok(Lambda);
   REQUIRE(Tok.tok == Tok::TokType::LPAREN);
-  Tok = gettok(lambda);
+  Tok = gettok(Lambda);
   REQUIRE(Tok.tok == Tok::TokType::VOID);
-  Tok = gettok(lambda);
+  Tok = gettok(Lambda);
   REQUIRE(Tok.tok == Tok::TokType::RPAREN);
-  Tok = gettok(lambda);
+  Tok = gettok(Lambda);
   REQUIRE(Tok.tok == Tok::TokType::RPAREN);
 }
 
 TEST_CASE("Lexing full expressions 2", "[parser]") {
-  Stream letvals(L"(let-values () #f)");
-  Tok Tok = gettok(letvals);
+  Stream Letvals(L"(let-values () #f)");
+  Tok Tok = gettok(Letvals);
   REQUIRE(Tok.tok == Tok::TokType::LPAREN);
-  Tok = gettok(letvals);
+  Tok = gettok(Letvals);
   REQUIRE(Tok.tok == Tok::TokType::LET_VALUES);
-  Tok = gettok(letvals);
+  Tok = gettok(Letvals);
   REQUIRE(Tok.tok == Tok::TokType::LPAREN);
-  Tok = gettok(letvals);
+  Tok = gettok(Letvals);
   REQUIRE(Tok.tok == Tok::TokType::RPAREN);
-  Tok = gettok(letvals);
+  Tok = gettok(Letvals);
   REQUIRE(Tok.tok == Tok::TokType::BOOL_FALSE);
-  Tok = gettok(letvals);
+  Tok = gettok(Letvals);
   REQUIRE(Tok.tok == Tok::TokType::RPAREN);
 }
 
 TEST_CASE("Lexing Characters", "[parser]") {
-  Stream char1(LR"(#\space)");
-  Tok Tok = gettok(char1);
+  Stream Char1(LR"(#\space)");
+  Tok Tok = gettok(Char1);
   REQUIRE(Tok.tok == Tok::TokType::CHAR_NAMED);
   REQUIRE(Tok.value == LR"(space)");
 
-  Stream char2(LR"(#\u10ff)");
-  Tok = gettok(char2);
+  Stream Char2(LR"(#\u10ff)");
+  Tok = gettok(Char2);
   REQUIRE(Tok.tok == Tok::TokType::CHAR_HEX);
   REQUIRE(Tok.value == LR"(u10ff)");
 }

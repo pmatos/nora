@@ -1,16 +1,17 @@
 #pragma once
 
+#include "ASTVisitor.h"
+
+#include <llvm/Support/Debug.h>
+#include <llvm/Support/raw_ostream.h>
+
 #include <cassert>
 #include <compare>
 #include <gmp.h>
 #include <iostream>
-#include <llvm/Support/Debug.h>
-#include <llvm/Support/raw_ostream.h>
 #include <memory>
 #include <utility>
 #include <vector>
-
-#include "ASTVisitor.h"
 
 // Forward declarations
 class IdPool;
@@ -346,10 +347,10 @@ public:
 class IdentifierFormal : public Formal {
 public:
   IdentifierFormal(const Identifier &I) : I(I){};
-  IdentifierFormal(const IdentifierFormal &other) = default;
-  IdentifierFormal(IdentifierFormal &&other) = default;
-  IdentifierFormal &operator=(const IdentifierFormal &other) = delete;
-  IdentifierFormal &operator=(IdentifierFormal &&other) = default;
+  IdentifierFormal(const IdentifierFormal &Other) = default;
+  IdentifierFormal(IdentifierFormal &&Other) = default;
+  IdentifierFormal &operator=(const IdentifierFormal &Other) = delete;
+  IdentifierFormal &operator=(IdentifierFormal &&Other) = default;
   ~IdentifierFormal() = default;
 
   std::unique_ptr<Formal> clone() const override {
@@ -367,10 +368,10 @@ class ListFormal : public Formal {
 public:
   ListFormal() = default;
   ListFormal(const std::vector<Identifier> &Ids) : Formals(Ids) {}
-  ListFormal(ListFormal const &other) = default;
-  ListFormal(ListFormal &&other) = default;
-  ListFormal &operator=(const ListFormal &other) = delete;
-  ListFormal &operator=(ListFormal &&other) = default;
+  ListFormal(ListFormal const &Other) = default;
+  ListFormal(ListFormal &&Other) = default;
+  ListFormal &operator=(const ListFormal &Other) = delete;
+  ListFormal &operator=(ListFormal &&Other) = default;
   ~ListFormal() override = default;
 
   std::unique_ptr<Formal> clone() const override {
@@ -404,10 +405,10 @@ public:
   ListRestFormal(const std::vector<Identifier> &Formals,
                  const Identifier &RestFormal)
       : ListFormal(Formals), RestFormal(RestFormal) {}
-  ListRestFormal(const ListRestFormal &other) = default;
-  ListRestFormal(ListRestFormal &&other) = default;
-  ListRestFormal &operator=(const ListRestFormal &other) = delete;
-  ListRestFormal &operator=(ListRestFormal &&other) = default;
+  ListRestFormal(const ListRestFormal &Other) = default;
+  ListRestFormal(ListRestFormal &&Other) = default;
+  ListRestFormal &operator=(const ListRestFormal &Other) = delete;
+  ListRestFormal &operator=(ListRestFormal &&Other) = default;
   ~ListRestFormal() override = default;
 
   std::unique_ptr<Formal> clone() const override {

@@ -218,9 +218,9 @@ std::optional<Tok> maybeLexIdOrNumber(Stream &S) {
 
     std::wstring_view Value = S.getSubviewAndSkip(Count);
 
-    bool isNumber = std::regex_match(Value.cbegin(), Value.cend(),
+    bool IsNumber = std::regex_match(Value.cbegin(), Value.cend(),
                                      std::wregex(L"[-+]?[0-9]+"));
-    return {Tok(isNumber ? Tok::TokType::NUM : Tok::TokType::ID, Value, Start,
+    return {Tok(IsNumber ? Tok::TokType::NUM : Tok::TokType::ID, Value, Start,
                 Start + Count - 1)};
   }
 
@@ -241,9 +241,9 @@ std::optional<Tok> maybeLexIdOrNumber(Stream &S) {
   }
 
   std::wstring_view Value = S.getSubviewAndSkip(Count);
-  bool isNumber = std::regex_match(Value.cbegin(), Value.cend(),
+  bool IsNumber = std::regex_match(Value.cbegin(), Value.cend(),
                                    std::wregex(L"[-+]?[0-9]+"));
-  Tok T(isNumber ? Tok::TokType::NUM : Tok::TokType::ID, Value, Start,
+  Tok T(IsNumber ? Tok::TokType::NUM : Tok::TokType::ID, Value, Start,
         Start + Count - 1);
 
   // Transform token
@@ -654,11 +654,11 @@ size_t isHexScalarValue(Stream &S, size_t Offset) {
   return Count;
 }
 
-bool isMnemonicEscape(Stream &s, size_t offset) {
-  if (s.peekChar(offset) == '\\' &&
-      (s.peekChar(offset + 1) == 'a' || s.peekChar(offset + 1) == 'b' ||
-       s.peekChar(offset + 1) == 't' || s.peekChar(offset + 1) == 'n' ||
-       s.peekChar(offset + 1) == 'r')) {
+bool isMnemonicEscape(Stream &S, size_t Offset) {
+  if (S.peekChar(Offset) == '\\' &&
+      (S.peekChar(Offset + 1) == 'a' || S.peekChar(Offset + 1) == 'b' ||
+       S.peekChar(Offset + 1) == 't' || S.peekChar(Offset + 1) == 'n' ||
+       S.peekChar(Offset + 1) == 'r')) {
     return true;
   }
   return false;

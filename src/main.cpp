@@ -19,6 +19,7 @@
 
 namespace cl = llvm::cl;
 
+namespace {
 static cl::opt<std::string> InputFilename(cl::Positional,
                                           cl::desc("<input file>"),
                                           cl::value_desc("filename"),
@@ -27,13 +28,13 @@ static cl::opt<std::string> InputFilename(cl::Positional,
 static cl::opt<bool> Verbose("v", cl::desc("Enable verbose output"),
                              cl::init(false));
 
-namespace {
 enum Action { None, DumpAST };
-} // namespace
 
 static cl::opt<enum Action>
     EmitAction("emit", cl::desc("Select the kind of output desired"),
                cl::values(clEnumValN(DumpAST, "ast", "output the AST dump")));
+
+} // namespace
 
 int main(int argc, char *argv[]) {
   mlir::registerAsmPrinterCLOptions();
@@ -44,8 +45,8 @@ int main(int argc, char *argv[]) {
     std::cout << "Nora pre-release " << PROJECT_VERSION << std::endl;
 
   // Initialize logger
-  static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
-  plog::init(plog::none, &consoleAppender);
+  static plog::ColorConsoleAppender<plog::TxtFormatter> ConsoleAppender;
+  plog::init(plog::none, &ConsoleAppender);
 
   if (Verbose) {
     std::cout << "Parsing linklet in file " << InputFilename << std::endl;
