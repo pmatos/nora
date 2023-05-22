@@ -33,6 +33,19 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release")
 endif()
 
+# FIXME: there are some warnings in GCC - so disable Werror
+#        for now.
+# From cmake 2.24 onwards we can use CMAKE_COMPILE_WARNING_AS_ERROR
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  set(FLAGS_TO_REMOVE "-Werror")
+  foreach(TYPE "" "_DEBUG" "_RELEASE" "_RELWITHDEBINFO" "_MINSIZEREL")
+    set(CURRENT_FLAG_VAR "CMAKE_CXX_FLAGS${TYPE}")
+    if(${CURRENT_FLAG_VAR} MATCHES ${FLAGS_TO_REMOVE})
+        string(REPLACE ${FLAGS_TO_REMOVE} "" ${CURRENT_FLAG_VAR} "${${CURRENT_FLAG_VAR}}")
+    endif()
+  endforeach()
+endif()
+
 # For git users, attempt to generate a more useful version string
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
   find_package(Git QUIET REQUIRED)

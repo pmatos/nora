@@ -313,9 +313,12 @@ std::optional<Tok> maybeLexVector(Stream &S) {
 
 std::optional<Tok> maybeLexBoolean(Stream &S) {
   if (S.searchString(L"#t") || S.searchString(L"#f")) {
-    Tok T(S.peekChar(1) == 't' ? Tok::TokType::BOOL_TRUE
-                               : Tok::TokType::BOOL_FALSE,
-          S.getSubviewAndSkip(2), S.getPosition(), S.getPosition() + 1);
+    Tok::TokType Ty = S.peekChar(1) == L't' ? Tok::TokType::BOOL_TRUE
+                                            : Tok::TokType::BOOL_FALSE;
+    size_t Start = S.getPosition();
+    size_t End = S.getPosition() + 1;
+    auto Val = S.getSubviewAndSkip(2);
+    Tok T(Ty, Val, Start, End);
     return {T};
   }
 

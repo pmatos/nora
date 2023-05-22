@@ -32,7 +32,7 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
         endif()
 else()
         if(WITH_UBSAN)
-                set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror -fsanitize=undefined")
+                set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=undefined")
                 target_link_options(norac BEFORE PUBLIC -fsanitize=undefined)
         endif()
 

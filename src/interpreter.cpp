@@ -145,7 +145,8 @@ void Interpreter::visit(ast::DefineValues const &DV) {
   // 2. Add bindings to the environment.
   size_t Idx = 0;
   for (const auto &Id : DV.getIds()) {
-    const ast::ExprNode &E = V->getExprs()[Idx++];
+    const auto &Exprs = V->getExprs();
+    const ast::ExprNode &E = Exprs[Idx++];
 
     // Because we know that ValuesExpr is a value we can down cast in place.
     std::unique_ptr<ast::ExprNode> EPtr(E.clone());

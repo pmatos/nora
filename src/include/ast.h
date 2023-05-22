@@ -100,7 +100,7 @@ public:
 // on leaf node classes
 template <typename Derived, typename Base> class ClonableNode : public Base {
 public:
-  ClonableNode<>(ASTNode::ASTNodeKind Kind) : Base(Kind) {}
+  ClonableNode(ASTNode::ASTNodeKind Kind) : Base(Kind) {}
 
   Base *clone() const override {
     return new Derived(static_cast<const Derived &>(*this));
