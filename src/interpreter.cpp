@@ -1,14 +1,14 @@
 #include "interpreter.h"
 
+#include "Casting.h"
+
+#include <llvm/Support/ErrorHandling.h>
+
 #include <gmp.h>
 #include <iostream>
-#include <llvm/Support/ErrorHandling.h>
 #include <memory>
 #include <plog/Log.h>
 #include <ranges>
-
-#include "Casting.h"
-#include "ast_fwd.h"
 
 // Constructor for interpreter sets up initial environment.
 Interpreter::Interpreter() {
