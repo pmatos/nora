@@ -40,3 +40,28 @@ jobs:
       - name: Test
         working-directory: ./build
         run: ninja test
+
+  ubsan-test:
+    needs: test
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake git ninja-build python3-pip
+          sudo apt-get install -y clang-15 llvm-15-dev llvm-15-tools mlir-15-tools libmlir-15-dev
+          sudo update-alternatives --install /usr/bin/FileCheck FileCheck /usr/bin/FileCheck-15 1
+      - name: Install lit
+        run: pip3 install lit
+      - name: Configure with UBSan
+        run: |
+          mkdir build
+          cd build
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="/usr/lib/llvm-15/cmake;/usr/lib/llvm-15/lib/cmake/mlir/" -DCMAKE_VERBOSE_MAKEFILE=1 -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DWITH_UBSAN=True ..
+      - name: Build with UBSan
+        working-directory: ./build
+        run: ninja
+      - name: Test with UBSan
+        working-directory: ./build
+        run: bin/nora-lit ../test/integration -v
