@@ -3,7 +3,7 @@ name: Test
 on: [push, pull_request]
 
 jobs:
-  test:
+  test-clang:
     runs-on: ubuntu-22.04
 
     steps:
@@ -21,6 +21,31 @@ jobs:
           mkdir build
           cd build
           cmake -G Ninja -DCMAKE_PREFIX_PATH="/usr/lib/llvm-15/cmake;/usr/lib/llvm-15/lib/cmake/mlir/" -DCMAKE_VERBOSE_MAKEFILE=1 -DCMAKE_C_COMPILER=clang-15 -DCMAKE_CXX_COMPILER=clang++-15 ..
+      - name: Build
+        working-directory: ./build
+        run: ninja
+      - name: Test
+        working-directory: ./build
+        run: ninja test
+
+  test-gcc:
+    runs-on: ubuntu-22.04
+      
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake gcc-12 g++-12 llvm-15-dev llvm-15-tools mlir-15-tools libmlir-15-dev git ninja-build python3-pip
+      - name: Install FileCheck alternative
+        run: sudo update-alternatives --install /usr/bin/FileCheck FileCheck /usr/bin/FileCheck-15 1
+      - name: Install lit
+        run: pip3 install lit
+      - name: Configure
+        run: |
+          mkdir build
+          cd build
+          cmake -G Ninja -DCMAKE_PREFIX_PATH="/usr/lib/llvm-15/cmake;/usr/lib/llvm-15/lib/cmake/mlir/" -DCMAKE_VERBOSE_MAKEFILE=1 -DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12 ..
       - name: Build
         working-directory: ./build
         run: ninja
