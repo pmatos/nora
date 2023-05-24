@@ -116,6 +116,8 @@ Integer::Integer(const Integer &I) : ClonableNode(ASTNodeKind::AST_Integer) {
   mpz_init_set(Value, I.Value);
 }
 
+Integer::~Integer() { mpz_clear(Value); }
+
 Integer &Integer::operator=(const Integer &Int) {
   mpz_set(Value, Int.Value);
   return *this;

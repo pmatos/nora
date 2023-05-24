@@ -456,7 +456,7 @@ public:
   Integer(const Integer &I);
   Integer(Integer &&Int) = default;
   Integer &operator=(const Integer &Int);
-  ~Integer() = default;
+  ~Integer();
 
   Integer &operator+=(const Integer &Int);
   Integer &operator-=(const Integer &Int);
