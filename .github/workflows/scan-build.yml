@@ -4,6 +4,13 @@ on:
   pull_request:
     branches:
       - main
+    paths:
+      - '**.cpp'
+      - '**.td'
+      - '**.h'
+      - '**.inc'
+      - '**.def'
+      - '**.h.in'
 
 jobs:
   analyze:
