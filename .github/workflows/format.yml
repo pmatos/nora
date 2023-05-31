@@ -1,0 +1,21 @@
+name: "ClangFormat"
+
+on: [pull_request]
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 5
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git clang-format-15
+      - name: Check formatting
+        working-directory: ${{ github.workspace }}
+        run: |
+          pwd
+          ls -la
+          git clang-format-15 HEAD~1
