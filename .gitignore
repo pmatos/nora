@@ -34,3 +34,6 @@ build/
 compiled/
 *.rktl
 !expander.rktl
+
+# VSCode
+*.code-workspace
