@@ -7,8 +7,14 @@
 #include <gmp.h>
 #include <iostream>
 #include <memory>
-#include <plog/Log.h>
 #include <ranges>
+
+#include "Casting.h"
+#include "ast_fwd.h"
+#include "llvm/Support/raw_ostream.h"
+
+#undef DEBUG_TYPE
+#define DEBUG_TYPE "Interpreter"
 
 // Constructor for interpreter sets up initial environment.
 Interpreter::Interpreter() {
@@ -32,11 +38,11 @@ void Interpreter::visit(ast::Identifier const &Id) {
   // Check if there's a binding for Id in environment,
   // if so, return the value.
   // If not, error UndefinedIdentifier.
-  PLOGD << "Interpreting Identifier: ";
-  IF_PLOG(plog::debug) {
-    std::wstring Name(Id.getName());
-    PLOGD << Name << std::endl;
-  }
+  LLVM_DEBUG({
+    llvm::dbgs() << "Interpreting Identifier: ";
+    std::string Name(Id.getName());
+    llvm::dbgs() << Name << "\n";
+  });
 
   // FIXME: why is it that :
   // for (auto &Env : Envs | std::ranges::reverse) {
@@ -51,9 +57,9 @@ void Interpreter::visit(ast::Identifier const &Id) {
 
   // It's not in the environment, but is it an identifier that's
   // part of the runtime?
-  const std::wstring Name(Id.getName());
+  const std::string Name(Id.getName());
   if (Runtime::getInstance().isRuntimeFunction(Name)) {
-    PLOGD << "Identifier is runtime function\n";
+    LLVM_DEBUG(llvm::dbgs() << "Identifier is runtime function\n");
     std::unique_ptr<ast::RuntimeFunction> RF =
         Runtime::getInstance().lookupRuntimeFunction(Name);
     Result = std::move(RF);
@@ -61,7 +67,7 @@ void Interpreter::visit(ast::Identifier const &Id) {
   }
 
   // FIXME: error here UndefineIdentifier.
-  std::wcerr << "Undefined Identifier: " << Id.getName() << std::endl;
+  llvm::errs() << "Undefined Identifier: " << Id.getName() << "\n";
   Result = nullptr;
 }
 
@@ -70,13 +76,14 @@ void Interpreter::visit(ast::RuntimeFunction const &LV) {
 }
 
 void Interpreter::visit(ast::Integer const &Int) {
-  PLOGD << "Interpreting Integer: " << Int.asString() << std::endl;
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting Integer: " << Int.asString()
+                          << "\n");
   Result = std::unique_ptr<ast::ValueNode>(Int.clone());
   assert(llvm::dyn_cast<ast::Integer>(Result.get()));
 }
 
 void Interpreter::visit(ast::Linklet const &Linklet) {
-  PLOGD << "Interpreting Linklet" << std::endl;
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting Linklet\n");
 
   for (const auto &BodyForm : Linklet.getBody()) {
     // The result of the last expression ends up being saved in Result.
@@ -85,7 +92,7 @@ void Interpreter::visit(ast::Linklet const &Linklet) {
 }
 
 void Interpreter::visit(ast::Values const &V) {
-  PLOGD << "Interpreting Values: " << std::endl;
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting Values\n");
   std::vector<std::unique_ptr<ast::ValueNode>> ValuesVec;
   for (const auto &Expr : V.getExprs()) {
     Expr->accept(*this);
@@ -110,7 +117,7 @@ void Interpreter::visit(ast::Values const &V) {
 }
 
 void Interpreter::visit(ast::DefineValues const &DV) {
-  PLOGD << "Interpreting DefineValues: " << std::endl;
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting DefineValues\n");
 
   // 1. Evaluate values body.
   DV.getBody().accept(*this);
@@ -128,7 +135,7 @@ void Interpreter::visit(ast::DefineValues const &DV) {
 
   // Check if the expression is a Values.
   if (!llvm::isa<ast::Values>(*Result)) {
-    std::cerr << "Expected Values in DefineValues." << std::endl;
+    llvm::errs() << "Expected Values in DefineValues.\n";
     Result = nullptr;
     return;
   }
@@ -136,8 +143,8 @@ void Interpreter::visit(ast::DefineValues const &DV) {
 
   // Check if the number of values is equal to the number of identifiers.
   if (DV.countIds() != V->countExprs()) {
-    std::cerr << "Expected " << DV.countIds() << " values, got "
-              << V->countExprs() << std::endl;
+    llvm::errs() << "Expected " << DV.countIds() << " values, got "
+                 << V->countExprs() << "\n";
     Result = nullptr;
     return;
   }
@@ -160,17 +167,17 @@ void Interpreter::visit(ast::DefineValues const &DV) {
 }
 
 void Interpreter::visit(ast::Void const &Vd) {
-  PLOGD << "Interpreting Void" << std::endl;
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting Void\n");
   Result = std::unique_ptr<ast::ValueNode>(new ast::Void());
 }
 
 void Interpreter::visit(ast::Lambda const &L) {
-  PLOGD << "Interpreting Lambda: " << std::endl;
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting Lambda\n");
   Result = std::unique_ptr<ast::ValueNode>(L.clone());
 }
 
 void Interpreter::visit(ast::Begin const &B) {
-  PLOGD << "Interpreting Begin: " << std::endl;
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting Begin\n");
 
   // 1. Evaluate each expression in the body.
   std::unique_ptr<ast::ValueNode> D;
@@ -196,7 +203,7 @@ void Interpreter::visit(ast::Begin const &B) {
 }
 
 void Interpreter::visit(ast::List const &L) {
-  PLOGD << "Interpreting List" << std::endl;
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting List\n");
   Result = std::unique_ptr<ast::ValueNode>(L.clone());
 }
 
@@ -213,7 +220,7 @@ void Interpreter::visit(ast::Application const &A) {
     std::unique_ptr<ast::RuntimeFunction> RF =
         dyn_castU<ast::RuntimeFunction>(D);
     if (!RF) {
-      std::cerr << "Expected lambda expression in Application." << std::endl;
+      std::cerr << "Expected lambda expression in Application.\n";
       return;
     }
 
@@ -236,16 +243,16 @@ void Interpreter::visit(ast::Application const &A) {
       Args.emplace_back(ArgHolder.back().get());
     }
 
-    IF_PLOG(plog::debug) {
-      std::wcerr << "Calling runtime function: " << RF->getName() << std::endl;
+    LLVM_DEBUG({
+      llvm::dbgs() << "Calling runtime function: " << RF->getName() << "\n";
       for (const ast::ValueNode *Arg : Args) {
         assert(llvm::dyn_cast<ast::Integer>(Arg) &&
                "Expected Integer in runtime function call.");
-        std::cerr << "  Arg: ";
+        llvm::dbgs() << "  Arg: ";
         Arg->dump();
-        std::cerr << std::endl;
+        llvm::dbgs() << "\n";
       }
-    }
+    });
 
     // Call the runtime function.
     Result = Runtime::getInstance().callFunction(RF->getName(), Args);
@@ -324,7 +331,7 @@ void Interpreter::visit(ast::Application const &A) {
 // To interpret a set! expression we set the value of the identifier in the
 // current environment and return void.
 void Interpreter::visit(ast::SetBang const &SB) {
-  PLOGD << "Interpreting SetBang\n";
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting SetBang\n");
 
   // 1. Evaluate the expression.
   SB.getExpr().accept(*this);
@@ -345,7 +352,7 @@ void Interpreter::visit(ast::SetBang const &SB) {
 }
 
 void Interpreter::visit(ast::IfCond const &I) {
-  PLOGD << "Interpreting If\n";
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting If\n");
 
   // 1. Evaluate the predicate.
   I.getCond().accept(*this);
@@ -363,17 +370,13 @@ void Interpreter::visit(ast::IfCond const &I) {
 }
 
 void Interpreter::visit(ast::BooleanLiteral const &Bool) {
-  PLOGD << "Interpreting BooleanLiteral\n";
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting BooleanLiteral\n");
   Result = std::unique_ptr<ast::ValueNode>(Bool.clone());
 }
 
 void Interpreter::visit(ast::LetValues const &L) {
-  PLOGD << "Interpreting LetValues"
-        << "\n";
-  IF_PLOG(plog::debug) {
-    L.dump();
-    PLOGD << "\n";
-  }
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting LetValues\n");
+  LLVM_DEBUG(L.dump(); llvm::dbgs() << "\n";);
 
   // 1. Evaluate each of the expressions in order.
   std::vector<std::unique_ptr<ast::ValueNode>> ExprValues;
@@ -390,7 +393,7 @@ void Interpreter::visit(ast::LetValues const &L) {
   // to the value of the expression. If on the other hand, it's a list of
   // identifiers, then it should have the same length as the values list and
   // each identifier is assigned to the corresponding value.
-  PLOGD << "Creating environment for LetValues\n";
+  LLVM_DEBUG(llvm::dbgs() << "Creating environment for LetValues\n");
   Environment Env;
   for (size_t Idx = 0; Idx < ExprValues.size(); ++Idx) {
     if (std::ranges::size(L.getBindingIds(Idx)) == 1) {
@@ -416,8 +419,9 @@ void Interpreter::visit(ast::LetValues const &L) {
           std::unique_ptr<ast::ExprNode> EPtr(E.clone());
           std::unique_ptr<ast::ValueNode> Val = dyn_castU<ast::ValueNode>(EPtr);
 
-          PLOGD << "Adding " << std::wstring(IdsExprRange[Idx].getName())
-                << " to environment\n";
+          LLVM_DEBUG(llvm::dbgs()
+                     << "Adding " << std::string(IdsExprRange[Idx].getName())
+                     << " to environment\n");
           Env.add(IdsExprRange[Idx], std::move(Val));
         }
 
@@ -428,10 +432,10 @@ void Interpreter::visit(ast::LetValues const &L) {
       }
     }
   }
-  PLOGD << " Pushing new environment for LetValues\n";
+  LLVM_DEBUG(llvm::dbgs() << " Pushing new environment for LetValues\n");
   Envs.push_back(Env);
 
-  PLOGD << "Evaluating body of LetValues\n";
+  LLVM_DEBUG(llvm::dbgs() << "Evaluating body of LetValues\n");
   for (size_t I = 0; I < L.exprsCount(); ++I) {
     // 3. Return the result of the let-values expression.
     L.getBodyExpr(I).accept(*this);

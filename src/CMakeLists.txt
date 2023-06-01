@@ -19,9 +19,12 @@ add_llvm_executable(norac
         environment.cpp
         ast.cpp
         idpool.cpp
-        parse.cpp
+        Parse.cpp
+        Lex.cpp
+        SourceStream.cpp
         interpreter.cpp
         runtime.cpp
+        UTF8.cpp
 )
 target_link_libraries(norac PRIVATE ${LIBS})
 

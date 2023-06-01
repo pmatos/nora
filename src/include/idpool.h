@@ -19,10 +19,10 @@ public:
     return *Inst;
   }
 
-  ast::Identifier create(const std::wstring &Name);
+  ast::Identifier create(const std::string &Name);
   ast::Identifier create(const ast::Identifier &Id);
 
 private:
   static IdPool *Inst;
-  std::set<std::wstring> StrPool;
+  std::set<std::string> StrPool;
 };

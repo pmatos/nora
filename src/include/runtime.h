@@ -16,15 +16,15 @@ public:
   Runtime &operator=(const Runtime &) = delete;
 
   std::unique_ptr<ast::ValueNode>
-  callFunction(const std::wstring &Name,
+  callFunction(const std::string &Name,
                const std::vector<const ast::ValueNode *> &Args);
 
-  bool isRuntimeFunction(const std::wstring &Name) {
+  bool isRuntimeFunction(const std::string &Name) {
     return RuntimeFunctions.find(Name) != RuntimeFunctions.end();
   }
 
   std::unique_ptr<ast::RuntimeFunction>
-  lookupRuntimeFunction(const std::wstring &Name) {
+  lookupRuntimeFunction(const std::string &Name) {
     assert(isRuntimeFunction(Name) && "Function not found in runtime.");
     ast::ValueNode *V = RuntimeFunctions[Name]->clone();
     ast::RuntimeFunction *RF = llvm::cast<ast::RuntimeFunction>(V);
@@ -39,6 +39,6 @@ public:
 
 private:
   Runtime(); /// Private constructor for singleton
-  std::unordered_map<std::wstring, std::shared_ptr<ast::RuntimeFunction>>
+  std::unordered_map<std::string, std::shared_ptr<ast::RuntimeFunction>>
       RuntimeFunctions;
 };

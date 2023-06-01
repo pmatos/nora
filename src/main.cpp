@@ -6,16 +6,11 @@
 #include <llvm/Support/CommandLine.h>
 #include <mlir/IR/AsmState.h>
 #include <mlir/IR/MLIRContext.h>
-#include <plog/Appenders/ColorConsoleAppender.h>
-#include <plog/Formatters/TxtFormatter.h>
-#include <plog/Init.h>
-#include <plog/Log.h>
 #include <variant>
 
+#include "Parse.h"
 #include "config.h"
 #include "interpreter.h"
-#include "parse.h"
-#include "plog/Severity.h"
 
 namespace cl = llvm::cl;
 
@@ -41,19 +36,13 @@ int main(int argc, char *argv[]) {
   mlir::registerMLIRContextCLOptions();
   cl::ParseCommandLineOptions(argc, argv, "norac\n");
 
-  if (Verbose)
-    std::cout << "Nora pre-release " << PROJECT_VERSION << std::endl;
-
-  // Initialize logger
-  static plog::ColorConsoleAppender<plog::TxtFormatter> ConsoleAppender;
-  plog::init(plog::none, &ConsoleAppender);
-
   if (Verbose) {
+    std::cout << "Nora pre-release " << PROJECT_VERSION << std::endl;
     std::cout << "Parsing linklet in file " << InputFilename << std::endl;
   }
 
-  Stream Input(InputFilename);
-  std::unique_ptr<ast::Linklet> AST = parseLinklet(Input);
+  SourceStream Input(InputFilename);
+  std::unique_ptr<ast::Linklet> AST = Parse::parseLinklet(Input);
 
   if (!AST) {
     std::cerr << "Parsing failed!" << std::endl;

@@ -1,7 +1,7 @@
 #include "ast.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include <llvm/Support/Casting.h>
-#include <plog/Log.h>
 
 using namespace ast;
 
@@ -25,12 +25,12 @@ void Application::appendExpr(std::unique_ptr<ExprNode> &&E) {
 ExprNode const &Application::operator[](size_t I) const { return *Exprs[I]; }
 
 void Application::dump() const {
-  std::wcout << L"(";
+  std::cout << "(";
   for (const auto &Expr : Exprs) {
     Expr->dump();
-    std::wcout << L" ";
+    std::cout << " ";
   }
-  std::wcout << L")";
+  std::cout << ")";
 }
 
 //
@@ -53,7 +53,7 @@ void Begin::appendExpr(std::unique_ptr<ExprNode> &&E) {
 // Implementation of Identifier node.
 //
 
-Identifier::Identifier(std::wstring_view Id)
+Identifier::Identifier(llvm::StringRef Id)
     : ClonableNode(ASTNodeKind::AST_Identifier), Id(Id) {}
 
 Identifier &Identifier::operator=(Identifier &&I) noexcept {
@@ -61,16 +61,16 @@ Identifier &Identifier::operator=(Identifier &&I) noexcept {
   return *this;
 }
 
-const std::wstring_view Identifier::getName() const { return Id; }
+const llvm::StringRef Identifier::getName() const { return Id; }
 
 std::strong_ordering Identifier::operator<=>(const Identifier &I) const {
-  return Id <=> I.Id;
+  int Result = Id.compare(I.Id);
+  return Result < 0   ? std::strong_ordering::less
+         : Result > 0 ? std::strong_ordering::greater
+                      : std::strong_ordering::equal;
 }
 
-void Identifier::dump() const {
-  // FIXME: use ICU for proper output to llvm::dbgs()
-  std::wcout << Id;
-}
+void Identifier::dump() const { llvm::dbgs() << Id; }
 
 //
 // Implementation of IfCond node.
@@ -90,13 +90,13 @@ ExprNode const &IfCond::getThen() const { return *Then; }
 ExprNode const &IfCond::getElse() const { return *Else; }
 
 void IfCond::dump() const {
-  std::wcout << L"(if ";
+  std::cout << "(if ";
   Cond->dump();
-  std::wcout << L" ";
+  std::cout << " ";
   Then->dump();
-  std::wcout << L" ";
+  std::cout << " ";
   Else->dump();
-  std::wcout << L")";
+  std::cout << ")";
 }
 
 //
@@ -170,7 +170,7 @@ Lambda::Lambda(Lambda const &L)
 const ExprNode &Lambda::getBody() const { return *Body; }
 
 void Lambda::dump() const {
-  std::wcout << L"(lambda ";
+  std::cout << "(lambda ";
   auto const &F = getFormals();
   switch (F.getType()) {
   case Formal::Type::Identifier: {
@@ -201,12 +201,12 @@ void Lambda::dump() const {
     break;
   }
   }
-  std::wcout << L" ";
+  std::cout << " ";
   Body->dump();
-  std::wcout << L")";
+  std::cout << ")";
 }
 
-void Lambda::write() const { std::wcout << L"#<procedure>"; }
+void Lambda::write() const { std::cout << "#<procedure>"; }
 
 //
 // Implementation of DefineValues node.
@@ -227,13 +227,13 @@ DefineValues::DefineValues(std::vector<Identifier> Ids,
 const ExprNode &DefineValues::getBody() const { return *Body; }
 
 void DefineValues::dump() const {
-  std::wcout << L"(define-values (";
+  llvm::outs() << "(define-values (";
   for (const auto &Id : Ids) {
-    std::wcout << Id.getName() << L" ";
+    llvm::outs() << Id.getName() << " ";
   }
-  std::wcout << L") ";
+  llvm::outs() << ") ";
   Body->dump();
-  std::wcout << L")";
+  llvm::outs() << ")";
 }
 
 //
@@ -277,22 +277,22 @@ void Linklet::appendBodyForm(std::unique_ptr<TLNode> &&Form) {
 }
 
 void Linklet::dump() const {
-  std::wcout << L"(linklet (";
+  llvm::outs() << "(linklet (";
   for (const auto &I : Imports) {
-    std::wcout << L"(" << I.first.getName() << L" " << I.second.getName()
-               << L") ";
+    llvm::outs() << "(" << I.first.getName() << " " << I.second.getName()
+                 << ") ";
   }
-  std::wcout << L") (";
+  llvm::outs() << ") (";
   for (const auto &E : Exports) {
-    std::wcout << L"(" << E.first.getName() << L" " << E.second.getName()
-               << L") ";
+    llvm::outs() << "(" << E.first.getName() << " " << E.second.getName()
+                 << ") ";
   }
-  std::wcout << L") (";
+  llvm::outs() << ") (";
   for (const auto &Form : Body) {
     Form->dump();
-    std::wcout << L" ";
+    llvm::outs() << " ";
   }
-  std::wcout << L"))";
+  std::cout << "))";
 }
 
 //
@@ -337,12 +337,12 @@ ExprNode const &Values::ExprRange::operator[](size_t I) const {
 }
 
 void Values::dump() const {
-  std::wcout << L"(values";
+  std::cout << "(values";
   for (const auto &Expr : Exprs) {
-    std::wcout << L" ";
+    std::cout << " ";
     Expr->dump();
   }
-  std::wcout << L")";
+  std::cout << ")";
 }
 
 void Values::write() const {
@@ -350,9 +350,9 @@ void Values::write() const {
     ExprNode *E = Expr.get();
     if (ValueNode *V = llvm::dyn_cast<ValueNode>(E)) {
       V->write();
-      std::wcout << std::endl;
+      std::cout << std::endl;
     } else {
-      std::wcerr << L"Error: non-value in values expression" << std::endl;
+      std::cerr << "Error: non-value in values expression" << std::endl;
       exit(1);
     }
   }
@@ -397,7 +397,7 @@ size_t LetValues::exprsCount() const { return Exprs.size(); }
 //
 // Implementation of Void node.
 //
-void Void::dump() const { std::wcerr << "(void)"; }
+void Void::dump() const { std::cerr << "(void)"; }
 
 void Void::write() const {
   // Do nothing
