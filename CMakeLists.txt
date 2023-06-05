@@ -111,9 +111,6 @@ endif()
 
 message(STATUS "Found GMP library")
 
-# Find and Configure ICU
-find_package(ICU REQUIRED COMPONENTS uc io)
-
 # Configure LLVM
 find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
