@@ -2,6 +2,7 @@
 
 #include "Casting.h"
 
+#include <llvm/ADT/STLExtras.h>
 #include <llvm/Support/ErrorHandling.h>
 
 #include <gmp.h>
@@ -337,15 +338,19 @@ void Interpreter::visit(ast::SetBang const &SB) {
   SB.getExpr().accept(*this);
   std::unique_ptr<ast::ValueNode> D = std::move(Result);
 
-  // 2. Set the value of the identifier in the current environment.
+  // 2. Set the value of the identifier in the current set of environments.
+  // We need to search the environments in reverse order.
   assert(Envs.size() > 0);
-  Environment &Env = Envs.back();
-  const ast::Identifier &Id = SB.getIdentifier();
-  if (!Env.lookup(Id)) {
-    std::cerr << "Cannot set undefined identifier." << std::endl;
-    return;
+  for (auto &Env : llvm::reverse(Envs)) {
+    if (Env.lookup(SB.getIdentifier())) {
+      Env.add(SB.getIdentifier(), std::move(D));
+      Result = std::unique_ptr<ast::ValueNode>(new ast::Void());
+      return;
+    }
   }
-  Env.add(Id, std::move(D));
+
+  // If we get here, we couldn't find the identifier.
+  llvm::errs() << "Cannot set undefined identifier.\n";
 
   // 3. Return void.
   Result = std::unique_ptr<ast::ValueNode>(new ast::Void());
