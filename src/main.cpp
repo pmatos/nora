@@ -3,10 +3,13 @@
 #include <filesystem>
 #include <iostream>
 #include <iterator>
+#include <variant>
+
 #include <llvm/Support/CommandLine.h>
+#include <llvm/Support/Debug.h>
+#include <llvm/Support/InitLLVM.h>
 #include <mlir/IR/AsmState.h>
 #include <mlir/IR/MLIRContext.h>
-#include <variant>
 
 #include "Parse.h"
 #include "config.h"
@@ -22,6 +25,8 @@ static cl::opt<std::string> InputFilename(cl::Positional,
 
 static cl::opt<bool> Verbose("v", cl::desc("Enable verbose output"),
                              cl::init(false));
+static cl::opt<bool, true> DebugFlag("debug", cl::desc("Enable debug output"),
+                                     cl::Hidden, cl::location(llvm::DebugFlag));
 
 enum Action { None, DumpAST };
 
@@ -32,6 +37,8 @@ static cl::opt<enum Action>
 } // namespace
 
 int main(int argc, char *argv[]) {
+  llvm::InitLLVM X(argc, argv);
+
   mlir::registerAsmPrinterCLOptions();
   mlir::registerMLIRContextCLOptions();
   cl::ParseCommandLineOptions(argc, argv, "norac\n");
