@@ -539,11 +539,16 @@ Tok Lex::gettok(SourceStream &S) {
   // We start by skipping whitespace which is not part of a token
   S.skipWhitespace();
 
+  // FIXME: we are allowing both [ and ] for readability but we don't really
+  // count them to ensure they match so this is valid:
+  // (+ 2 1]
   switch (S.peekChar()) {
   case '(':
+  case '[':
     S.skipPrefix(1);
     return {Tok::TokType::LPAREN, S.getPosition()};
   case ')':
+  case ']':
     S.skipPrefix(1);
     return {Tok::TokType::RPAREN, S.getPosition()};
   }
