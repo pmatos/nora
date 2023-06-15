@@ -25,12 +25,12 @@ void Application::appendExpr(std::unique_ptr<ExprNode> &&E) {
 ExprNode const &Application::operator[](size_t I) const { return *Exprs[I]; }
 
 void Application::dump() const {
-  std::cout << "(";
+  llvm::dbgs() << "(";
   for (const auto &Expr : Exprs) {
     Expr->dump();
-    std::cout << " ";
+    llvm::dbgs() << " ";
   }
-  std::cout << ")";
+  llvm::dbgs() << ")";
 }
 
 //
