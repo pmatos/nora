@@ -38,5 +38,8 @@ Closure::Closure(const Closure &Other)
   }
 }
 
-void Closure::dump() const {}
-void Closure::write() const {}
+void Closure::dump() const {
+  // TODO: Implement.
+  llvm::dbgs() << "<closure: not implemented>\n";
+}
+void Closure::write() const { llvm::outs() << "<closure>\n"; }
