@@ -14,6 +14,7 @@ public:
   virtual void visit(ast::Values const &V) = 0;
   virtual void visit(ast::Void const &Vd) = 0;
   virtual void visit(ast::Lambda const &L) = 0;
+  virtual void visit(ast::Closure const &L) = 0;
   virtual void visit(ast::Begin const &B) = 0;
   virtual void visit(ast::List const &L) = 0;
   virtual void visit(ast::Application const &A) = 0;

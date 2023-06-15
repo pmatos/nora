@@ -18,6 +18,8 @@ add_llvm_executable(norac
         main.cpp
         environment.cpp
         ast.cpp
+        ASTRuntime.cpp
+        AnalysisFreeVars.cpp
         idpool.cpp
         Parse.cpp
         Lex.cpp

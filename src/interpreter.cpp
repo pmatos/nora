@@ -5,11 +5,13 @@
 #include <llvm/ADT/STLExtras.h>
 #include <llvm/Support/ErrorHandling.h>
 
+#include <array>
 #include <gmp.h>
 #include <iostream>
 #include <memory>
 #include <ranges>
 
+#include "ASTRuntime.h"
 #include "Casting.h"
 #include "ast_fwd.h"
 #include "llvm/Support/raw_ostream.h"
@@ -45,11 +47,8 @@ void Interpreter::visit(ast::Identifier const &Id) {
     llvm::dbgs() << Name << "\n";
   });
 
-  // FIXME: why is it that :
-  // for (auto &Env : Envs | std::ranges::reverse) {
-  // does not work here?
-  for (auto Env = Envs.rbegin(); Env != Envs.rend(); ++Env) {
-    auto V = Env->lookup(Id);
+  for (auto &Env : llvm::reverse(Envs)) {
+    auto V = Env.lookup(Id);
     if (V) {
       Result = std::move(V);
       return;
@@ -173,8 +172,15 @@ void Interpreter::visit(ast::Void const &Vd) {
 }
 
 void Interpreter::visit(ast::Lambda const &L) {
+  // The interpretation of a lambda expression is a closure,
+  // even if no variables are captured.
   LLVM_DEBUG(llvm::dbgs() << "Interpreting Lambda\n");
-  Result = std::unique_ptr<ast::ValueNode>(L.clone());
+  Result = std::make_unique<ast::Closure>(L, Envs);
+}
+
+void Interpreter::visit(ast::Closure const &C) {
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting Closure\n");
+  Result = std::unique_ptr<ast::ValueNode>(C.clone());
 }
 
 void Interpreter::visit(ast::Begin const &B) {
@@ -214,14 +220,15 @@ void Interpreter::visit(ast::Application const &A) {
   A[0].accept(*this);
   std::unique_ptr<ast::ValueNode> D = std::move(Result);
 
-  // Error out if not a lambda expression or runtime expression.
-  std::unique_ptr<ast::Lambda> L = dyn_castU<ast::Lambda>(D);
-  if (!L) {
+  // Error out if not a Closure expression or Runtime expression.
+  std::unique_ptr<ast::Closure> C = dyn_castU<ast::Closure>(D);
+  if (!C) {
     // maybe a runtime function?
     std::unique_ptr<ast::RuntimeFunction> RF =
         dyn_castU<ast::RuntimeFunction>(D);
     if (!RF) {
-      std::cerr << "Expected lambda expression in Application.\n";
+      llvm::errs() << "Expected closure or runtime function expression in "
+                      "application.\n";
       return;
     }
 
@@ -233,21 +240,19 @@ void Interpreter::visit(ast::Application const &A) {
     // will contain pointers to the results in ArgHolder. This sucks a bit but
     // at this point, I am not sure if there's a point in focusing on optimizing
     // this.
-    std::vector<std::unique_ptr<ast::ValueNode>> ArgHolder;
-    std::vector<const ast::ValueNode *> Args;
-    ArgHolder.reserve(A.length() - 1);
-    Args.reserve(A.length() - 1);
-    for (size_t Idx = 1; Idx < A.length(); ++Idx) {
-      A[Idx].accept(*this);
+    std::vector<std::unique_ptr<ast::ValueNode>> ArgHolder(A.length() - 1);
+    std::vector<const ast::ValueNode *> Args(A.length() - 1);
+    for (size_t Idx = 0; Idx < A.length() - 1; ++Idx) {
+      A[Idx + 1].accept(*this);
       assert(Result && "Expected result from expression.");
-      ArgHolder.emplace_back(std::move(Result));
-      Args.emplace_back(ArgHolder.back().get());
+      ArgHolder[Idx] = std::move(Result);
+      Args[Idx] = ArgHolder[Idx].get();
     }
 
     LLVM_DEBUG({
       llvm::dbgs() << "Calling runtime function: " << RF->getName() << "\n";
       for (const ast::ValueNode *Arg : Args) {
-        assert(llvm::dyn_cast<ast::Integer>(Arg) &&
+        assert(Arg && llvm::dyn_cast<ast::Integer>(Arg) &&
                "Expected Integer in runtime function call.");
         llvm::dbgs() << "  Arg: ";
         Arg->dump();
@@ -271,7 +276,8 @@ void Interpreter::visit(ast::Application const &A) {
   // If we have a list formals then, error out of args diff than formals.
   // If we have a list rest formals then, error out if args less than formals.
   // If it's identifier formals then it does not matter.
-  const ast::Formal &F = L->getFormals();
+  const ast::Lambda &L = C->getLambda();
+  const ast::Formal &F = L.getFormals();
   if (F.getType() == ast::Formal::Type::List) {
     auto LF = static_cast<const ast::ListFormal &>(F);
     if (Args.size() != LF.size()) {
@@ -323,9 +329,13 @@ void Interpreter::visit(ast::Application const &A) {
     llvm_unreachable("unknown formal type");
   }
 
-  Envs.push_back(Env);
+  Envs.push_back(C->getEnvironment()); // Pushes the closure environment first.
+  Envs.push_back(Env); // Then pushes the environment with the args.
+
   // 4. Return the result of the application.
-  L->getBody().accept(*this);
+  L.getBody().accept(*this);
+
+  Envs.pop_back();
   Envs.pop_back();
 }
 
