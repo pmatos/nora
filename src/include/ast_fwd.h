@@ -8,6 +8,7 @@ class DefineValues;
 class Values;
 class Void;
 class Lambda;
+class Closure;
 class Begin;
 class List;
 class Application;

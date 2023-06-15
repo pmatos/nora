@@ -20,6 +20,10 @@ public:
   // Lookup an identifier in the environment.
   std::unique_ptr<ast::ValueNode> lookup(ast::Identifier const &Id) const;
 
+  // Implement range style access to the Env map.
+  auto begin() const { return Env.begin(); }
+  auto end() const { return Env.end(); }
+
 private:
   // Environment map for identifiers.
   std::map<ast::Identifier, std::shared_ptr<ast::ValueNode>> Env;

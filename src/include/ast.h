@@ -10,6 +10,7 @@
 #include <gmp.h>
 #include <iostream>
 #include <memory>
+#include <ranges>
 #include <utility>
 #include <vector>
 
@@ -42,6 +43,7 @@ public:
     AST_BooleanLiteral,
     AST_Integer,
     AST_Lambda,
+    AST_Closure, // result of evaluating a Lambda expression
     AST_List,
     AST_Values,
     AST_Void,
@@ -206,6 +208,7 @@ private:
 class Application : public ClonableNode<Application, ExprNode> {
 public:
   Application() : ClonableNode(ASTNodeKind::AST_Application) {}
+  Application &operator=(Application &&) = delete;
   Application(const Application &);
   Application(Application &&) = default;
   Application &operator=(const Application &) = delete;
@@ -221,8 +224,12 @@ public:
     return N->getKind() == ASTNodeKind::AST_Application;
   }
 
+  const llvm::SmallVector<std::unique_ptr<ExprNode>> &getExprs() const {
+    return Exprs;
+  }
+
 private:
-  std::vector<std::unique_ptr<ExprNode>> Exprs;
+  llvm::SmallVector<std::unique_ptr<ExprNode>> Exprs;
 };
 
 // AST Node representing a begin or begin0 expression.
@@ -234,7 +241,8 @@ public:
   Begin &operator=(const Begin &B) = delete;
   ~Begin() = default;
 
-  [[nodiscard]] const std::vector<std::unique_ptr<ExprNode>> &getBody() const {
+  [[nodiscard]] const llvm::SmallVector<std::unique_ptr<ExprNode>> &
+  getBody() const {
     return Body;
   }
   [[nodiscard]] size_t bodyCount() const { return Body.size(); }
@@ -249,7 +257,7 @@ public:
   }
 
 private:
-  std::vector<std::unique_ptr<ExprNode>> Body;
+  llvm::SmallVector<std::unique_ptr<ExprNode>> Body;
   bool Zero = false;
 };
 
@@ -495,6 +503,8 @@ public:
   void dump() const override;
   void write() const override;
 
+  llvm::SmallVector<Identifier> findFreeVariables() const;
+
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_Lambda;
   }
@@ -507,6 +517,8 @@ private:
 class LetValues : public ClonableNode<LetValues, ExprNode> {
 public:
   LetValues() : ClonableNode(ASTNodeKind::AST_LetValues) {}
+  LetValues &operator=(const LetValues &) = delete;
+  LetValues &operator=(LetValues &&) = delete;
   LetValues(const LetValues &DV);
   LetValues(LetValues &&DV) = default;
   ~LetValues() = default;
@@ -575,8 +587,10 @@ public:
     return N->getKind() == ASTNodeKind::AST_List;
   }
 
+  auto const &values() const { return Values; }
+
 private:
-  std::vector<std::unique_ptr<ast::ValueNode>> Values;
+  llvm::SmallVector<std::unique_ptr<ast::ValueNode>> Values;
 };
 
 class SetBang : public ClonableNode<SetBang, ExprNode> {
@@ -671,8 +685,12 @@ public:
   virtual std::unique_ptr<ast::ValueNode>
   operator()(const std::vector<const ast::ValueNode *> &Args) const = 0;
 
-  void dump() const override { std::cerr << "#<runtime:" << getName() << ">"; }
-  void write() const override { std::cout << "#<runtime:" << getName() << ">"; }
+  void dump() const override {
+    llvm::errs() << "#<runtime:" << getName() << ">";
+  }
+  void write() const override {
+    llvm::outs() << "#<runtime:" << getName() << ">";
+  }
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_RuntimeFunction;
