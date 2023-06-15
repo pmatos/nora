@@ -90,13 +90,13 @@ ExprNode const &IfCond::getThen() const { return *Then; }
 ExprNode const &IfCond::getElse() const { return *Else; }
 
 void IfCond::dump() const {
-  std::cout << "(if ";
+  llvm::dbgs() << "(if ";
   Cond->dump();
-  std::cout << " ";
+  llvm::dbgs() << " ";
   Then->dump();
-  std::cout << " ";
+  llvm::dbgs() << " ";
   Else->dump();
-  std::cout << ")";
+  llvm::dbgs() << ")";
 }
 
 //
@@ -170,7 +170,7 @@ Lambda::Lambda(Lambda const &L)
 const ExprNode &Lambda::getBody() const { return *Body; }
 
 void Lambda::dump() const {
-  std::cout << "(lambda ";
+  llvm::dbgs() << "(lambda ";
   auto const &F = getFormals();
   switch (F.getType()) {
   case Formal::Type::Identifier: {
@@ -180,30 +180,30 @@ void Lambda::dump() const {
   }
   case Formal::Type::List: {
     ListFormal const &FList = static_cast<ListFormal const &>(F);
-    std::cout << "(";
+    llvm::dbgs() << "(";
     for (const auto &Formal : FList.getIds()) {
       Formal.dump();
-      std::cout << " ";
+      llvm::dbgs() << " ";
     }
-    std::cout << ")";
+    llvm::dbgs() << ")";
     break;
   }
   case Formal::Type::ListRest: {
     ListRestFormal const &FListRest = static_cast<ListRestFormal const &>(F);
-    std::cout << "(";
+    llvm::dbgs() << "(";
     for (const auto &Formal : FListRest.getIds()) {
       Formal.dump();
-      std::cout << " ";
+      llvm::dbgs() << " ";
     }
-    std::cout << " . ";
+    llvm::dbgs() << " . ";
     FListRest.getRestFormal().dump();
-    std::cout << ")";
+    llvm::dbgs() << ")";
     break;
   }
   }
-  std::cout << " ";
+  llvm::dbgs() << " ";
   Body->dump();
-  std::cout << ")";
+  llvm::dbgs() << ")";
 }
 
 void Lambda::write() const { std::cout << "#<procedure>"; }
@@ -227,13 +227,13 @@ DefineValues::DefineValues(std::vector<Identifier> Ids,
 const ExprNode &DefineValues::getBody() const { return *Body; }
 
 void DefineValues::dump() const {
-  llvm::outs() << "(define-values (";
+  llvm::dbgs() << "(define-values (";
   for (const auto &Id : Ids) {
-    llvm::outs() << Id.getName() << " ";
+    Id.dump();
   }
-  llvm::outs() << ") ";
+  llvm::dbgs() << ") ";
   Body->dump();
-  llvm::outs() << ")";
+  llvm::dbgs() << ")";
 }
 
 //
@@ -277,22 +277,22 @@ void Linklet::appendBodyForm(std::unique_ptr<TLNode> &&Form) {
 }
 
 void Linklet::dump() const {
-  llvm::outs() << "(linklet (";
+  llvm::dbgs() << "(linklet (";
   for (const auto &I : Imports) {
-    llvm::outs() << "(" << I.first.getName() << " " << I.second.getName()
+    llvm::dbgs() << "(" << I.first.getName() << " " << I.second.getName()
                  << ") ";
   }
-  llvm::outs() << ") (";
+  llvm::dbgs() << ") (";
   for (const auto &E : Exports) {
-    llvm::outs() << "(" << E.first.getName() << " " << E.second.getName()
+    llvm::dbgs() << "(" << E.first.getName() << " " << E.second.getName()
                  << ") ";
   }
-  llvm::outs() << ") (";
+  llvm::dbgs() << ") (";
   for (const auto &Form : Body) {
     Form->dump();
-    llvm::outs() << " ";
+    llvm::dbgs() << " ";
   }
-  std::cout << "))";
+  llvm::dbgs() << "))";
 }
 
 //
@@ -312,6 +312,14 @@ void SetBang::setIdentifier(std::unique_ptr<Identifier> &&I) {
   Id = std::move(I);
 }
 void SetBang::setExpr(std::unique_ptr<ExprNode> &&E) { Expr = std::move(E); }
+
+void SetBang::dump() const {
+  llvm::dbgs() << "(set! ";
+  Id->dump();
+  llvm::dbgs() << " ";
+  Expr->dump();
+  llvm::dbgs() << ")";
+}
 
 //
 // Implementation of Values node.
@@ -337,12 +345,12 @@ ExprNode const &Values::ExprRange::operator[](size_t I) const {
 }
 
 void Values::dump() const {
-  std::cout << "(values";
+  llvm::dbgs() << "(values";
   for (const auto &Expr : Exprs) {
-    std::cout << " ";
+    llvm::dbgs() << " ";
     Expr->dump();
   }
-  std::cout << ")";
+  llvm::dbgs() << ")";
 }
 
 void Values::write() const {
@@ -394,10 +402,30 @@ ExprNode const &LetValues::getBindingExpr(size_t Idx) const {
 ExprNode const &LetValues::getBodyExpr(size_t Idx) const { return *Body[Idx]; }
 size_t LetValues::exprsCount() const { return Exprs.size(); }
 
+void LetValues::dump() const {
+  llvm::dbgs() << "(let-values (";
+  for (size_t Idx = 0; Idx < bindingCount(); Idx++) {
+    llvm::dbgs() << "[";
+    for (const auto &Id : getBindingIds(Idx)) {
+      Id.dump();
+      llvm::dbgs() << " ";
+    }
+    llvm::dbgs() << "] ";
+    getBindingExpr(Idx).dump();
+  }
+  llvm::dbgs() << ")";
+
+  for (const auto &Expr : Body) {
+    Expr->dump();
+    llvm::dbgs() << " ";
+  }
+  llvm::dbgs() << ")";
+}
+
 //
 // Implementation of Void node.
 //
-void Void::dump() const { std::cerr << "(void)"; }
+void Void::dump() const { llvm::dbgs() << "(void)"; }
 
 void Void::write() const {
   // Do nothing
@@ -420,13 +448,13 @@ ValueNode const &List::operator[](size_t I) const { return *Values[I]; }
 
 void List::dump() const {
   const List &L = *this;
-  std::cout << "(list ";
-  for (size_t i = 0; i < L.length(); ++i) {
-    L[i].dump();
-    if (i != L.length() - 1)
-      std::cout << " ";
+  llvm::dbgs() << "(list ";
+  for (size_t I = 0; I < L.length(); ++I) {
+    L[I].dump();
+    if (I != L.length() - 1)
+      llvm::dbgs() << " ";
   }
-  std::cout << ")";
+  llvm::dbgs() << ")";
 }
 
 void List::write() const {

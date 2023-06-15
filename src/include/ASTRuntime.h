@@ -22,7 +22,7 @@ public:
     return N->getKind() == ASTNodeKind::AST_Closure;
   }
 
-  void dump() const override;
+  LLVM_DUMP_METHOD void dump() const override;
   void write() const override;
 
   const Lambda &getLambda() const { return *L; }

@@ -2,6 +2,7 @@
 
 #include "ASTVisitor.h"
 
+#include <llvm/Support/Compiler.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/raw_ostream.h>
 
@@ -129,7 +130,7 @@ public:
   std::strong_ordering operator<=>(const Identifier &I) const;
 
   [[nodiscard]] const llvm::StringRef getName() const;
-  void dump() const override;
+  LLVM_DUMP_METHOD void dump() const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_Identifier;
@@ -185,7 +186,7 @@ public:
     return Exports;
   }
 
-  void dump() const override;
+  LLVM_DUMP_METHOD void dump() const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_Linklet;
@@ -218,7 +219,7 @@ public:
   [[nodiscard]] size_t length() const { return Exprs.size(); }
   [[nodiscard]] ExprNode const &operator[](size_t I) const;
 
-  void dump() const override;
+  LLVM_DUMP_METHOD void dump() const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_Application;
@@ -247,7 +248,7 @@ public:
   }
   [[nodiscard]] size_t bodyCount() const { return Body.size(); }
   [[nodiscard]] bool isZero() const { return Zero; }
-  void dump() const override {}
+  LLVM_DUMP_METHOD void dump() const override {}
 
   void appendExpr(std::unique_ptr<ExprNode> &&E);
   void markAsBegin0() { Zero = true; }
@@ -271,7 +272,7 @@ public:
   ~BooleanLiteral() = default;
 
   [[nodiscard]] bool value() const { return Value; }
-  void dump() const override {
+  LLVM_DUMP_METHOD void dump() const override {
     if (Value)
       llvm::dbgs() << "#t";
     else
@@ -318,7 +319,7 @@ public:
   IdRange getIds() const { return IdRange{Ids}; }
   [[nodiscard]] const ExprNode &getBody() const;
   [[nodiscard]] size_t countIds() const { return Ids.size(); }
-  void dump() const override;
+  LLVM_DUMP_METHOD void dump() const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_DefineValues;
@@ -445,7 +446,7 @@ public:
   [[nodiscard]] ExprNode const &getThen() const;
   [[nodiscard]] ExprNode const &getElse() const;
 
-  void dump() const override;
+  LLVM_DUMP_METHOD void dump() const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_IfCond;
@@ -473,7 +474,7 @@ public:
   bool operator==(int64_t X) const;
   bool operator==(const Integer &Int) const;
 
-  void dump() const override;
+  LLVM_DUMP_METHOD void dump() const override;
   void write() const override;
   std::string asString() const;
 
@@ -500,7 +501,7 @@ public:
   [[nodiscard]] Formal const &getFormals() const { return *Formals; }
   [[nodiscard]] const ExprNode &getBody() const;
 
-  void dump() const override;
+  LLVM_DUMP_METHOD void dump() const override;
   void write() const override;
 
   llvm::SmallVector<Identifier> findFreeVariables() const;
@@ -557,7 +558,7 @@ public:
   size_t exprsCount() const;
   size_t bodyCount() const { return Body.size(); }
 
-  void dump() const override {}
+  LLVM_DUMP_METHOD void dump() const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_LetValues;
@@ -580,7 +581,7 @@ public:
   [[nodiscard]] size_t length() const { return Values.size(); }
   [[nodiscard]] ValueNode const &operator[](size_t I) const;
 
-  void dump() const override;
+  LLVM_DUMP_METHOD void dump() const override;
   void write() const override;
 
   static bool classof(const ASTNode *N) {
@@ -606,7 +607,7 @@ public:
   [[nodiscard]] Identifier const &getIdentifier() const;
   [[nodiscard]] ExprNode const &getExpr() const;
 
-  void dump() const override {}
+  LLVM_DUMP_METHOD void dump() const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_SetBang;
@@ -644,7 +645,7 @@ public:
   }
   [[nodiscard]] size_t countExprs() const { return Exprs.size(); }
 
-  void dump() const override;
+  LLVM_DUMP_METHOD void dump() const override;
   void write() const override;
 
   static bool classof(const ASTNode *N) {
@@ -666,7 +667,7 @@ public:
   bool operator==(const Void &V) const { return true; }
   ~Void() = default;
 
-  void dump() const override;
+  LLVM_DUMP_METHOD void dump() const override;
   void write() const override;
 
   static bool classof(const ASTNode *N) {
@@ -685,8 +686,8 @@ public:
   virtual std::unique_ptr<ast::ValueNode>
   operator()(const std::vector<const ast::ValueNode *> &Args) const = 0;
 
-  void dump() const override {
-    llvm::errs() << "#<runtime:" << getName() << ">";
+  LLVM_DUMP_METHOD void dump() const override {
+    llvm::dbgs() << "#<runtime:" << getName() << ">";
   }
   void write() const override {
     llvm::outs() << "#<runtime:" << getName() << ">";
