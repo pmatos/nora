@@ -219,7 +219,7 @@ DefineValues::DefineValues(const DefineValues &DV)
   }
 }
 
-DefineValues::DefineValues(std::vector<Identifier> Ids,
+DefineValues::DefineValues(llvm::SmallVector<Identifier> Ids,
                            std::unique_ptr<ExprNode> &Body)
     : ClonableNode(ASTNodeKind::AST_DefineValues), Ids(std::move(Ids)),
       Body(std::move(Body)) {}
@@ -258,8 +258,8 @@ Linklet::Linklet(const Linklet &L) : ClonableNode(ASTNodeKind::AST_Linklet) {
 }
 
 Linklet::FormRange::FormRange(
-    std::vector<std::unique_ptr<ast::TLNode>>::const_iterator FsBegin,
-    std::vector<std::unique_ptr<ast::TLNode>>::const_iterator FsEnd)
+    llvm::SmallVector<std::unique_ptr<ast::TLNode>>::const_iterator FsBegin,
+    llvm::SmallVector<std::unique_ptr<ast::TLNode>>::const_iterator FsEnd)
     : BeginIt(FsBegin), EndIt(FsEnd) {}
 
 TLNode const &Linklet::FormRange::operator[](size_t I) const {
@@ -325,7 +325,7 @@ void SetBang::dump() const {
 // Implementation of Values node.
 //
 
-Values::Values(std::vector<std::unique_ptr<ExprNode>> Exprs)
+Values::Values(llvm::SmallVector<std::unique_ptr<ExprNode>> Exprs)
     : ClonableNode(ASTNodeKind::AST_Values), Exprs(std::move(Exprs)) {}
 
 // Copy constructor for values.
@@ -336,8 +336,8 @@ Values::Values(const Values &V) : ClonableNode(ASTNodeKind::AST_Values) {
 }
 
 Values::ExprRange::ExprRange(
-    std::vector<std::unique_ptr<ast::ExprNode>>::const_iterator EsBegin,
-    std::vector<std::unique_ptr<ast::ExprNode>>::const_iterator EsEnd)
+    llvm::SmallVector<std::unique_ptr<ast::ExprNode>>::const_iterator EsBegin,
+    llvm::SmallVector<std::unique_ptr<ast::ExprNode>>::const_iterator EsEnd)
     : BeginIt(EsBegin), EndIt(EsEnd) {}
 
 ExprNode const &Values::ExprRange::operator[](size_t I) const {
@@ -383,7 +383,7 @@ LetValues::LetValues(const LetValues &DV)
   }
 }
 
-void LetValues::appendBinding(std::vector<Identifier> &&Ids,
+void LetValues::appendBinding(llvm::SmallVector<Identifier> &&Ids,
                               std::unique_ptr<ExprNode> Expr) {
   this->Ids.emplace_back(std::move(Ids));
   this->Exprs.emplace_back(std::move(Expr));

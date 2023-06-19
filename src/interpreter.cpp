@@ -103,7 +103,7 @@ void Interpreter::visit(ast::Values const &V) {
     return;
   }
 
-  std::vector<std::unique_ptr<ast::ExprNode>> Exprs;
+  llvm::SmallVector<std::unique_ptr<ast::ExprNode>> Exprs;
   Exprs.reserve(ValuesVec.size());
   for (auto &V : ValuesVec) {
     Exprs.emplace_back(std::move(V));
@@ -237,8 +237,9 @@ void Interpreter::visit(ast::Application const &A) {
     // will contain pointers to the results in ArgHolder. This sucks a bit but
     // at this point, I am not sure if there's a point in focusing on optimizing
     // this.
-    std::vector<std::unique_ptr<ast::ValueNode>> ArgHolder(A.length() - 1);
-    std::vector<const ast::ValueNode *> Args(A.length() - 1);
+    llvm::SmallVector<std::unique_ptr<ast::ValueNode>> ArgHolder(A.length() -
+                                                                 1);
+    llvm::SmallVector<const ast::ValueNode *> Args(A.length() - 1);
     for (size_t Idx = 0; Idx < A.length() - 1; ++Idx) {
       A[Idx + 1].accept(*this);
       assert(Result && "Expected result from expression.");

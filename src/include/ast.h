@@ -13,7 +13,6 @@
 #include <memory>
 #include <ranges>
 #include <utility>
-#include <vector>
 
 // Forward declarations
 class IdPool;
@@ -158,14 +157,15 @@ public:
   class FormRange {
   public:
     FormRange() = delete;
-    FormRange(std::vector<std::unique_ptr<TLNode>>::const_iterator FsBegin,
-              std::vector<std::unique_ptr<TLNode>>::const_iterator FsEnd);
+    FormRange(
+        llvm::SmallVector<std::unique_ptr<TLNode>>::const_iterator FsBegin,
+        llvm::SmallVector<std::unique_ptr<TLNode>>::const_iterator FsEnd);
     [[nodiscard]] auto begin() const { return BeginIt; }
     [[nodiscard]] auto end() const { return EndIt; }
     [[nodiscard]] TLNode const &operator[](size_t I) const;
 
   private:
-    std::vector<std::unique_ptr<TLNode>>::const_iterator BeginIt, EndIt;
+    llvm::SmallVector<std::unique_ptr<TLNode>>::const_iterator BeginIt, EndIt;
   };
 
   void appendImport(const Identifier &ExtId, const Identifier &IntId);
@@ -177,12 +177,12 @@ public:
   size_t bodyFormsCount() const { return Body.size(); }
 
   [[nodiscard]] FormRange getBody() const {
-    return {Body.cbegin(), Body.cend()};
+    return {Body.begin(), Body.end()};
   };
-  [[nodiscard]] const std::vector<idpair_t> &getImports() const {
+  [[nodiscard]] const llvm::SmallVector<idpair_t> &getImports() const {
     return Imports;
   }
-  [[nodiscard]] const std::vector<idpair_t> &getExports() const {
+  [[nodiscard]] const llvm::SmallVector<idpair_t> &getExports() const {
     return Exports;
   }
 
@@ -195,15 +195,15 @@ public:
 private:
   // Sets of imports. The pair contains two Ids
   // One for external-imported-id and the other for internal-imported-id
-  std::vector<idpair_t> Imports;
+  llvm::SmallVector<idpair_t> Imports;
 
   // Sets of exports. The pair contains two Ids
   // One for internal-exported-id and the other for external-exported-id
   // If there is just a single exported-id, then both are the same
-  std::vector<idpair_t> Exports;
+  llvm::SmallVector<idpair_t> Exports;
 
   /// Linklet body expressions
-  std::vector<std::unique_ptr<TLNode>> Body;
+  llvm::SmallVector<std::unique_ptr<TLNode>> Body;
 };
 
 class Application : public ClonableNode<Application, ExprNode> {
@@ -295,7 +295,8 @@ private:
 
 class DefineValues : public ClonableNode<DefineValues, TLNode> {
 public:
-  DefineValues(std::vector<Identifier> Ids, std::unique_ptr<ExprNode> &Body);
+  DefineValues(llvm::SmallVector<Identifier> Ids,
+               std::unique_ptr<ExprNode> &Body);
   DefineValues(const DefineValues &DV);
   DefineValues(DefineValues &&DV) = default;
   ~DefineValues() = default;
@@ -306,14 +307,14 @@ public:
   class IdRange {
   public:
     IdRange() = delete;
-    IdRange(const std::vector<Identifier> &Ids)
-        : BeginIt(Ids.cbegin()), EndIt(Ids.cend()) {}
+    IdRange(const llvm::SmallVector<Identifier> &Ids)
+        : BeginIt(Ids.begin()), EndIt(Ids.end()) {}
     [[nodiscard]] auto begin() const { return BeginIt; }
     [[nodiscard]] auto end() const { return EndIt; }
     const Identifier &operator[](size_t Idx) const { return *(BeginIt + Idx); }
 
   private:
-    std::vector<Identifier>::const_iterator BeginIt, EndIt;
+    llvm::SmallVector<Identifier>::const_iterator BeginIt, EndIt;
   };
 
   IdRange getIds() const { return IdRange{Ids}; }
@@ -326,7 +327,7 @@ public:
   }
 
 private:
-  std::vector<Identifier> Ids;
+  llvm::SmallVector<Identifier> Ids;
   std::unique_ptr<ExprNode> Body;
 };
 
@@ -376,7 +377,7 @@ private:
 class ListFormal : public Formal {
 public:
   ListFormal() = default;
-  ListFormal(const std::vector<Identifier> &Ids) : Formals(Ids) {}
+  ListFormal(const llvm::SmallVector<Identifier> &Ids) : Formals(Ids) {}
   ListFormal(ListFormal const &Other) = default;
   ListFormal(ListFormal &&Other) = default;
   ListFormal &operator=(const ListFormal &Other) = delete;
@@ -390,13 +391,13 @@ public:
   class IdRange {
   public:
     IdRange() = delete;
-    IdRange(const std::vector<Identifier> &Ids)
-        : BeginIt(Ids.cbegin()), EndIt(Ids.cend()) {}
+    IdRange(const llvm::SmallVector<Identifier> &Ids)
+        : BeginIt(Ids.begin()), EndIt(Ids.end()) {}
     [[nodiscard]] auto begin() const { return BeginIt; }
     [[nodiscard]] auto end() const { return EndIt; }
 
   private:
-    std::vector<Identifier>::const_iterator BeginIt, EndIt;
+    llvm::SmallVector<Identifier>::const_iterator BeginIt, EndIt;
   };
 
   IdRange getIds() const { return IdRange{Formals}; }
@@ -406,12 +407,12 @@ public:
   Identifier &operator[](size_t Index) { return Formals[Index]; }
 
 private:
-  std::vector<Identifier> Formals;
+  llvm::SmallVector<Identifier> Formals;
 };
 
 class ListRestFormal : public ListFormal {
 public:
-  ListRestFormal(const std::vector<Identifier> &Formals,
+  ListRestFormal(const llvm::SmallVector<Identifier> &Formals,
                  const Identifier &RestFormal)
       : ListFormal(Formals), RestFormal(RestFormal) {}
   ListRestFormal(const ListRestFormal &Other) = default;
@@ -530,8 +531,8 @@ public:
   class IdRange {
   public:
     IdRange() = delete;
-    IdRange(const std::vector<Identifier> &Ids)
-        : BeginIt(Ids.cbegin()), EndIt(Ids.cend()) {}
+    IdRange(const llvm::SmallVector<Identifier> &Ids)
+        : BeginIt(Ids.begin()), EndIt(Ids.end()) {}
     [[nodiscard]] auto begin() const { return BeginIt; }
     [[nodiscard]] auto end() const { return EndIt; }
     [[nodiscard]] Identifier const &operator[](size_t Idx) const {
@@ -539,14 +540,14 @@ public:
     }
 
   private:
-    std::vector<Identifier>::const_iterator BeginIt, EndIt;
+    llvm::SmallVector<Identifier>::const_iterator BeginIt, EndIt;
   };
 
   IdRange getBindingIds(size_t Idx) const;
   ExprNode const &getBindingExpr(size_t Idx) const;
   ExprNode const &getBodyExpr(size_t Idx) const;
 
-  void appendBinding(std::vector<Identifier> &&Ids,
+  void appendBinding(llvm::SmallVector<Identifier> &&Ids,
                      std::unique_ptr<ExprNode> Expr);
   void appendBody(std::unique_ptr<ExprNode> Expr);
 
@@ -565,9 +566,9 @@ public:
   }
 
 private:
-  std::vector<std::vector<Identifier>> Ids;
-  std::vector<std::unique_ptr<ExprNode>> Exprs;
-  std::vector<std::unique_ptr<ExprNode>> Body;
+  llvm::SmallVector<llvm::SmallVector<Identifier>> Ids;
+  llvm::SmallVector<std::unique_ptr<ExprNode>> Exprs;
+  llvm::SmallVector<std::unique_ptr<ExprNode>> Body;
 };
 
 class List : public ClonableNode<List, ValueNode> {
@@ -620,7 +621,7 @@ private:
 
 class Values : public ClonableNode<Values, ValueNode> {
 public:
-  explicit Values(std::vector<std::unique_ptr<ExprNode>> Exprs);
+  explicit Values(llvm::SmallVector<std::unique_ptr<ExprNode>> Exprs);
   Values(const Values &V);
   Values(Values &&V) = default;
   Values &operator=(const Values &V) = delete;
@@ -630,18 +631,19 @@ public:
   class ExprRange {
   public:
     ExprRange() = delete;
-    ExprRange(std::vector<std::unique_ptr<ExprNode>>::const_iterator EsBegin,
-              std::vector<std::unique_ptr<ExprNode>>::const_iterator EsEnd);
+    ExprRange(
+        llvm::SmallVector<std::unique_ptr<ExprNode>>::const_iterator EsBegin,
+        llvm::SmallVector<std::unique_ptr<ExprNode>>::const_iterator EsEnd);
     [[nodiscard]] auto begin() const { return BeginIt; }
     [[nodiscard]] auto end() const { return EndIt; }
     [[nodiscard]] ExprNode const &operator[](size_t I) const;
 
   private:
-    std::vector<std::unique_ptr<ExprNode>>::const_iterator BeginIt, EndIt;
+    llvm::SmallVector<std::unique_ptr<ExprNode>>::const_iterator BeginIt, EndIt;
   };
 
   [[nodiscard]] ExprRange getExprs() const {
-    return {Exprs.cbegin(), Exprs.cend()};
+    return {Exprs.begin(), Exprs.end()};
   }
   [[nodiscard]] size_t countExprs() const { return Exprs.size(); }
 
@@ -653,7 +655,7 @@ public:
   }
 
 private:
-  std::vector<std::unique_ptr<ExprNode>> Exprs;
+  llvm::SmallVector<std::unique_ptr<ExprNode>> Exprs;
 };
 
 // This class represents the void constant.
@@ -684,7 +686,7 @@ public:
 
   virtual ~RuntimeFunction() = default;
   virtual std::unique_ptr<ast::ValueNode>
-  operator()(const std::vector<const ast::ValueNode *> &Args) const = 0;
+  operator()(const llvm::SmallVector<const ast::ValueNode *> &Args) const = 0;
 
   LLVM_DUMP_METHOD void dump() const override {
     llvm::dbgs() << "#<runtime:" << getName() << ">";
