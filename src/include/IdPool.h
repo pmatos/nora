@@ -4,7 +4,7 @@
 #include <string>
 #include <string_view>
 
-#include "ast.h"
+#include "AST.h"
 
 // Identifier nodes are kept in a Pool and handles
 // are passed around

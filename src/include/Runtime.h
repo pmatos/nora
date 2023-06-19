@@ -7,7 +7,7 @@
 
 #include <llvm/Support/Casting.h>
 
-#include "ast.h"
+#include "AST.h"
 
 class Runtime {
 public:

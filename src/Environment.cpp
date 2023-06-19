@@ -1,4 +1,4 @@
-#include "environment.h"
+#include "Environment.h"
 
 // Add a new identifier to the environment.
 void Environment::add(ast::Identifier const &Id,

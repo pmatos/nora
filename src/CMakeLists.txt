@@ -15,17 +15,17 @@ set(LIBS
 )
 
 add_llvm_executable(norac
-        main.cpp
-        environment.cpp
-        ast.cpp
-        ASTRuntime.cpp
         AnalysisFreeVars.cpp
-        idpool.cpp
-        Parse.cpp
+        AST.cpp
+        ASTRuntime.cpp
+        Environment.cpp
+        IdPool.cpp
+        Interpreter.cpp
         Lex.cpp
+        main.cpp
+        Parse.cpp
+        Runtime.cpp
         SourceStream.cpp
-        interpreter.cpp
-        runtime.cpp
         UTF8.cpp
 )
 target_link_libraries(norac PRIVATE ${LIBS})

@@ -1,7 +1,7 @@
 #pragma once
 
+#include "AST.h"
 #include "ASTVisitor.h"
-#include "ast.h"
 
 #include <llvm/ADT/STLExtras.h>
 

@@ -1,7 +1,7 @@
 #pragma once
 
+#include "AST.h"
 #include "SourceStream.h"
-#include "ast.h"
 
 #include <llvm/Support/Errc.h>
 #include <llvm/Support/ErrorOr.h>

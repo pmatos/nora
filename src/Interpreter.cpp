@@ -1,4 +1,4 @@
-#include "interpreter.h"
+#include "Interpreter.h"
 
 #include <llvm/ADT/STLExtras.h>
 #include <llvm/Support/ErrorHandling.h>

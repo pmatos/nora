@@ -8,10 +8,10 @@
 #include <memory>
 #include <vector>
 
+#include "AST.h"
 #include "ASTVisitor.h"
-#include "ast.h"
-#include "environment.h"
-#include "runtime.h"
+#include "Environment.h"
+#include "Runtime.h"
 
 // The interpreter class uses a visitor pattern to access the nodes.
 

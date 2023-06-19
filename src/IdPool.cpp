@@ -1,6 +1,6 @@
-#include "idpool.h"
+#include "IdPool.h"
 
-#include "ast.h"
+#include "AST.h"
 
 IdPool *IdPool::Inst = nullptr;
 
