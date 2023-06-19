@@ -11,9 +11,10 @@
 #include <mlir/IR/AsmState.h>
 #include <mlir/IR/MLIRContext.h>
 
+#include "Interpreter.h"
 #include "Parse.h"
+#include "SourceStream.h"
 #include "config.h"
-#include "interpreter.h"
 
 namespace cl = llvm::cl;
 

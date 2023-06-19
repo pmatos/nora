@@ -1,7 +1,7 @@
 #pragma once
 
-#include "ast.h"
-#include "environment.h"
+#include "AST.h"
+#include "Environment.h"
 
 #include <memory>
 

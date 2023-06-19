@@ -1,8 +1,8 @@
 #include "Parse.h"
 
 #include "Casting.h"
+#include "IdPool.h"
 #include "Lex.h"
-#include "idpool.h"
 
 #include "mlir/IR/Diagnostics.h"
 

@@ -3,7 +3,7 @@
 #include <map>
 #include <memory>
 
-#include "ast.h"
+#include "AST.h"
 
 class Environment {
 
