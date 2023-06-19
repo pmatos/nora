@@ -1,9 +1,8 @@
 #include "interpreter.h"
 
-#include "Casting.h"
-
 #include <llvm/ADT/STLExtras.h>
 #include <llvm/Support/ErrorHandling.h>
+#include <llvm/Support/raw_ostream.h>
 
 #include <array>
 #include <gmp.h>
@@ -13,8 +12,6 @@
 
 #include "ASTRuntime.h"
 #include "Casting.h"
-#include "ast_fwd.h"
-#include "llvm/Support/raw_ostream.h"
 
 #undef DEBUG_TYPE
 #define DEBUG_TYPE "Interpreter"
