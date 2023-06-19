@@ -46,7 +46,7 @@ public:
   };
   std::unique_ptr<ast::ValueNode>
   callFunction(const std::string &Name,
-               const std::vector<const ast::ValueNode *> &Args) {
+               const llvm::SmallVector<const ast::ValueNode *> &Args) {
     return Runtime::getInstance().callFunction(Name, Args);
   }
 

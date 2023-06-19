@@ -6,8 +6,8 @@ class AddFunction : public ast::RuntimeFunction {
 public:
   AddFunction(const std::string &Name) : RuntimeFunction(Name) {}
 
-  virtual std::unique_ptr<ast::ValueNode>
-  operator()(const std::vector<const ast::ValueNode *> &Args) const override {
+  virtual std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
     auto Sum = std::make_unique<ast::Integer>(0);
 
     for (const auto *Arg : Args) {
@@ -32,8 +32,8 @@ class SubtractFunction : public ast::RuntimeFunction {
 public:
   SubtractFunction(const std::string &Name) : RuntimeFunction(Name) {}
 
-  virtual std::unique_ptr<ast::ValueNode>
-  operator()(const std::vector<const ast::ValueNode *> &Args) const override {
+  virtual std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
     if (Args.empty()) {
       // Runtime error, no args to -
       // FIXME: issue error message
@@ -73,8 +73,8 @@ class MultiplyFunction : public ast::RuntimeFunction {
 public:
   MultiplyFunction(const std::string &Name) : RuntimeFunction(Name) {}
 
-  virtual std::unique_ptr<ast::ValueNode>
-  operator()(const std::vector<const ast::ValueNode *> &Args) const override {
+  virtual std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
     auto Mul = std::make_unique<ast::Integer>(1);
 
     for (const auto *Arg : Args) {
@@ -107,7 +107,7 @@ Runtime::Runtime() {
 
 std::unique_ptr<ast::ValueNode>
 Runtime::callFunction(const std::string &Name,
-                      const std::vector<const ast::ValueNode *> &Args) {
+                      const llvm::SmallVector<const ast::ValueNode *> &Args) {
   assert(RuntimeFunctions.find(Name) != RuntimeFunctions.end() &&
          "Function not found in runtime.");
   auto Fn = RuntimeFunctions[Name];

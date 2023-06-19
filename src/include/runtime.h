@@ -17,7 +17,7 @@ public:
 
   std::unique_ptr<ast::ValueNode>
   callFunction(const std::string &Name,
-               const std::vector<const ast::ValueNode *> &Args);
+               const llvm::SmallVector<const ast::ValueNode *> &Args);
 
   bool isRuntimeFunction(const std::string &Name) {
     return RuntimeFunctions.find(Name) != RuntimeFunctions.end();

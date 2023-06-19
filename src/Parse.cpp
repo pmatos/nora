@@ -259,7 +259,7 @@ std::unique_ptr<ast::DefineValues> Parse::parseDefineValues(SourceStream &S) {
   }
 
   // parse the list of ids
-  std::vector<ast::Identifier> Ids;
+  llvm::SmallVector<ast::Identifier> Ids;
   T = gettok(S);
   if (!T.is(Tok::TokType::LPAREN)) {
     return nullptr;
@@ -309,7 +309,7 @@ std::unique_ptr<ast::Values> Parse::parseValues(SourceStream &S) {
     return nullptr;
   }
 
-  std::vector<std::unique_ptr<ast::ExprNode>> Exprs;
+  llvm::SmallVector<std::unique_ptr<ast::ExprNode>> Exprs;
   while (true) {
     std::unique_ptr<ast::ExprNode> Expr = parseExpr(S);
     if (!Expr) {
@@ -472,7 +472,7 @@ std::unique_ptr<ast::Formal> Parse::parseFormals(SourceStream &S) {
     return nullptr;
   }
 
-  std::vector<ast::Identifier> Ids;
+  llvm::SmallVector<ast::Identifier> Ids;
   while (true) {
     T = gettok(S);
     if (T.is(Tok::TokType::RPAREN) || T.is(Tok::TokType::DOT)) {
@@ -744,7 +744,7 @@ std::unique_ptr<ast::LetValues> Parse::parseLetValues(SourceStream &S) {
       return nullptr;
     }
 
-    std::vector<ast::Identifier> Ids;
+    llvm::SmallVector<ast::Identifier> Ids;
     while (true) {
       T = gettok(S);
       if (T.is(Tok::TokType::RPAREN)) {
