@@ -12,6 +12,7 @@
 
 #include "ASTRuntime.h"
 #include "Casting.h"
+#include "Valueify.h"
 
 #undef DEBUG_TYPE
 #define DEBUG_TYPE "Interpreter"
@@ -456,4 +457,22 @@ void Interpreter::visit(ast::LetValues const &L) {
   }
 
   Envs.pop_back();
+}
+
+// Interpreting a quoted expression is transforming this expression into a
+// value. An atom (identifier, number, etc) is itself, while anything else is a
+// list. This essentially funnels all ASTNodes into a single ValueNode type. So
+// a LinkletNode becomes a list as `(linklet () () ...)`.
+//
+// Therefore we need to recursively valueify everything.
+void Interpreter::visit(ast::QuotedExpr const &QE) {
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting QuotedExpr\n");
+  Valueify VV;
+  VV.visit(QE);
+  Result = VV.getResult();
+}
+
+void Interpreter::visit(ast::Symbol const &Sym) {
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting Symbol\n");
+  Result = std::unique_ptr<ast::ValueNode>(Sym.clone());
 }

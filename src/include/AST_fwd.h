@@ -1,21 +1,23 @@
 #pragma once
 
 namespace ast {
-class Identifier;
-class Integer;
-class Linklet;
+// Note: Leave the following list sorted.
+class Application;
+class Begin;
+class BooleanLiteral;
+class Closure;
 class DefineValues;
+class Identifier;
+class IfCond;
+class Integer;
+class Lambda;
+class LetValues;
+class Linklet;
+class List;
+class QuotedExpr;
+class RuntimeFunction;
+class SetBang;
+class Symbol;
 class Values;
 class Void;
-class Lambda;
-class Closure;
-class Begin;
-class List;
-class Application;
-class SetBang;
-class IfCond;
-class BooleanLiteral;
-class LetValues;
-class ValueNode;
-class RuntimeFunction;
 }; // namespace ast

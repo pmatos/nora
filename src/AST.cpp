@@ -467,3 +467,25 @@ void List::write() const {
   }
   std::cout << ")";
 }
+
+//
+// Implementation of QuotedExpr node.
+//
+QuotedExpr::QuotedExpr(const ASTNode *N)
+    : ClonableNode(ASTNodeKind::AST_QuotedExpr), Node(N->clone()) {}
+
+QuotedExpr::QuotedExpr(const QuotedExpr &V)
+    : ClonableNode(ASTNodeKind::AST_QuotedExpr), Node(V.Node->clone()) {}
+
+bool QuotedExpr::operator==(const QuotedExpr &V) const {
+  // FIXME: this is not correct, we need to compare the AST nodes.
+  return false;
+};
+
+LLVM_DUMP_METHOD void QuotedExpr::dump() const {
+  // FIXME: this is not correct, we need to print the AST nodes.
+}
+
+void QuotedExpr::write() const {
+  // FIXME: this is not correct, we need to print the AST nodes.
+}

@@ -35,6 +35,7 @@ add_llvm_executable(norac
         Runtime.cpp
         SourceStream.cpp
         UTF8.cpp
+        Valueify.cpp
 )
 target_link_libraries(norac PRIVATE ${LIBS})
 
