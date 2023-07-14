@@ -132,3 +132,13 @@ void AnalysisFreeVars::visit(ast::RuntimeFunction const &LV) {
   // Runtime Functions have no free variables.
   // Nothing to do.
 }
+
+void AnalysisFreeVars::visit(ast::QuotedExpr const &QE) {
+  // Quoted Expressions have no free variables.
+  // Nothing to do.
+}
+
+void AnalysisFreeVars::visit(ast::Symbol const &Sym) {
+  // Symbols have no free variables.
+  // Nothing to do.
+}

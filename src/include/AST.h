@@ -2,6 +2,7 @@
 
 #include "ASTVisitor.h"
 
+#include <llvm/ADT/SmallString.h>
 #include <llvm/Support/Compiler.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/raw_ostream.h>
@@ -28,6 +29,7 @@ public:
   // The order of the enum is important. The order of the nodes in the enum
   // must match the order of the nodes in the class hierarchy. The order of
   // the nodes in the class hierarchy are in lexical order.
+  // Note: Keep the following list in sorted order
   enum ASTNodeKind {
     AST_Linklet,
     First_TLNode, // all TLNodes must be after this
@@ -41,13 +43,15 @@ public:
     AST_SetBang,
     First_ValueNode, // all ValueNodes must be after this
     AST_BooleanLiteral,
+    AST_Closure, // result of evaluating a Lambda expression
     AST_Integer,
     AST_Lambda,
-    AST_Closure, // result of evaluating a Lambda expression
     AST_List,
+    AST_Symbol,
     AST_Values,
     AST_Void,
     AST_RuntimeFunction,
+    AST_QuotedExpr // result of a quote expression
   };
 
   ASTNode(ASTNodeKind Kind) : Kind(Kind) {}
@@ -679,6 +683,28 @@ public:
 private:
 };
 
+// This class represents the void constant.
+// https://docs.racket-lang.org/reference/quote.html
+class QuotedExpr : public ClonableNode<QuotedExpr, ValueNode> {
+public:
+  QuotedExpr(const ASTNode *N);
+  QuotedExpr(const QuotedExpr &V);
+  QuotedExpr(QuotedExpr &&V) = default;
+  QuotedExpr &operator=(const QuotedExpr &V) = delete;
+  bool operator==(const QuotedExpr &V) const;
+  ~QuotedExpr() = default;
+
+  LLVM_DUMP_METHOD void dump() const override;
+  void write() const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == ASTNodeKind::AST_QuotedExpr;
+  }
+
+private:
+  std::unique_ptr<ASTNode> Node;
+};
+
 class RuntimeFunction : public ValueNode {
 public:
   RuntimeFunction(const std::string &Name)
@@ -705,6 +731,41 @@ public:
 
 private:
   std::string Name;
+};
+
+class Symbol : public ClonableNode<Symbol, ValueNode> {
+public:
+  Symbol(const std::string &Name)
+      : ClonableNode(ASTNodeKind::AST_Symbol), Name(Name) {}
+  Symbol(const llvm::StringRef &Name)
+      : ClonableNode(ASTNodeKind::AST_Symbol), Name(Name) {}
+  bool operator==(const Symbol &V) const {
+    // FIXME: probably wrong due to symbol interning
+    // might end up depending on how we implement symbol interning, eq?, eqv?
+    // and equal?
+    return Name == V.Name;
+  }
+
+  virtual Symbol *clone() const override { return new Symbol(Name.str()); }
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == ASTNodeKind::AST_Symbol;
+  }
+
+  const llvm::SmallString<4> &getName() const { return Name; }
+
+  LLVM_DUMP_METHOD void dump() const override {
+    // FIXME
+    llvm::dbgs() << "#<symbol:" << getName() << ">";
+  }
+
+  void write() const override {
+    // FIXME
+    llvm::outs() << "#<symbol:" << getName() << ">";
+  }
+
+private:
+  llvm::SmallString<4> Name;
 };
 
 }; // namespace ast

@@ -65,7 +65,7 @@ using namespace Lex;
 //       | (let-values ([<id> ...) <expr>] ...) <expr>)     - parseLetValues
 //       | (letrec-values ([(<id> ...) <expr>] ...) <expr>)
 //       | (set! <id> <expr>)                               - parseSetBang
-//       | (quote <datum>)
+//       | (quote <datum>)                                  - parseQuote
 //       | (with-continuation-mark <expr> <expr> <expr>)
 //       | (<expr> ...+)                                    - parseApplication
 //       | (%variable-reference <id>)
@@ -223,6 +223,11 @@ std::unique_ptr<ast::ExprNode> Parse::parseExpr(SourceStream &S) {
   std::unique_ptr<ast::Application> A = parseApplication(S);
   if (A) {
     return A;
+  }
+
+  std::unique_ptr<ast::QuotedExpr> Q = parseQuote(S);
+  if (Q) {
+    return Q;
   }
 
   return nullptr;
@@ -793,4 +798,26 @@ std::unique_ptr<ast::LetValues> Parse::parseLetValues(SourceStream &S) {
   }
 
   return Let;
+}
+
+// Parse a quoted form.
+// (quote form)
+// or 'form
+std::unique_ptr<ast::QuotedExpr> Parse::parseQuote(SourceStream &S) {
+  size_t Start = S.getPosition();
+
+  Tok T = gettok(S);
+  if (T.is(Tok::TokType::QUOTE) || T.is(Tok::TokType::SYMBOLMARK)) {
+    std::unique_ptr<ast::ExprNode> Exp = parseExpr(S);
+    if (!Exp) {
+      S.rewindTo(Start);
+      return nullptr;
+    }
+
+    ast::ASTNode *Node = Exp.release();
+    return std::make_unique<ast::QuotedExpr>(Node);
+  }
+
+  S.rewindTo(Start);
+  return nullptr;
 }

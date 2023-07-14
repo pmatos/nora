@@ -6,6 +6,7 @@
 
 // Implements a wrapper for llvm::dyn_cast to use with smart_pointers.
 template <typename To, typename From>
+// NOLINTNEXTLINE(readability-identifier-naming)
 std::unique_ptr<To> dyn_castU(std::unique_ptr<From> &Ptr) {
   static_assert(std::is_base_of_v<From, To> || std::is_base_of_v<To, From>,
                 "To and From must be in the same inheritance hierarchy");
@@ -31,6 +32,7 @@ std::unique_ptr<To> dyn_castU(std::unique_ptr<From> &Ptr) {
 }
 
 template <typename To, typename From>
+// NOLINTNEXTLINE(readability-identifier-naming)
 std::shared_ptr<To> dyn_castS(const std::shared_ptr<From> &Ptr) {
   static_assert(std::is_base_of_v<From, To> || std::is_base_of_v<To, From>,
                 "To and From must be in the same inheritance hierarchy");
