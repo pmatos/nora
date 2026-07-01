@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r '.tool_response.filePath // .tool_input.file_path' | { read -r f; echo \"$f\" | grep -qiE '\\.(c|cc|cxx|cpp|h|hh|hpp|hxx)$' && clang-format -i \"$f\"; } 2>/dev/null || true",
+            "command": "jq -r '.tool_response.filePath // .tool_input.file_path' | { read -r f; echo \"$f\" | grep -qiE '\\.(c|cc|cxx|cpp|h|hh|hpp|hxx)$' && command -v clang-format-22 >/dev/null 2>&1 && clang-format-22 -i \"$f\"; } 2>/dev/null || true",
             "statusMessage": "clang-format"
           }
         ]
