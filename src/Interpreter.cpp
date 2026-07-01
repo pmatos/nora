@@ -402,11 +402,65 @@ void Interpreter::visit(ast::String const &Str) {
   Result = std::unique_ptr<ast::ValueNode>(Str.clone());
 }
 
+// Bind one let-values / letrec-values clause into Env: a single identifier
+// takes the whole value, while several identifiers require a Values result
+// whose arity matches. Returns false (after reporting) on a mismatch.
+static bool bindClause(Environment &Env, const ast::LetValues::IdRange &Ids,
+                       std::unique_ptr<ast::ValueNode> Val) {
+  if (std::ranges::size(Ids) == 1) {
+    Env.add(Ids[0], std::move(Val));
+    return true;
+  }
+
+  auto Vs = dyn_castU<ast::Values>(Val);
+  if (!Vs) {
+    std::cerr << "Expected a values node, got ";
+    Val->dump();
+    return false;
+  }
+  if (std::ranges::size(Ids) != Vs->countExprs()) {
+    std::cerr << "Expected " << std::ranges::size(Ids) << " values, got "
+              << Vs->countExprs() << std::endl;
+    return false;
+  }
+
+  const auto &ValuesExprRange = Vs->getExprs();
+  for (size_t Idx = 0; Idx < Vs->countExprs(); ++Idx) {
+    // Elements of a Values node are values stored as exprs; downcast in place.
+    std::unique_ptr<ast::ExprNode> EPtr(ValuesExprRange[Idx].clone());
+    Env.add(Ids[Idx], dyn_castU<ast::ValueNode>(EPtr));
+  }
+  return true;
+}
+
 void Interpreter::visit(ast::LetValues const &L) {
   LLVM_DEBUG(llvm::dbgs() << "Interpreting LetValues\n");
   LLVM_DEBUG(L.dump(); llvm::dbgs() << "\n";);
 
-  // 1. Evaluate each of the expressions in order.
+  if (L.isRec()) {
+    // letrec-values: the bound identifiers are in scope while their own binding
+    // expressions are evaluated, so push a fresh environment first and fill it
+    // in as each clause is evaluated left to right. Keeping it live on the
+    // stack lets self- and mutually-recursive closures resolve the bindings the
+    // same way top-level recursive definitions do.
+    Envs.emplace_back();
+    for (size_t Idx = 0; Idx < L.exprsCount(); ++Idx) {
+      L.getBindingExpr(Idx).accept(*this);
+      assert(Result);
+      if (!bindClause(Envs.back(), L.getBindingIds(Idx), std::move(Result))) {
+        Result = nullptr;
+        Envs.pop_back();
+        return;
+      }
+    }
+    for (size_t I = 0; I < L.bodyCount(); ++I)
+      L.getBodyExpr(I).accept(*this);
+    Envs.pop_back();
+    return;
+  }
+
+  // let-values: every binding expression is evaluated in the enclosing
+  // environment before any of the identifiers are bound.
   std::vector<std::unique_ptr<ast::ValueNode>> ExprValues;
   ExprValues.reserve(L.exprsCount());
   for (size_t Idx = 0; Idx < L.exprsCount(); ++Idx) {
@@ -415,59 +469,20 @@ void Interpreter::visit(ast::LetValues const &L) {
     ExprValues.emplace_back(std::move(Result));
   }
 
-  // 2. Create an environment where each identifier is bound to the
-  // corresponding value. Then evaluate the body in this environment.
-  // If the binding variable list has a single identifier, it's simply assigned
-  // to the value of the expression. If on the other hand, it's a list of
-  // identifiers, then it should have the same length as the values list and
-  // each identifier is assigned to the corresponding value.
   LLVM_DEBUG(llvm::dbgs() << "Creating environment for LetValues\n");
   Environment Env;
   for (size_t Idx = 0; Idx < ExprValues.size(); ++Idx) {
-    if (std::ranges::size(L.getBindingIds(Idx)) == 1) {
-      Env.add(*L.getBindingIds(Idx).begin(), std::move(ExprValues[Idx]));
-    } else {
-      std::unique_ptr<ast::ValueNode> V = std::move(ExprValues[Idx]);
-
-      if (auto const &Vs = dyn_castU<ast::Values>(V)) {
-        if (std::ranges::size(L.getBindingIds(Idx)) != Vs->countExprs()) {
-          std::cerr << "Expected " << std::ranges::size(L.getBindingIds(Idx))
-                    << " values, got " << ExprValues.size() << std::endl;
-          return;
-        }
-
-        const auto &IdsExprRange = L.getBindingIds(Idx);
-        const auto &ValuesExprRange = Vs->getExprs();
-
-        for (size_t Idx = 0; Idx < Vs->countExprs(); ++Idx) {
-          // All the elements in ValuesExprRange are Value,
-          // not Expr but we need to downcast them to add
-          // them to the environment.
-          const auto &E = ValuesExprRange[Idx];
-          std::unique_ptr<ast::ExprNode> EPtr(E.clone());
-          std::unique_ptr<ast::ValueNode> Val = dyn_castU<ast::ValueNode>(EPtr);
-
-          LLVM_DEBUG(llvm::dbgs()
-                     << "Adding " << std::string(IdsExprRange[Idx].getName())
-                     << " to environment\n");
-          Env.add(IdsExprRange[Idx], std::move(Val));
-        }
-
-      } else {
-        std::cerr << "Expected a values node, got ";
-        V->dump();
-        return;
-      }
+    if (!bindClause(Env, L.getBindingIds(Idx), std::move(ExprValues[Idx]))) {
+      Result = nullptr;
+      return;
     }
   }
   LLVM_DEBUG(llvm::dbgs() << " Pushing new environment for LetValues\n");
   Envs.push_back(Env);
 
   LLVM_DEBUG(llvm::dbgs() << "Evaluating body of LetValues\n");
-  for (size_t I = 0; I < L.exprsCount(); ++I) {
-    // 3. Return the result of the let-values expression.
+  for (size_t I = 0; I < L.bodyCount(); ++I)
     L.getBodyExpr(I).accept(*this);
-  }
 
   Envs.pop_back();
 }

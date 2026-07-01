@@ -140,7 +140,19 @@ void AnalysisFreeVars::visit(ast::LetValues const &LV) {
     for (auto const &Var : LV.getBindingIds(Idx))
       LVVars.insert(Var);
 
+  // In let-values the binding expressions are evaluated in the enclosing scope,
+  // so the bound identifiers do not shadow them. In letrec-values the
+  // identifiers are in scope for the binding expressions too, enabling
+  // recursion, so those references must not be reported as free.
+  if (!LV.isRec())
+    for (size_t Idx = 0; Idx < LV.bindingCount(); Idx++)
+      LV.getBindingExpr(Idx).accept(*this);
+
   Vars.push_back(LVVars);
+
+  if (LV.isRec())
+    for (size_t Idx = 0; Idx < LV.bindingCount(); Idx++)
+      LV.getBindingExpr(Idx).accept(*this);
 
   for (size_t Idx = 0; Idx < LV.bodyCount(); Idx++)
     LV.getBodyExpr(Idx).accept(*this);

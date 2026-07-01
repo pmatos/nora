@@ -63,7 +63,7 @@ using namespace Lex;
 //       | (begin <expr> ...+)                              - parseBegin
 //       | (begin0 <expr> ...+)                             - parseBegin
 //       | (let-values ([<id> ...) <expr>] ...) <expr>)     - parseLetValues
-//       | (letrec-values ([(<id> ...) <expr>] ...) <expr>)
+//       | (letrec-values ([(<id> ...) <expr>] ...) <expr>) - parseLetValues
 //       | (set! <id> <expr>)                               - parseSetBang
 //       | (quote <datum>)                                  - parseQuote
 //       | (with-continuation-mark <expr> <expr> <expr>)
@@ -870,8 +870,10 @@ Parse::parseBooleanLiteral(SourceStream &S) {
   return nullptr;
 }
 
-// Parse a let-values form.
-// (let-values ([(id ...) val-expr] ...) body ...+)
+// Parse a let-values or letrec-values form. The two share an identical
+// grammar; they differ only in scoping, tracked by the LetValues Rec flag.
+// (let-values    ([(id ...) val-expr] ...) body ...+)
+// (letrec-values ([(id ...) val-expr] ...) body ...+)
 std::unique_ptr<ast::LetValues> Parse::parseLetValues(SourceStream &S) {
   size_t Start = S.getPosition();
 
@@ -882,12 +884,13 @@ std::unique_ptr<ast::LetValues> Parse::parseLetValues(SourceStream &S) {
   }
 
   T = gettok(S);
-  if (!T.is(Tok::TokType::LET_VALUES)) {
+  if (!T.is(Tok::TokType::LET_VALUES) && !T.is(Tok::TokType::LETREC_VALUES)) {
     S.rewindTo(Start);
     return nullptr;
   }
 
   auto Let = std::make_unique<ast::LetValues>();
+  Let->setRec(T.is(Tok::TokType::LETREC_VALUES));
 
   T = gettok(S);
   if (!T.is(Tok::TokType::LPAREN)) {

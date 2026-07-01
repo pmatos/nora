@@ -637,6 +637,12 @@ public:
   size_t exprsCount() const;
   size_t bodyCount() const { return Body.size(); }
 
+  // A letrec-values form binds its identifiers over the binding expressions as
+  // well as the body, enabling recursive and mutually-recursive definitions; a
+  // plain let-values evaluates its binding expressions in the outer scope.
+  bool isRec() const { return Rec; }
+  void setRec(bool R) { Rec = R; }
+
   LLVM_DUMP_METHOD void dump() const override;
 
   static bool classof(const ASTNode *N) {
@@ -647,6 +653,7 @@ private:
   llvm::SmallVector<llvm::SmallVector<Identifier>> Ids;
   llvm::SmallVector<std::unique_ptr<ExprNode>> Exprs;
   llvm::SmallVector<std::unique_ptr<ExprNode>> Body;
+  bool Rec = false;
 };
 
 class List : public ClonableNode<List, ValueNode> {

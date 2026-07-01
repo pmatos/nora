@@ -232,6 +232,22 @@ TEST_CASE("Lexing full expressions 2", "[parser]") {
   REQUIRE(Tok.is(Tok::TokType::RPAREN));
 }
 
+TEST_CASE("Lexing letrec-values", "[parser]") {
+  SourceStream Letvals("(letrec-values () #f)");
+  Tok Tok = gettok(Letvals);
+  REQUIRE(Tok.is(Tok::TokType::LPAREN));
+  Tok = gettok(Letvals);
+  REQUIRE(Tok.is(Tok::TokType::LETREC_VALUES));
+  Tok = gettok(Letvals);
+  REQUIRE(Tok.is(Tok::TokType::LPAREN));
+  Tok = gettok(Letvals);
+  REQUIRE(Tok.is(Tok::TokType::RPAREN));
+  Tok = gettok(Letvals);
+  REQUIRE(Tok.is(Tok::TokType::BOOL_FALSE));
+  Tok = gettok(Letvals);
+  REQUIRE(Tok.is(Tok::TokType::RPAREN));
+}
+
 TEST_CASE("Lexing Characters", "[parser]") {
   SourceStream Char1(R"(#\space)");
   Tok Tok = gettok(Char1);
