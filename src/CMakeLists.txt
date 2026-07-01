@@ -17,6 +17,11 @@ if(NORA_ENABLE_MLIR)
         )
 endif()
 
+# norac uses LLVM Support APIs directly (cl, InitLLVM, MemoryBuffer,
+# raw_ostream). Link the Support component explicitly so the default
+# (MLIR-off) build also links on LLVM installs without the libLLVM dylib.
+set(LLVM_LINK_COMPONENTS Support)
+
 add_llvm_executable(norac
         AnalysisFreeVars.cpp
         AST.cpp
