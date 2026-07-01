@@ -1,6 +1,7 @@
 #include "AST.h"
 
 #include <llvm/Support/Casting.h>
+#include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace ast;
@@ -389,8 +390,9 @@ void Values::write() const {
       V->write();
       std::cout << std::endl;
     } else {
-      std::cerr << "Error: non-value in values expression" << std::endl;
-      exit(1);
+      // A fully evaluated Values node only ever holds value nodes; anything
+      // else is an internal invariant violation.
+      llvm_unreachable("non-value in values expression");
     }
   }
 }

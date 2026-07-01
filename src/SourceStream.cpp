@@ -1,18 +1,35 @@
 #include "SourceStream.h"
 
-SourceStream::SourceStream(const std::string &Path) : Path(Path) {
+#include "Diagnostics.h"
+
+SourceStream::SourceStream(const std::string &Path,
+                           nora::DiagnosticEngine *Diag)
+    : Path(Path), Diag(Diag) {
   auto MaybeBuffer = SourceStream::getFileBuffer(Path);
   if (!MaybeBuffer) {
-    llvm::errs() << "Error reading file: " << Path << "\n";
+    const std::string Msg =
+        "cannot open file '" + Path + "': " + MaybeBuffer.getError().message();
+    if (Diag) {
+      Diag->error(Msg);
+    } else {
+      llvm::errs() << Msg << "\n";
+    }
     exit(EXIT_FAILURE);
   }
   Buffer = std::move(*MaybeBuffer);
   Contents = Buffer->getBuffer();
   Position = 0;
+  if (Diag) {
+    Diag->addBuffer(Contents, Path);
+  }
 }
 
-SourceStream::SourceStream(const char *View)
-    : Path(), Contents(View), Position(0) {}
+SourceStream::SourceStream(const char *View, nora::DiagnosticEngine *Diag)
+    : Path(), Contents(View), Position(0), Diag(Diag) {
+  if (Diag) {
+    Diag->addBuffer(Contents, "<input>");
+  }
+}
 
 /// Read the file pointed to by \param path and returns its contents as a
 /// MemoryBuffer.

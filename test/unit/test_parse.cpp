@@ -2,12 +2,17 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
+#include "Diagnostics.h"
 #include "Lex.h"
 #include "Parse.h"
+#include "SourceStream.h"
 
 #include <llvm/Support/Casting.h>
+#include <llvm/Support/SourceMgr.h>
+#include <llvm/Support/raw_ostream.h>
 
 #include <optional>
+#include <string>
 
 using namespace Lex;
 using namespace Parse;
@@ -300,4 +305,42 @@ TEST_CASE("Parsing begin", "[parser]") {
 
   REQUIRE(B);
   REQUIRE(B->bodyCount() == 3);
+}
+
+TEST_CASE("DiagnosticEngine counts diagnostics", "[diagnostics]") {
+  nora::DiagnosticEngine Diag;
+  REQUIRE_FALSE(Diag.hadError());
+  REQUIRE(Diag.getNumErrors() == 0);
+  REQUIRE(Diag.getNumWarnings() == 0);
+
+  Diag.error("first failure");
+  Diag.error("second failure");
+  REQUIRE(Diag.hadError());
+  REQUIRE(Diag.getNumErrors() == 2);
+  REQUIRE(Diag.getNumWarnings() == 0);
+}
+
+TEST_CASE("SourceStream getLoc maps offsets into the buffer", "[diagnostics]") {
+  nora::DiagnosticEngine Diag;
+  SourceStream S("(+ 1 2)", &Diag);
+
+  llvm::SMLoc L0 = S.getLoc(0);
+  llvm::SMLoc L3 = S.getLoc(3);
+  REQUIRE(L0.isValid());
+  REQUIRE(L3.isValid());
+  REQUIRE(L3.getPointer() - L0.getPointer() == 3);
+}
+
+TEST_CASE("DiagnosticEngine renders line and column", "[diagnostics]") {
+  nora::DiagnosticEngine Diag;
+  SourceStream S("(+ 1 2)", &Diag);
+
+  std::string Buf;
+  llvm::raw_string_ostream OS(Buf);
+  // Offset 3 is the digit '1' -> line 1, column 4.
+  Diag.getSourceMgr().PrintMessage(OS, S.getLoc(3), llvm::SourceMgr::DK_Error,
+                                   "boom");
+  OS.flush();
+  REQUIRE(Buf.find("error: boom") != std::string::npos);
+  REQUIRE(Buf.find("1:4") != std::string::npos);
 }
