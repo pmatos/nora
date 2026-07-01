@@ -1,0 +1,28 @@
+# Pre-commit hooks for local hygiene. See https://pre-commit.com
+#
+#   pip install pre-commit   # or: pipx install pre-commit
+#   pre-commit install       # enable the git hook
+#   pre-commit run --all-files
+#
+# The extracted Racket expander is a generated artifact and is excluded.
+exclude: '^expander/expander\.rktl$'
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: ["--markdown-linebreak-ext=md"]
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v22.1.5
+    hooks:
+      - id: clang-format
+        types_or: [c++, c]

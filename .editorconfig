@@ -1,0 +1,27 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{cpp,cc,h,hpp}]
+indent_style = space
+indent_size = 2
+
+[*.td]
+indent_style = space
+indent_size = 2
+
+[*.{yml,yaml,json}]
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+# The extracted Racket expander is a generated artifact; leave it untouched.
+[expander/expander.rktl]
+trim_trailing_whitespace = false
+insert_final_newline = false
