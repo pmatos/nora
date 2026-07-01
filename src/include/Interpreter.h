@@ -23,6 +23,7 @@ public:
   virtual void visit(ast::Application const &A) override;
   virtual void visit(ast::Begin const &B) override;
   virtual void visit(ast::BooleanLiteral const &Bool) override;
+  virtual void visit(ast::Char const &C) override;
   virtual void visit(ast::Closure const &L) override;
   virtual void visit(ast::DefineValues const &DV) override;
   virtual void visit(ast::Identifier const &Id) override;
@@ -35,8 +36,10 @@ public:
   virtual void visit(ast::QuotedExpr const &L) override;
   virtual void visit(ast::RuntimeFunction const &LV) override;
   virtual void visit(ast::SetBang const &SB) override;
+  virtual void visit(ast::String const &Str) override;
   virtual void visit(ast::Symbol const &Sym) override;
   virtual void visit(ast::Values const &V) override;
+  virtual void visit(ast::Vector const &Vec) override;
   virtual void visit(ast::Void const &Vd) override;
 
   // Checks if an identifier is bound in the current environment.

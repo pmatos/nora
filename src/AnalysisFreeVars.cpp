@@ -83,6 +83,16 @@ void AnalysisFreeVars::visit(ast::List const &L) {
   for (auto const &Expr : L.values()) {
     Expr->accept(*this);
   }
+  if (L.getTail()) {
+    L.getTail()->accept(*this);
+  }
+}
+
+void AnalysisFreeVars::visit(ast::Vector const &Vec) {
+  // Iterate through all the Vector elements and check for free variables.
+  for (auto const &Expr : Vec.values()) {
+    Expr->accept(*this);
+  }
 }
 
 void AnalysisFreeVars::visit(ast::Application const &A) {
@@ -111,6 +121,16 @@ void AnalysisFreeVars::visit(ast::IfCond const &If) {
 
 void AnalysisFreeVars::visit(ast::BooleanLiteral const &Bool) {
   // Boolean literals have no free variables.
+  // Nothing to do.
+}
+
+void AnalysisFreeVars::visit(ast::Char const &C) {
+  // Characters have no free variables.
+  // Nothing to do.
+}
+
+void AnalysisFreeVars::visit(ast::String const &Str) {
+  // Strings have no free variables.
   // Nothing to do.
 }
 

@@ -122,7 +122,9 @@ std::optional<Tok> Lex::maybeLexVector(SourceStream &S) {
   }
   S.skipPrefix(2);
 
-  Tok T(Tok::TokType::VECTOR_START, Start, S.getPosition());
+  // End is the index of the last consumed char ("(") so Tok::size() == 2, the
+  // number of bytes consumed; getPosition() is one past the end.
+  Tok T(Tok::TokType::VECTOR_START, Start, S.getPosition() - 1);
   return {T};
 }
 
@@ -173,6 +175,11 @@ std::optional<Tok> Lex::maybeLexDot(SourceStream &S) {
 }
 
 std::optional<Tok> Lex::maybeLexString(SourceStream &S) {
+  // Only a leading double quote can start a string. Guard before touching
+  // std::regex: regex_search on a non-string window crashes in this libstdc++.
+  if (S.peekChar() != '"') {
+    return {};
+  }
   std::cmatch CM;
   if (S.searchRegex(R"|("([^"\\]*(\\.[^"\\]*)*)")|", CM)) {
     Tok T(Tok::TokType::STRING, CM.str(), S.getPosition(),
@@ -277,11 +284,21 @@ std::optional<Tok> Lex::maybeLexSchemeChar(SourceStream &S) {
     return {T};
   }
 
-  std::cmatch CM;
-  if (S.searchRegex(R"((?:u|x|U|X)[0-9a-fA-F]{4})", CM)) {
-    Tok T(Tok::TokType::CHAR_HEX, CM.str(), S.getPosition() - 2,
-          S.getPosition() + CM.length() - 1);
-    S.skipPrefix(CM.length());
+  // Hexadecimal scalar value: #\uHHHH or #\UHHHH (also x/X). Scanned by hand
+  // rather than with std::regex, whose libstdc++ implementation crashes while
+  // compiling the bounded-repetition pattern here.
+  auto IsHex = [](char C) {
+    return (C >= '0' && C <= '9') || (C >= 'a' && C <= 'f') ||
+           (C >= 'A' && C <= 'F');
+  };
+  char Prefix = S.peekChar();
+  if ((Prefix == 'u' || Prefix == 'x' || Prefix == 'U' || Prefix == 'X') &&
+      IsHex(S.peekChar(1)) && IsHex(S.peekChar(2)) && IsHex(S.peekChar(3)) &&
+      IsHex(S.peekChar(4))) {
+    llvm::StringRef Value = S.getSubview(5);
+    Tok T(Tok::TokType::CHAR_HEX, Value, S.getPosition() - 2,
+          S.getPosition() + 4);
+    S.skipPrefix(5);
     return {T};
   }
 
@@ -303,7 +320,10 @@ std::optional<Tok> Lex::maybeLexSchemeChar(SourceStream &S) {
       (isDelimiter(S, 1) || S.peekChar(1) == EOF ||
        std::isspace(S.peekChar(1)))) {
     auto Subview = S.getSubviewAndSkip(Bytes);
-    Tok T(Tok::TokType::CHAR, Subview, LexStart, S.getPosition());
+    // End is the index of the last consumed char, so that Tok::size() equals
+    // the number of bytes consumed (#\ plus the character). Using getPosition()
+    // (one past the end) would make size() too large and callers over-rewind.
+    Tok T(Tok::TokType::CHAR, Subview, LexStart, S.getPosition() - 1);
     return {T};
   }
 

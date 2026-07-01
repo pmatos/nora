@@ -210,6 +210,10 @@ void Interpreter::visit(ast::List const &L) {
   LLVM_DEBUG(llvm::dbgs() << "Interpreting List\n");
   Result = std::unique_ptr<ast::ValueNode>(L.clone());
 }
+void Interpreter::visit(ast::Vector const &Vec) {
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting Vector\n");
+  Result = std::unique_ptr<ast::ValueNode>(Vec.clone());
+}
 
 void Interpreter::visit(ast::Application const &A) {
   // 1. Evaluate the first expression.
@@ -386,6 +390,16 @@ void Interpreter::visit(ast::IfCond const &I) {
 void Interpreter::visit(ast::BooleanLiteral const &Bool) {
   LLVM_DEBUG(llvm::dbgs() << "Interpreting BooleanLiteral\n");
   Result = std::unique_ptr<ast::ValueNode>(Bool.clone());
+}
+
+void Interpreter::visit(ast::Char const &C) {
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting Char\n");
+  Result = std::unique_ptr<ast::ValueNode>(C.clone());
+}
+
+void Interpreter::visit(ast::String const &Str) {
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting String\n");
+  Result = std::unique_ptr<ast::ValueNode>(Str.clone());
 }
 
 void Interpreter::visit(ast::LetValues const &L) {

@@ -83,6 +83,24 @@ void Symbol::dump() const { llvm::dbgs() << "#<symbol:" << Name << ">"; }
 void Symbol::write() const { std::cout << getName().str(); }
 
 //
+// Implementation of Char node.
+//
+void Char::dump() const { llvm::dbgs() << "#\\" << Value; }
+
+// Characters print in Racket read syntax (#\a). The leading quote (if any) is
+// emitted by the enclosing QuotedExpr; characters are self-quoting so none is.
+void Char::write() const { std::cout << "#\\" << getValue().str(); }
+
+//
+// Implementation of String node.
+//
+void String::dump() const { llvm::dbgs() << Value; }
+
+// Strings print in Racket read syntax ("z"); Value already carries the
+// delimiting quotes. Self-quoting, so the enclosing QuotedExpr adds no quote.
+void String::write() const { std::cout << getValue().str(); }
+
+//
 // Implementation of IfCond node.
 //
 
@@ -449,6 +467,9 @@ List::List(List const &L) : ClonableNode(ASTNodeKind::AST_List) {
   for (auto &V : L.Values) {
     Values.emplace_back(std::unique_ptr<ValueNode>(V->clone()));
   }
+  if (L.Tail) {
+    Tail = std::unique_ptr<ValueNode>(L.Tail->clone());
+  }
 }
 
 void List::appendExpr(std::unique_ptr<ValueNode> &&Value) {
@@ -465,6 +486,10 @@ void List::dump() const {
     if (I != L.length() - 1)
       llvm::dbgs() << " ";
   }
+  if (L.hasTail()) {
+    llvm::dbgs() << " . ";
+    L.getTail()->dump();
+  }
   llvm::dbgs() << ")";
 }
 
@@ -474,6 +499,47 @@ void List::write() const {
   for (size_t I = 0; I < L.length(); ++I) {
     L[I].write();
     if (I != L.length() - 1)
+      std::cout << " ";
+  }
+  if (L.hasTail()) {
+    std::cout << " . ";
+    L.getTail()->write();
+  }
+  std::cout << ")";
+}
+
+//
+// Implementation of Vector node.
+//
+Vector::Vector(Vector const &V) : ClonableNode(ASTNodeKind::AST_Vector) {
+  for (auto &E : V.Values) {
+    Values.emplace_back(std::unique_ptr<ValueNode>(E->clone()));
+  }
+}
+
+void Vector::appendExpr(std::unique_ptr<ValueNode> &&Value) {
+  Values.emplace_back(std::move(Value));
+}
+
+ValueNode const &Vector::operator[](size_t I) const { return *Values[I]; }
+
+void Vector::dump() const {
+  const Vector &V = *this;
+  llvm::dbgs() << "#(";
+  for (size_t I = 0; I < V.length(); ++I) {
+    V[I].dump();
+    if (I != V.length() - 1)
+      llvm::dbgs() << " ";
+  }
+  llvm::dbgs() << ")";
+}
+
+void Vector::write() const {
+  const Vector &V = *this;
+  std::cout << "#(";
+  for (size_t I = 0; I < V.length(); ++I) {
+    V[I].write();
+    if (I != V.length() - 1)
       std::cout << " ";
   }
   std::cout << ")";
@@ -508,7 +574,8 @@ void QuotedExpr::write() const {
   if (!Node)
     return;
 
-  if (llvm::isa<Integer>(*Node) || llvm::isa<BooleanLiteral>(*Node)) {
+  if (llvm::isa<Integer>(*Node) || llvm::isa<BooleanLiteral>(*Node) ||
+      llvm::isa<Char>(*Node) || llvm::isa<String>(*Node)) {
     Node->write();
     return;
   }
