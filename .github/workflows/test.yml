@@ -2,66 +2,100 @@ name: Test
 
 on: [push, pull_request]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  LLVM_VERSION: "22"
+  CMAKE_PREFIX_PATH: /usr/lib/llvm-22
+
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
         compiler: [clang, gcc]
-        mode: [Debug, Release]
+        preset: [debug, release]
 
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v3
-      - name: Install dependencies
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install LLVM ${{ env.LLVM_VERSION }}
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh "$LLVM_VERSION"
+
+      - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake git ninja-build python3-pip
-          if [ ${{ matrix.compiler }} = "clang" ]; then
-            sudo apt-get install -y clang-15 llvm-15-dev llvm-15-tools mlir-15-tools libmlir-15-dev
-            echo "CC=clang-15" >> $GITHUB_ENV
-            echo "CXX=clang++-15" >> $GITHUB_ENV
-          elif [ ${{ matrix.compiler }} = "gcc" ]; then
-            sudo apt-get install -y gcc-12 g++-12 llvm-15-dev llvm-15-tools mlir-15-tools libmlir-15-dev
-            echo "CC=gcc-12" >> $GITHUB_ENV
-            echo "CXX=g++-12" >> $GITHUB_ENV
+          sudo apt-get install -y ninja-build libgmp-dev \
+            "llvm-${LLVM_VERSION}-dev" "llvm-${LLVM_VERSION}-tools" python3-pip
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            sudo apt-get install -y "clang-${LLVM_VERSION}"
+            echo "CC=clang-${LLVM_VERSION}" >> "$GITHUB_ENV"
+            echo "CXX=clang++-${LLVM_VERSION}" >> "$GITHUB_ENV"
+          else
+            sudo apt-get install -y gcc-14 g++-14
+            echo "CC=gcc-14" >> "$GITHUB_ENV"
+            echo "CXX=g++-14" >> "$GITHUB_ENV"
           fi
-          sudo update-alternatives --install /usr/bin/FileCheck FileCheck /usr/bin/FileCheck-15 1
-      - name: Install lit
-        run: pip3 install lit
-      - name: Configure
-        run: |
-          mkdir build
-          cd build
-          cmake -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.mode }} -DCMAKE_PREFIX_PATH="/usr/lib/llvm-15/cmake;/usr/lib/llvm-15/lib/cmake/mlir/" -DCMAKE_VERBOSE_MAKEFILE=1 -DCMAKE_C_COMPILER=${{ env.CC }} -DCMAKE_CXX_COMPILER=${{ env.CXX }} ..
-      - name: Build
-        working-directory: ./build
-        run: ninja
-      - name: Test
-        working-directory: ./build
-        run: ninja test
+          # Make FileCheck and friends discoverable for the lit test suite.
+          echo "/usr/lib/llvm-${LLVM_VERSION}/bin" >> "$GITHUB_PATH"
 
-  ubsan-test:
+      - name: Install lit
+        run: pip3 install --break-system-packages lit
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }}
+
+  sanitizers:
     needs: test
-    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [asan, ubsan]
+    runs-on: ubuntu-24.04
+    env:
+      CC: clang-22
+      CXX: clang++-22
     steps:
-      - uses: actions/checkout@v3
-      - name: Install dependencies
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install LLVM ${{ env.LLVM_VERSION }}
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh "$LLVM_VERSION"
+
+      - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake git ninja-build python3-pip
-          sudo apt-get install -y clang-15 llvm-15-dev llvm-15-tools mlir-15-tools libmlir-15-dev
-          sudo update-alternatives --install /usr/bin/FileCheck FileCheck /usr/bin/FileCheck-15 1
+          sudo apt-get install -y ninja-build libgmp-dev \
+            "clang-${LLVM_VERSION}" "llvm-${LLVM_VERSION}-dev" \
+            "llvm-${LLVM_VERSION}-tools" python3-pip
+          echo "/usr/lib/llvm-${LLVM_VERSION}/bin" >> "$GITHUB_PATH"
+
       - name: Install lit
-        run: pip3 install lit
-      - name: Configure with UBSan
-        run: |
-          mkdir build
-          cd build
-          cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="/usr/lib/llvm-15/cmake;/usr/lib/llvm-15/lib/cmake/mlir/" -DCMAKE_VERBOSE_MAKEFILE=1 -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DWITH_UBSAN=True ..
-      - name: Build with UBSan
-        working-directory: ./build
-        run: ninja
-      - name: Test with UBSan
-        working-directory: ./build
-        run: bin/nora-lit ../test/integration -v
+        run: pip3 install --break-system-packages lit
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }}
