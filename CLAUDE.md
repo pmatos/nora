@@ -44,6 +44,9 @@ ctest --preset debug         # unit (Catch2) + integration (lit/FileCheck) tests
   drift, so run it before committing.
 - Linting: `clang-tidy` (`.clang-tidy`).
 - Optional local hooks: `pre-commit install` (see `.pre-commit-config.yaml`).
+- Claude Code auto-formats edited C/C++ files via a `PostToolUse` hook in
+  `.claude/settings.json` (runs `clang-format-22`, matching the pinned
+  pre-commit version; silently no-ops if that binary is absent).
 
 ## Adding an integration test
 
