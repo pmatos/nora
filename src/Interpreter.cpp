@@ -12,7 +12,6 @@
 
 #include "ASTRuntime.h"
 #include "Casting.h"
-#include "Valueify.h"
 
 #undef DEBUG_TYPE
 #define DEBUG_TYPE "Interpreter"
@@ -467,9 +466,10 @@ void Interpreter::visit(ast::LetValues const &L) {
 // Therefore we need to recursively valueify everything.
 void Interpreter::visit(ast::QuotedExpr const &QE) {
   LLVM_DEBUG(llvm::dbgs() << "Interpreting QuotedExpr\n");
-  Valueify VV;
-  VV.visit(QE);
-  Result = VV.getResult();
+  // The value of a quote is its datum. Keep the QuotedExpr wrapper so that
+  // printing uses Racket's `print` form (a leading quote for non-self-quoting
+  // data); QuotedExpr::clone deep-copies the underlying datum.
+  Result = std::unique_ptr<ast::ValueNode>(QE.clone());
 }
 
 void Interpreter::visit(ast::Symbol const &Sym) {
