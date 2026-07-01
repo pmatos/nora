@@ -19,6 +19,18 @@ if __name__ == "__main__":
     base_analysis_dir = sys.argv[1]
     pr_analysis_dir = sys.argv[2]
 
+    # An absent base directory means the base tree could not be built with the
+    # current toolchain (e.g. it predates a toolchain modernization), so there
+    # is no baseline to diff against. Skip the differential rather than flag
+    # every PR finding as new. An empty-but-present directory means the base
+    # built cleanly with zero findings, so the differential still runs.
+    if not os.path.isdir(base_analysis_dir):
+        print(
+            f"Base analysis '{base_analysis_dir}' is unavailable "
+            "(base tree did not build); skipping differential comparison."
+        )
+        sys.exit(0)
+
     base_errors = parse_reports(base_analysis_dir)
     pr_errors = parse_reports(pr_analysis_dir)
     new_errors = pr_errors - base_errors

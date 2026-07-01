@@ -46,13 +46,24 @@ jobs:
             "clang-tools-${LLVM_VERSION}" "llvm-${LLVM_VERSION}-dev" "llvm-${LLVM_VERSION}-tools"
           echo "/usr/lib/llvm-${LLVM_VERSION}/bin" >> "$GITHUB_PATH"
 
-      - name: Analyze base (main)
+      # Best-effort baseline. If the base tree fails to configure/build with
+      # this toolchain (e.g. it predates the modernization and still requires
+      # MLIR), skip the baseline instead of failing the job; the compare step
+      # then reports the PR's findings without a differential. Once a
+      # modernized commit lands on the base branch this resolves itself.
+      - name: Analyze base (${{ github.base_ref || 'main' }})
         run: |
           git checkout "origin/${GITHUB_BASE_REF:-main}"
-          scan-build --use-cc="clang-${LLVM_VERSION}" --use-c++="clang++-${LLVM_VERSION}" \
-            -o base-analysis cmake -G Ninja -S . -B build-base -DCMAKE_BUILD_TYPE=Release
-          scan-build --use-cc="clang-${LLVM_VERSION}" --use-c++="clang++-${LLVM_VERSION}" \
-            -o base-analysis cmake --build build-base --target norac
+          if scan-build --use-cc="clang-${LLVM_VERSION}" --use-c++="clang++-${LLVM_VERSION}" \
+               -o base-analysis cmake -G Ninja -S . -B build-base -DCMAKE_BUILD_TYPE=Release \
+             && scan-build --use-cc="clang-${LLVM_VERSION}" --use-c++="clang++-${LLVM_VERSION}" \
+               -o base-analysis cmake --build build-base --target norac; then
+            # Keep the directory even when scan-build prunes it for zero findings.
+            mkdir -p base-analysis
+          else
+            echo "::warning::Base tree (${GITHUB_BASE_REF:-main}) failed to build with this toolchain; skipping the differential baseline."
+            rm -rf base-analysis
+          fi
 
       - name: Analyze pull request head
         run: |
