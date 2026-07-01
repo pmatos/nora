@@ -254,13 +254,25 @@ void Interpreter::continueStep() {
     std::unique_ptr<ast::ValueNode> KeyV = std::move(Top.WcmKeyV);
     std::unique_ptr<ast::ValueNode> ValV = std::move(Val);
     Kont.pop_back();
-    // Install the mark on the frame that encloses the with-continuation-mark
-    // form. There is always such a frame (a Halt frame sits at the bottom of
-    // every top-level form's continuation).
+    // Push a dedicated mark-bearing frame holding this key/value, and evaluate
+    // the result expression under it. The frame is popped when the result
+    // produces a value (see the WcmMark case), so the mark's dynamic extent is
+    // exactly the result expression - a with-continuation-mark in non-tail
+    // position no longer leaks its mark into later expressions.
+    Kont.emplace_back(Frame::WcmMark);
     ast::setMark(Kont.back().Marks, std::move(KeyV), std::move(ValV));
     Control = ResultE;
     Env = E;
     M = Mode::Eval;
+    break;
+  }
+
+  case Frame::WcmMark: {
+    // The result expression has produced a value; discard the mark frame and
+    // pass the value through to the enclosing continuation.
+    std::unique_ptr<ast::ValueNode> V = std::move(Val);
+    Kont.pop_back();
+    deliver(std::move(V));
     break;
   }
 

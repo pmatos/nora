@@ -1,6 +1,7 @@
 ;; RUN: norac %s | FileCheck %s
-;; Two with-continuation-mark forms for the same key in the same continuation
-;; frame (nested in tail position): the inner value overwrites the outer one.
+;; Two nested with-continuation-mark forms for the same key: continuation-mark-
+;; set-first returns the innermost (most recent) value, so the inner mark shadows
+;; the outer one.
 ;; CHECK: 2
 (linklet () ()
   (with-continuation-mark 'k 1

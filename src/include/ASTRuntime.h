@@ -37,7 +37,7 @@ private:
 
 // A single continuation mark is a key/value pair. A MarkFrame collects the
 // marks belonging to one continuation frame; within a frame each key appears
-// at most once (a later with-continuation-mark for the same key overwrites).
+// at most once (setMark overwrites an existing entry for the same key).
 using MarkEntry =
     std::pair<std::unique_ptr<ValueNode>, std::unique_ptr<ValueNode>>;
 using MarkFrame = std::vector<MarkEntry>;

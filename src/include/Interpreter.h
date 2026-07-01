@@ -91,6 +91,7 @@ private:
       Set,      // set!: mutate then produce void
       WcmKey,   // with-continuation-mark: after key, evaluate val
       WcmVal,   // with-continuation-mark: after val, install mark + eval result
+      WcmMark,  // holds a with-continuation-mark mark for its result expression
       Call      // a procedure activation (holds the callee's marks)
     };
 

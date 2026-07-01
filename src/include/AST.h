@@ -708,8 +708,8 @@ private:
 
 // AST node for (with-continuation-mark key-expr val-expr result-expr).
 // key-expr and val-expr are evaluated in non-tail position; the resulting
-// key/value pair is installed as a continuation mark on the current
-// continuation frame while result-expr is evaluated in tail position.
+// key/value pair is installed as a continuation mark on a dedicated frame that
+// is in effect only while result-expr is evaluated.
 class WithContinuationMark
     : public ClonableNode<WithContinuationMark, ExprNode> {
 public:
