@@ -38,6 +38,7 @@ public:
   virtual void visit(ast::String const &Str) override;
   virtual void visit(ast::Symbol const &Sym) override;
   virtual void visit(ast::Values const &V) override;
+  virtual void visit(ast::VariableReference const &VR) override;
   virtual void visit(ast::Vector const &Vec) override;
   virtual void visit(ast::Void const &Vd) override;
 

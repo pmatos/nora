@@ -284,6 +284,12 @@ void Interpreter::applyFormals(
   Envs.pop_back();
 }
 
+// A variable reference is an opaque, self-evaluating value.
+void Interpreter::visit(ast::VariableReference const &VR) {
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting VariableReference\n");
+  Result = std::unique_ptr<ast::ValueNode>(VR.clone());
+}
+
 void Interpreter::visit(ast::Application const &A) {
   // 1. Evaluate the first expression.
   // which should evaluate to a lambda expression.

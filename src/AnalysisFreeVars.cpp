@@ -108,6 +108,11 @@ void AnalysisFreeVars::visit(ast::Vector const &Vec) {
   }
 }
 
+void AnalysisFreeVars::visit(ast::VariableReference const &VR) {
+  // A variable reference is an opaque value with no free variables.
+  // Nothing to do.
+}
+
 void AnalysisFreeVars::visit(ast::Application const &A) {
   // Iterate through all the Application expressions and check for free
   // variables.

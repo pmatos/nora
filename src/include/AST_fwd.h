@@ -24,6 +24,7 @@ class SetBang;
 class String;
 class Symbol;
 class Values;
+class VariableReference;
 class Vector;
 class Void;
 }; // namespace ast
