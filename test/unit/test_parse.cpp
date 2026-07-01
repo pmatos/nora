@@ -185,6 +185,20 @@ TEST_CASE("Lexing Symbol tokens", "[parser]") {
   REQUIRE(Tok.Value == R"(\)");
 }
 
+TEST_CASE("Lexing Keyword tokens", "[parser]") {
+  SourceStream Kw("#:foo");
+  Tok Tok = gettok(Kw);
+  REQUIRE(Tok.is(Tok::TokType::KEYWORD));
+  REQUIRE(Tok.Value == "foo");
+
+  SourceStream QuotedKw("'#:bar");
+  Tok = gettok(QuotedKw);
+  REQUIRE(Tok.is(Tok::TokType::SYMBOLMARK));
+  Tok = gettok(QuotedKw);
+  REQUIRE(Tok.is(Tok::TokType::KEYWORD));
+  REQUIRE(Tok.Value == "bar");
+}
+
 TEST_CASE("Lexing identifiers starting with numbers", "[parser]") {
   SourceStream Sym("1/bound-identifier=?");
   Tok Tok = gettok(Sym);
@@ -227,6 +241,22 @@ TEST_CASE("Lexing full expressions 2", "[parser]") {
   REQUIRE(Tok.is(Tok::TokType::LPAREN));
   Tok = gettok(Letvals);
   REQUIRE(Tok.is(Tok::TokType::LET_VALUES));
+  Tok = gettok(Letvals);
+  REQUIRE(Tok.is(Tok::TokType::LPAREN));
+  Tok = gettok(Letvals);
+  REQUIRE(Tok.is(Tok::TokType::RPAREN));
+  Tok = gettok(Letvals);
+  REQUIRE(Tok.is(Tok::TokType::BOOL_FALSE));
+  Tok = gettok(Letvals);
+  REQUIRE(Tok.is(Tok::TokType::RPAREN));
+}
+
+TEST_CASE("Lexing letrec-values", "[parser]") {
+  SourceStream Letvals("(letrec-values () #f)");
+  Tok Tok = gettok(Letvals);
+  REQUIRE(Tok.is(Tok::TokType::LPAREN));
+  Tok = gettok(Letvals);
+  REQUIRE(Tok.is(Tok::TokType::LETREC_VALUES));
   Tok = gettok(Letvals);
   REQUIRE(Tok.is(Tok::TokType::LPAREN));
   Tok = gettok(Letvals);
@@ -297,6 +327,28 @@ TEST_CASE("Parsing lambdas", "[parser]") {
   const ast::ExprNode &B2 = L->getBody();
   const auto &Var = llvm::cast<ast::Identifier>(B2);
   REQUIRE(Var.getName() == "x");
+}
+
+TEST_CASE("Parsing case-lambda", "[parser]") {
+  SourceStream CL1("(case-lambda ((x) x) ((x y) (+ x y)))");
+  std::unique_ptr<ast::CaseLambda> CL = parseCaseLambda(CL1);
+  REQUIRE(CL);
+  REQUIRE(CL->size() == 2);
+  REQUIRE((*CL)[0].getFormalsType() == ast::Formal::Type::List);
+  REQUIRE((*CL)[1].getFormalsType() == ast::Formal::Type::List);
+
+  // A clause may use a rest formal.
+  SourceStream CL2("(case-lambda ((x) x) ((x . y) y))");
+  CL = parseCaseLambda(CL2);
+  REQUIRE(CL);
+  REQUIRE(CL->size() == 2);
+  REQUIRE((*CL)[1].getFormalsType() == ast::Formal::Type::ListRest);
+
+  // A case-lambda with no clauses is valid.
+  SourceStream CL3("(case-lambda)");
+  CL = parseCaseLambda(CL3);
+  REQUIRE(CL);
+  REQUIRE(CL->size() == 0);
 }
 
 TEST_CASE("Parsing begin", "[parser]") {

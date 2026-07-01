@@ -183,6 +183,18 @@ void Interpreter::visit(ast::Closure const &C) {
   Result = std::unique_ptr<ast::ValueNode>(C.clone());
 }
 
+void Interpreter::visit(ast::CaseLambda const &CL) {
+  // The interpretation of a case-lambda expression is a closure,
+  // even if no variables are captured.
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting CaseLambda\n");
+  Result = std::make_unique<ast::CaseLambdaClosure>(CL, Envs);
+}
+
+void Interpreter::visit(ast::CaseLambdaClosure const &C) {
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting CaseLambdaClosure\n");
+  Result = std::unique_ptr<ast::ValueNode>(C.clone());
+}
+
 void Interpreter::visit(ast::Begin const &B) {
   LLVM_DEBUG(llvm::dbgs() << "Interpreting Begin\n");
 
@@ -214,6 +226,63 @@ void Interpreter::visit(ast::Vector const &Vec) {
   Result = std::unique_ptr<ast::ValueNode>(Vec.clone());
 }
 
+// Returns true if the formals F accept NArgs supplied arguments.
+static bool formalsAccept(const ast::Formal &F, size_t NArgs) {
+  switch (F.getType()) {
+  case ast::Formal::Type::List:
+    return static_cast<const ast::ListFormal &>(F).size() == NArgs;
+  case ast::Formal::Type::ListRest:
+    return static_cast<const ast::ListRestFormal &>(F).size() <= NArgs;
+  case ast::Formal::Type::Identifier:
+    return true;
+  }
+  llvm_unreachable("unknown formal type");
+}
+
+void Interpreter::applyFormals(
+    const ast::Formal &F, const ast::ExprNode &Body,
+    const Environment &CapturedEnv,
+    std::vector<std::unique_ptr<ast::ValueNode>> &Args) {
+  // Create an environment where each argument is bound to the corresponding
+  // value. Then evaluate the body in this environment.
+  Environment Env;
+  if (F.getType() == ast::Formal::Type::List) {
+    auto LF = static_cast<const ast::ListFormal &>(F);
+    for (size_t Idx = 0; Idx < Args.size(); ++Idx) {
+      Env.add(LF[Idx], std::move(Args[Idx]));
+    }
+  } else if (F.getType() == ast::Formal::Type::ListRest) {
+    auto LRF = static_cast<const ast::ListRestFormal &>(F);
+    size_t Idx = 0;
+    for (; Idx < LRF.size(); ++Idx) {
+      Env.add(LRF[Idx], std::move(Args[Idx]));
+    }
+    // Create a list of the remaining arguments.
+    auto L = std::make_unique<ast::List>();
+    for (; Idx < Args.size(); ++Idx) {
+      L->appendExpr(std::move(Args[Idx]));
+    }
+    Env.add(LRF.getRestFormal(), std::unique_ptr<ast::ValueNode>(L->clone()));
+  } else if (F.getType() == ast::Formal::Type::Identifier) {
+    auto IF = static_cast<const ast::IdentifierFormal &>(F);
+    auto L = std::make_unique<ast::List>();
+    for (size_t Idx = 0; Idx < Args.size(); ++Idx) {
+      L->appendExpr(std::move(Args[Idx]));
+    }
+    Env.add(IF.getIdentifier(), std::unique_ptr<ast::ValueNode>(L->clone()));
+  } else {
+    llvm_unreachable("unknown formal type");
+  }
+
+  Envs.push_back(CapturedEnv); // Pushes the closure environment first.
+  Envs.push_back(Env);         // Then pushes the environment with the args.
+
+  Body.accept(*this);
+
+  Envs.pop_back();
+  Envs.pop_back();
+}
+
 void Interpreter::visit(ast::Application const &A) {
   // 1. Evaluate the first expression.
   // which should evaluate to a lambda expression.
@@ -223,9 +292,13 @@ void Interpreter::visit(ast::Application const &A) {
     return;
   }
 
-  // Error out if not a Closure expression or Runtime expression.
+  // Error out if not a Closure, CaseLambdaClosure, or Runtime function.
   std::unique_ptr<ast::Closure> C = dyn_castU<ast::Closure>(D);
+  std::unique_ptr<ast::CaseLambdaClosure> CLC;
   if (!C) {
+    CLC = dyn_castU<ast::CaseLambdaClosure>(D);
+  }
+  if (!C && !CLC) {
     // maybe a runtime function?
     std::unique_ptr<ast::RuntimeFunction> RF =
         dyn_castU<ast::RuntimeFunction>(D);
@@ -287,73 +360,54 @@ void Interpreter::visit(ast::Application const &A) {
     }
     Args.emplace_back(std::move(Result));
   }
+  // 3. Single-clause closure: check arity and apply.
   // If we have a list formals then, error out of args diff than formals.
   // If we have a list rest formals then, error out if args less than formals.
   // If it's identifier formals then it does not matter.
-  const ast::Lambda &L = C->getLambda();
-  const ast::Formal &F = L.getFormals();
-  if (F.getType() == ast::Formal::Type::List) {
-    auto LF = static_cast<const ast::ListFormal &>(F);
-    if (Args.size() != LF.size()) {
-      Diag.error(A.getLoc(), llvm::Twine("arity mismatch: expected ") +
-                                 llvm::Twine(LF.size()) + " argument(s), got " +
-                                 llvm::Twine(Args.size()));
-      Result = nullptr;
-      return;
+  if (C) {
+    const ast::Lambda &L = C->getLambda();
+    const ast::Formal &F = L.getFormals();
+    if (F.getType() == ast::Formal::Type::List) {
+      auto LF = static_cast<const ast::ListFormal &>(F);
+      if (Args.size() != LF.size()) {
+        Diag.error(A.getLoc(), llvm::Twine("arity mismatch: expected ") +
+                                   llvm::Twine(LF.size()) +
+                                   " argument(s), got " +
+                                   llvm::Twine(Args.size()));
+        Result = nullptr;
+        return;
+      }
+    } else if (F.getType() == ast::Formal::Type::ListRest) {
+      auto LRF = static_cast<const ast::ListRestFormal &>(F);
+      if (Args.size() < LRF.size()) {
+        Diag.error(A.getLoc(),
+                   llvm::Twine("arity mismatch: expected at least ") +
+                       llvm::Twine(LRF.size()) + " argument(s), got " +
+                       llvm::Twine(Args.size()));
+        Result = nullptr;
+        return;
+      }
     }
-  } else if (F.getType() == ast::Formal::Type::ListRest) {
-    auto LRF = static_cast<const ast::ListRestFormal &>(F);
-    if (Args.size() < LRF.size()) {
-      Diag.error(A.getLoc(), llvm::Twine("arity mismatch: expected at least ") +
-                                 llvm::Twine(LRF.size()) +
-                                 " argument(s), got " +
-                                 llvm::Twine(Args.size()));
-      Result = nullptr;
+
+    applyFormals(F, L.getBody(), C->getEnvironment(), Args);
+    return;
+  }
+
+  // 4. Case-lambda closure: apply the first clause whose formals accept the
+  // number of supplied arguments.
+  const ast::CaseLambda &CL = CLC->getCaseLambda();
+  for (size_t Idx = 0; Idx < CL.size(); ++Idx) {
+    const ast::Lambda &Clause = CL[Idx];
+    if (formalsAccept(Clause.getFormals(), Args.size())) {
+      applyFormals(Clause.getFormals(), Clause.getBody(), CLC->getEnvironment(),
+                   Args);
       return;
     }
   }
 
-  // 3. Apply the lambda expression to the evaluated expressions.
-  // Create an environment where each argument is bound to the corresponding
-  // value. Then evaluate the lambda body in this environment.
-  Environment Env;
-  if (F.getType() == ast::Formal::Type::List) {
-    auto LF = static_cast<const ast::ListFormal &>(F);
-    for (size_t Idx = 0; Idx < Args.size(); ++Idx) {
-      Env.add(LF[Idx], std::move(Args[Idx]));
-    }
-  } else if (F.getType() == ast::Formal::Type::ListRest) {
-    auto LRF = static_cast<const ast::ListRestFormal &>(F);
-    size_t Idx = 0;
-    for (; Idx < LRF.size(); ++Idx) {
-      Env.add(LRF[Idx], std::move(Args[Idx]));
-    }
-    // Create a list of the remaining arguments.
-    auto L = std::make_unique<ast::List>();
-    for (; Idx < Args.size(); ++Idx) {
-      L->appendExpr(std::move(Args[Idx]));
-    }
-
-    Env.add(LRF.getRestFormal(), std::unique_ptr<ast::ValueNode>(L->clone()));
-  } else if (F.getType() == ast::Formal::Type::Identifier) {
-    auto IF = static_cast<const ast::IdentifierFormal &>(F);
-    auto L = std::make_unique<ast::List>();
-    for (size_t Idx = 0; Idx < Args.size(); ++Idx) {
-      L->appendExpr(std::move(Args[Idx]));
-    }
-    Env.add(IF.getIdentifier(), std::unique_ptr<ast::ValueNode>(L->clone()));
-  } else {
-    llvm_unreachable("unknown formal type");
-  }
-
-  Envs.push_back(C->getEnvironment()); // Pushes the closure environment first.
-  Envs.push_back(Env); // Then pushes the environment with the args.
-
-  // 4. Return the result of the application.
-  L.getBody().accept(*this);
-
-  Envs.pop_back();
-  Envs.pop_back();
+  Diag.error(A.getLoc(), llvm::Twine("case-lambda: no matching clause for ") +
+                             llvm::Twine(Args.size()) + " argument(s)");
+  Result = nullptr;
 }
 
 // To interpret a set! expression we set the value of the identifier in the
@@ -422,11 +476,71 @@ void Interpreter::visit(ast::String const &Str) {
   Result = std::unique_ptr<ast::ValueNode>(Str.clone());
 }
 
+// Bind one let-values / letrec-values clause into Env: a single identifier
+// takes the whole value, while several identifiers require a Values result
+// whose arity matches. Returns false (after reporting) on a mismatch.
+static bool bindClause(nora::DiagnosticEngine &Diag, llvm::SMLoc Loc,
+                       Environment &Env, const ast::LetValues::IdRange &Ids,
+                       std::unique_ptr<ast::ValueNode> Val) {
+  if (std::ranges::size(Ids) == 1) {
+    Env.add(Ids[0], std::move(Val));
+    return true;
+  }
+
+  auto Vs = dyn_castU<ast::Values>(Val);
+  if (!Vs) {
+    Diag.error(Loc, "let-values binding expected multiple values");
+    return false;
+  }
+  const size_t Expected = std::ranges::size(Ids);
+  if (Expected != Vs->countExprs()) {
+    Diag.error(Loc, llvm::Twine("let-values binding expected ") +
+                        llvm::Twine(Expected) + " values, got " +
+                        llvm::Twine(Vs->countExprs()));
+    return false;
+  }
+
+  const auto &ValuesExprRange = Vs->getExprs();
+  for (size_t Idx = 0; Idx < Vs->countExprs(); ++Idx) {
+    // Elements of a Values node are values stored as exprs; downcast in place.
+    std::unique_ptr<ast::ExprNode> EPtr(ValuesExprRange[Idx].clone());
+    Env.add(Ids[Idx], dyn_castU<ast::ValueNode>(EPtr));
+  }
+  return true;
+}
+
 void Interpreter::visit(ast::LetValues const &L) {
   LLVM_DEBUG(llvm::dbgs() << "Interpreting LetValues\n");
   LLVM_DEBUG(L.dump(); llvm::dbgs() << "\n";);
 
-  // 1. Evaluate each of the expressions in order.
+  if (L.isRec()) {
+    // letrec-values: the bound identifiers are in scope while their own binding
+    // expressions are evaluated, so push a fresh environment first and fill it
+    // in as each clause is evaluated left to right. Keeping it live on the
+    // stack lets self- and mutually-recursive closures resolve the bindings the
+    // same way top-level recursive definitions do.
+    Envs.emplace_back();
+    for (size_t Idx = 0; Idx < L.exprsCount(); ++Idx) {
+      L.getBindingExpr(Idx).accept(*this);
+      if (!Result) {
+        Envs.pop_back();
+        return;
+      }
+      if (!bindClause(Diag, L.getLoc(), Envs.back(), L.getBindingIds(Idx),
+                      std::move(Result))) {
+        Result = nullptr;
+        Envs.pop_back();
+        return;
+      }
+    }
+    for (size_t I = 0; I < L.bodyCount(); ++I)
+      L.getBodyExpr(I).accept(*this);
+    Envs.pop_back();
+    return;
+  }
+
+  // let-values: every binding expression is evaluated in the enclosing
+  // environment before any of the identifiers are bound.
   std::vector<std::unique_ptr<ast::ValueNode>> ExprValues;
   ExprValues.reserve(L.exprsCount());
   for (size_t Idx = 0; Idx < L.exprsCount(); ++Idx) {
@@ -437,62 +551,21 @@ void Interpreter::visit(ast::LetValues const &L) {
     ExprValues.emplace_back(std::move(Result));
   }
 
-  // 2. Create an environment where each identifier is bound to the
-  // corresponding value. Then evaluate the body in this environment.
-  // If the binding variable list has a single identifier, it's simply assigned
-  // to the value of the expression. If on the other hand, it's a list of
-  // identifiers, then it should have the same length as the values list and
-  // each identifier is assigned to the corresponding value.
   LLVM_DEBUG(llvm::dbgs() << "Creating environment for LetValues\n");
   Environment Env;
   for (size_t Idx = 0; Idx < ExprValues.size(); ++Idx) {
-    if (std::ranges::size(L.getBindingIds(Idx)) == 1) {
-      Env.add(*L.getBindingIds(Idx).begin(), std::move(ExprValues[Idx]));
-    } else {
-      std::unique_ptr<ast::ValueNode> V = std::move(ExprValues[Idx]);
-
-      if (auto const &Vs = dyn_castU<ast::Values>(V)) {
-        const size_t Expected = std::ranges::size(L.getBindingIds(Idx));
-        if (Expected != Vs->countExprs()) {
-          Diag.error(L.getLoc(), llvm::Twine("let-values binding expected ") +
-                                     llvm::Twine(Expected) + " values, got " +
-                                     llvm::Twine(Vs->countExprs()));
-          Result = nullptr;
-          return;
-        }
-
-        const auto &IdsExprRange = L.getBindingIds(Idx);
-        const auto &ValuesExprRange = Vs->getExprs();
-
-        for (size_t Idx = 0; Idx < Vs->countExprs(); ++Idx) {
-          // All the elements in ValuesExprRange are Value,
-          // not Expr but we need to downcast them to add
-          // them to the environment.
-          const auto &E = ValuesExprRange[Idx];
-          std::unique_ptr<ast::ExprNode> EPtr(E.clone());
-          std::unique_ptr<ast::ValueNode> Val = dyn_castU<ast::ValueNode>(EPtr);
-
-          LLVM_DEBUG(llvm::dbgs()
-                     << "Adding " << std::string(IdsExprRange[Idx].getName())
-                     << " to environment\n");
-          Env.add(IdsExprRange[Idx], std::move(Val));
-        }
-
-      } else {
-        Diag.error(L.getLoc(), "let-values binding expected multiple values");
-        Result = nullptr;
-        return;
-      }
+    if (!bindClause(Diag, L.getLoc(), Env, L.getBindingIds(Idx),
+                    std::move(ExprValues[Idx]))) {
+      Result = nullptr;
+      return;
     }
   }
   LLVM_DEBUG(llvm::dbgs() << " Pushing new environment for LetValues\n");
   Envs.push_back(Env);
 
   LLVM_DEBUG(llvm::dbgs() << "Evaluating body of LetValues\n");
-  for (size_t I = 0; I < L.exprsCount(); ++I) {
-    // 3. Return the result of the let-values expression.
+  for (size_t I = 0; I < L.bodyCount(); ++I)
     L.getBodyExpr(I).accept(*this);
-  }
 
   Envs.pop_back();
 }
@@ -514,4 +587,9 @@ void Interpreter::visit(ast::QuotedExpr const &QE) {
 void Interpreter::visit(ast::Symbol const &Sym) {
   LLVM_DEBUG(llvm::dbgs() << "Interpreting Symbol\n");
   Result = std::unique_ptr<ast::ValueNode>(Sym.clone());
+}
+
+void Interpreter::visit(ast::Keyword const &K) {
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting Keyword\n");
+  Result = std::unique_ptr<ast::ValueNode>(K.clone());
 }

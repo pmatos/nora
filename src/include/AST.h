@@ -44,9 +44,12 @@ public:
     AST_SetBang,
     First_ValueNode, // all ValueNodes must be after this
     AST_BooleanLiteral,
+    AST_CaseLambda,
+    AST_CaseLambdaClosure, // result of evaluating a CaseLambda expression
     AST_Char,
     AST_Closure, // result of evaluating a Lambda expression
     AST_Integer,
+    AST_Keyword,
     AST_Lambda,
     AST_List,
     AST_String,
@@ -212,6 +215,34 @@ public:
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_Symbol;
+  }
+
+private:
+  llvm::SmallString<32> Name;
+};
+
+// A keyword datum, e.g. #:foo. Name holds the bare keyword (without the leading
+// #:), matching the lexer's KEYWORD token. Like symbols, keywords are not
+// self-quoting, so the enclosing QuotedExpr emits a leading quote ('#:foo).
+class Keyword : public ClonableNode<Keyword, ValueNode> {
+public:
+  explicit Keyword(llvm::StringRef Name)
+      : ClonableNode(ASTNodeKind::AST_Keyword), Name(Name) {}
+  Keyword(const Keyword &K)
+      : ClonableNode(ASTNodeKind::AST_Keyword), Name(K.Name) {}
+  Keyword(Keyword &&) = default;
+  Keyword &operator=(const Keyword &K) = delete;
+  Keyword &operator=(Keyword &&K) = delete;
+  virtual ~Keyword() = default;
+
+  bool operator==(const Keyword &K) const { return getName() == K.getName(); }
+
+  [[nodiscard]] llvm::StringRef getName() const { return Name; }
+  LLVM_DUMP_METHOD void dump() const override;
+  void write() const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == ASTNodeKind::AST_Keyword;
   }
 
 private:
@@ -613,6 +644,33 @@ private:
   std::unique_ptr<ExprNode> Body;
 };
 
+// A case-lambda is a sequence of lambda clauses. When applied, the first
+// clause whose formals accept the number of supplied arguments is selected.
+// Defined in terms of Lambda, so it is placed right after it.
+class CaseLambda : public ClonableNode<CaseLambda, ValueNode> {
+public:
+  CaseLambda() : ClonableNode(ASTNodeKind::AST_CaseLambda) {}
+  CaseLambda(CaseLambda const &CL);
+  CaseLambda(CaseLambda &&CL) = default;
+  ~CaseLambda() = default;
+
+  void addClause(std::unique_ptr<Lambda> C) { Clauses.push_back(std::move(C)); }
+  [[nodiscard]] size_t size() const { return Clauses.size(); }
+  [[nodiscard]] Lambda const &operator[](size_t Idx) const {
+    return *Clauses[Idx];
+  }
+
+  LLVM_DUMP_METHOD void dump() const override;
+  void write() const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == ASTNodeKind::AST_CaseLambda;
+  }
+
+private:
+  llvm::SmallVector<std::unique_ptr<Lambda>> Clauses;
+};
+
 class LetValues : public ClonableNode<LetValues, ExprNode> {
 public:
   LetValues() : ClonableNode(ASTNodeKind::AST_LetValues) {}
@@ -656,6 +714,12 @@ public:
   size_t exprsCount() const;
   size_t bodyCount() const { return Body.size(); }
 
+  // A letrec-values form binds its identifiers over the binding expressions as
+  // well as the body, enabling recursive and mutually-recursive definitions; a
+  // plain let-values evaluates its binding expressions in the outer scope.
+  bool isRec() const { return Rec; }
+  void setRec(bool R) { Rec = R; }
+
   LLVM_DUMP_METHOD void dump() const override;
 
   static bool classof(const ASTNode *N) {
@@ -666,6 +730,7 @@ private:
   llvm::SmallVector<llvm::SmallVector<Identifier>> Ids;
   llvm::SmallVector<std::unique_ptr<ExprNode>> Exprs;
   llvm::SmallVector<std::unique_ptr<ExprNode>> Body;
+  bool Rec = false;
 };
 
 class List : public ClonableNode<List, ValueNode> {

@@ -87,12 +87,12 @@ bool hadError(const SourceStream &S) {
 //
 // expr := <id>                                             - parseIdentifier
 //       | (lambda <formals> <expr>)                        - parseLambda
-//       | (case-lambda (<formals> <expr>) ...)
+//       | (case-lambda (<formals> <expr>) ...)             - parseCaseLambda
 //       | (if <expr> <expr> <expr>)                        - parseIfCond
 //       | (begin <expr> ...+)                              - parseBegin
 //       | (begin0 <expr> ...+)                             - parseBegin
 //       | (let-values ([<id> ...) <expr>] ...) <expr>)     - parseLetValues
-//       | (letrec-values ([(<id> ...) <expr>] ...) <expr>)
+//       | (letrec-values ([(<id> ...) <expr>] ...) <expr>) - parseLetValues
 //       | (set! <id> <expr>)                               - parseSetBang
 //       | (quote <datum>)                                  - parseQuote
 //       | (with-continuation-mark <expr> <expr> <expr>)
@@ -241,6 +241,11 @@ std::unique_ptr<ast::ExprNode> Parse::parseExpr(SourceStream &S) {
     return L;
   }
 
+  std::unique_ptr<ast::CaseLambda> CL = parseCaseLambda(S);
+  if (CL) {
+    return CL;
+  }
+
   std::unique_ptr<ast::Begin> B = parseBegin(S);
   if (B) {
     return B;
@@ -304,6 +309,9 @@ std::unique_ptr<ast::ValueNode> Parse::parseValue(SourceStream &S) {
   }
   if (auto Sym = parseSymbol(S)) {
     return Sym;
+  }
+  if (auto Kw = parseKeyword(S)) {
+    return Kw;
   }
   if (auto L = parseLiteralList(S)) {
     return L;
@@ -461,6 +469,17 @@ std::unique_ptr<ast::Symbol> Parse::parseSymbol(SourceStream &S) {
   auto Sym = std::make_unique<ast::Symbol>(T.Value);
   Sym->setRange(tokRange(S, T));
   return Sym;
+}
+
+// Parse a keyword datum (#:foo). The lexer emits a KEYWORD token whose value is
+// the bare keyword (without the leading #:).
+std::unique_ptr<ast::Keyword> Parse::parseKeyword(SourceStream &S) {
+  Tok T = gettok(S);
+  if (!T.is(Tok::TokType::KEYWORD)) {
+    S.rewind(T.size());
+    return nullptr;
+  }
+  return std::make_unique<ast::Keyword>(T.Value);
 }
 
 // Parses an expression of the form:
@@ -715,6 +734,65 @@ std::unique_ptr<ast::Lambda> Parse::parseLambda(SourceStream &S) {
 
   Lambda->setRange(rangeFrom(S, NodeStart));
   return Lambda;
+}
+
+// Parse case-lambda expression of the form:
+// (case-lambda (<formals> <expr>) ...)
+std::unique_ptr<ast::CaseLambda> Parse::parseCaseLambda(SourceStream &S) {
+  size_t Start = S.getPosition();
+
+  Tok T = gettok(S);
+  if (!T.is(Tok::TokType::LPAREN)) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  T = gettok(S);
+  if (!T.is(Tok::TokType::CASE_LAMBDA)) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  auto CaseLambda = std::make_unique<ast::CaseLambda>();
+
+  // Parse zero or more clauses of the form ( <formals> <expr> ).
+  while (true) {
+    T = gettok(S);
+    if (T.is(Tok::TokType::RPAREN)) {
+      break; // End of the case-lambda.
+    }
+    if (!T.is(Tok::TokType::LPAREN)) {
+      S.rewindTo(Start);
+      return nullptr;
+    }
+
+    // Each clause reuses the lambda machinery: formals plus a single body.
+    auto Clause = std::make_unique<ast::Lambda>();
+
+    std::unique_ptr<ast::Formal> Formals = parseFormals(S);
+    if (!Formals) {
+      S.rewindTo(Start);
+      return nullptr;
+    }
+    Clause->setFormals(std::move(Formals));
+
+    std::unique_ptr<ast::ExprNode> Body = parseExpr(S);
+    if (!Body) {
+      S.rewindTo(Start);
+      return nullptr;
+    }
+    Clause->setBody(std::move(Body));
+
+    T = gettok(S);
+    if (!T.is(Tok::TokType::RPAREN)) {
+      S.rewindTo(Start);
+      return nullptr;
+    }
+
+    CaseLambda->addClause(std::move(Clause));
+  }
+
+  return CaseLambda;
 }
 
 // Parse formals of the form:
@@ -999,8 +1077,10 @@ Parse::parseBooleanLiteral(SourceStream &S) {
   return nullptr;
 }
 
-// Parse a let-values form.
-// (let-values ([(id ...) val-expr] ...) body ...+)
+// Parse a let-values or letrec-values form. The two share an identical
+// grammar; they differ only in scoping, tracked by the LetValues Rec flag.
+// (let-values    ([(id ...) val-expr] ...) body ...+)
+// (letrec-values ([(id ...) val-expr] ...) body ...+)
 std::unique_ptr<ast::LetValues> Parse::parseLetValues(SourceStream &S) {
   size_t Start = S.getPosition();
 
@@ -1013,12 +1093,13 @@ std::unique_ptr<ast::LetValues> Parse::parseLetValues(SourceStream &S) {
   const size_t NodeStart = T.Start;
 
   T = gettok(S);
-  if (!T.is(Tok::TokType::LET_VALUES)) {
+  if (!T.is(Tok::TokType::LET_VALUES) && !T.is(Tok::TokType::LETREC_VALUES)) {
     S.rewindTo(Start);
     return nullptr;
   }
 
   auto Let = std::make_unique<ast::LetValues>();
+  Let->setRec(T.is(Tok::TokType::LETREC_VALUES));
 
   T = gettok(S);
   if (!T.is(Tok::TokType::LPAREN)) {

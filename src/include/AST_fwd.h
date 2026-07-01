@@ -5,12 +5,15 @@ namespace ast {
 class Application;
 class Begin;
 class BooleanLiteral;
+class CaseLambda;
+class CaseLambdaClosure;
 class Char;
 class Closure;
 class DefineValues;
 class Identifier;
 class IfCond;
 class Integer;
+class Keyword;
 class Lambda;
 class LetValues;
 class Linklet;

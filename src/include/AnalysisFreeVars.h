@@ -19,12 +19,15 @@ public:
   virtual void visit(ast::Application const &A) override;
   virtual void visit(ast::Begin const &B) override;
   virtual void visit(ast::BooleanLiteral const &Bool) override;
+  virtual void visit(ast::CaseLambda const &CL) override;
+  virtual void visit(ast::CaseLambdaClosure const &CL) override;
   virtual void visit(ast::Char const &C) override;
   virtual void visit(ast::Closure const &L) override;
   virtual void visit(ast::DefineValues const &DV) override;
   virtual void visit(ast::Identifier const &Id) override;
   virtual void visit(ast::IfCond const &If) override;
   virtual void visit(ast::Integer const &Int) override;
+  virtual void visit(ast::Keyword const &K) override;
   virtual void visit(ast::Lambda const &L) override;
   virtual void visit(ast::LetValues const &LV) override;
   virtual void visit(ast::Linklet const &Linklet) override;
