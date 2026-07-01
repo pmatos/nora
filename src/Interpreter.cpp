@@ -237,14 +237,15 @@ void Interpreter::visit(ast::Application const &A) {
     // will contain pointers to the results in ArgHolder. This sucks a bit but
     // at this point, I am not sure if there's a point in focusing on optimizing
     // this.
-    llvm::SmallVector<std::unique_ptr<ast::ValueNode>> ArgHolder(A.length() -
-                                                                 1);
-    llvm::SmallVector<const ast::ValueNode *> Args(A.length() - 1);
+    llvm::SmallVector<std::unique_ptr<ast::ValueNode>> ArgHolder;
+    ArgHolder.reserve(A.length() - 1);
+    llvm::SmallVector<const ast::ValueNode *> Args;
+    Args.reserve(A.length() - 1);
     for (size_t Idx = 0; Idx < A.length() - 1; ++Idx) {
       A[Idx + 1].accept(*this);
       assert(Result && "Expected result from expression.");
-      ArgHolder[Idx] = std::move(Result);
-      Args[Idx] = ArgHolder[Idx].get();
+      ArgHolder.emplace_back(std::move(Result));
+      Args.emplace_back(ArgHolder.back().get());
     }
 
     LLVM_DEBUG({
