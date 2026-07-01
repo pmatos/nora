@@ -1,29 +1,30 @@
-# Version set according the the cmake versions available in Ubuntu/Bionic:
-# https://packages.ubuntu.com/bionic/cmake
-cmake_minimum_required(VERSION 3.10.2)
+cmake_minimum_required(VERSION 3.24)
 
 project(nora LANGUAGES C CXX VERSION 102)
 include(GNUInstallDirs)
 include(CTest)
 include(FetchContent)
 
-if(POLICY CMP0077)
-  cmake_policy(SET CMP0077 NEW)
-endif()
-
-if(POLICY CMP0116)
-  cmake_policy(SET CMP0116 NEW)
-endif()
-
 set(CMAKE_CXX_OUTPUT_EXTENSION_REPLACE ON)
 
 # The C++ standard whose features are required to build nora.
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -Werror")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -flto -Werror")
-set(CMAKE_CXX_FLAGS_MINSIZEREL "-Oz -flto -Werror")
+# The NIR MLIR dialect is experimental and not used by the interpreter yet, so
+# MLIR is opt-in. The default build depends only on LLVM + GMP.
+option(NORA_ENABLE_MLIR "Build the experimental NIR MLIR dialect (requires MLIR)" OFF)
+
+# Treat compiler warnings as errors by default (CMake >= 3.24). The code is
+# warning-clean on GCC and Clang; disable with -DCMAKE_COMPILE_WARNING_AS_ERROR=OFF
+# for exploratory local builds.
+option(NORA_WERROR "Treat compiler warnings as errors" ON)
+set(CMAKE_COMPILE_WARNING_AS_ERROR ${NORA_WERROR})
+
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -flto")
+set(CMAKE_CXX_FLAGS_MINSIZEREL "-Oz -flto")
 
 # Add new build type COVERAGE
 message("* Adding build type COVERAGE...")
@@ -60,24 +61,6 @@ message("* Current build type is : ${CMAKE_BUILD_TYPE}")
 set(CMAKE_BUILD_WITH_INSTALL_NAME_DIR ON)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-if(NOT CMAKE_BUILD_TYPE)
-  message(STATUS "No build type selected, default to Release")
-  set(CMAKE_BUILD_TYPE "Release")
-endif()
-
-# FIXME: there are some warnings in GCC - so disable Werror
-#        for now.
-# From cmake 2.24 onwards we can use CMAKE_COMPILE_WARNING_AS_ERROR
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  set(FLAGS_TO_REMOVE "-Werror")
-  foreach(TYPE "" "_DEBUG" "_RELEASE" "_RELWITHDEBINFO" "_MINSIZEREL" "_COVERAGE")
-    set(CURRENT_FLAG_VAR "CMAKE_CXX_FLAGS${TYPE}")
-    if(${CURRENT_FLAG_VAR} MATCHES ${FLAGS_TO_REMOVE})
-        string(REPLACE ${FLAGS_TO_REMOVE} "" ${CURRENT_FLAG_VAR} "${${CURRENT_FLAG_VAR}}")
-    endif()
-  endforeach()
-endif()
 
 # For git users, attempt to generate a more useful version string
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
@@ -116,25 +99,26 @@ find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
-find_package(MLIR REQUIRED CONFIG)
-message(STATUS "Using MILRConfig.cmake in: ${MLIR_DIR}")
-
 set(LLVM_RUNTIME_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/bin)
 set(LLVM_LIBRARY_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/lib)
-set(MLIR_BINARY_DIR ${CMAKE_BINARY_DIR})
 
-list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
 list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
 include(TableGen)
 include(AddLLVM)
-include(AddMLIR)
 include(HandleLLVMOptions)
 
 include_directories(${LLVM_INCLUDE_DIRS})
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 add_definitions(${LLVM_DEFINITIONS_LIST})
 
-include_directories(${MLIR_INCLUDE_DIRS})
+if(NORA_ENABLE_MLIR)
+  find_package(MLIR REQUIRED CONFIG)
+  message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")
+  set(MLIR_BINARY_DIR ${CMAKE_BINARY_DIR})
+  list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
+  include(AddMLIR)
+  include_directories(${MLIR_INCLUDE_DIRS})
+endif()
 
 # Configure src
 add_subdirectory(src)

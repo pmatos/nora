@@ -36,7 +36,7 @@ bool SourceStream::searchRegex(const char *Regex, std::cmatch &CM) const {
 }
 
 bool SourceStream::isPrefix(const char *Str) const {
-  return Contents.drop_front(Position).startswith(Str);
+  return Contents.drop_front(Position).starts_with(Str);
 }
 
 char SourceStream::peekChar(size_t N) const {

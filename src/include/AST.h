@@ -356,7 +356,7 @@ public:
 
 class IdentifierFormal : public Formal {
 public:
-  IdentifierFormal(const Identifier &I) : I(I){};
+  IdentifierFormal(const Identifier &I) : I(I) {};
   IdentifierFormal(const IdentifierFormal &Other) = default;
   IdentifierFormal(IdentifierFormal &&Other) = default;
   IdentifierFormal &operator=(const IdentifierFormal &Other) = delete;
