@@ -8,8 +8,6 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/InitLLVM.h>
-#include <mlir/IR/AsmState.h>
-#include <mlir/IR/MLIRContext.h>
 
 #include "Interpreter.h"
 #include "Parse.h"
@@ -40,8 +38,6 @@ static cl::opt<enum Action>
 int main(int argc, char *argv[]) {
   llvm::InitLLVM X(argc, argv);
 
-  mlir::registerAsmPrinterCLOptions();
-  mlir::registerMLIRContextCLOptions();
   cl::ParseCommandLineOptions(argc, argv, "norac\n");
 
   if (Verbose) {

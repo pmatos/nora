@@ -2,17 +2,20 @@ include_directories(include)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/include/)
 
 add_subdirectory(include)
-add_subdirectory(mlir)
 
-get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
-get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
-set(LIBS
-        ${dialect_libs}
-        ${conversion_libs}
-        gmp
-        MLIROptLib
-        nirLib
-)
+set(LIBS gmp)
+
+if(NORA_ENABLE_MLIR)
+        add_subdirectory(mlir)
+        get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
+        get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
+        list(APPEND LIBS
+                ${dialect_libs}
+                ${conversion_libs}
+                MLIROptLib
+                nirLib
+        )
+endif()
 
 add_llvm_executable(norac
         AnalysisFreeVars.cpp

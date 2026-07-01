@@ -4,8 +4,6 @@
 #include "IdPool.h"
 #include "Lex.h"
 
-#include "mlir/IR/Diagnostics.h"
-
 #include <array>
 #include <cassert>
 #include <codecvt>
@@ -21,7 +19,6 @@
 #include <regex>
 #include <string>
 #include <string_view>
-#include <unicode/unistr.h>
 #include <utility>
 #include <vector>
 
