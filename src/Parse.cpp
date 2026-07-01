@@ -298,16 +298,55 @@ static bool isSymbolTok(const Tok &T) {
          T.is(Tok::TokType::MAKE_STRUCT_TYPE);
 }
 
-// Parse a character datum (#\a). The lexer produces a CHAR token whose value
-// is the character's glyph; store it verbatim in a Char value node.
+// Decode a CHAR_HEX lexeme (a u/x/U/X prefix followed by hex digits, e.g.
+// "u03bb") into the UTF-8 bytes of the represented code point, so the character
+// prints as its glyph (#\λ) rather than the escape.
+static std::string decodeHexChar(std::string_view HexTok) {
+  auto HexVal = [](char C) -> unsigned {
+    if (C >= '0' && C <= '9')
+      return C - '0';
+    if (C >= 'a' && C <= 'f')
+      return C - 'a' + 10;
+    return C - 'A' + 10;
+  };
+  unsigned CodePoint = 0;
+  for (char C : HexTok.substr(1)) // skip the u/x/U/X prefix
+    CodePoint = CodePoint * 16 + HexVal(C);
+
+  std::string Out;
+  if (CodePoint < 0x80) {
+    Out.push_back(static_cast<char>(CodePoint));
+  } else if (CodePoint < 0x800) {
+    Out.push_back(static_cast<char>(0xC0 | (CodePoint >> 6)));
+    Out.push_back(static_cast<char>(0x80 | (CodePoint & 0x3F)));
+  } else if (CodePoint < 0x10000) {
+    Out.push_back(static_cast<char>(0xE0 | (CodePoint >> 12)));
+    Out.push_back(static_cast<char>(0x80 | ((CodePoint >> 6) & 0x3F)));
+    Out.push_back(static_cast<char>(0x80 | (CodePoint & 0x3F)));
+  } else {
+    Out.push_back(static_cast<char>(0xF0 | (CodePoint >> 18)));
+    Out.push_back(static_cast<char>(0x80 | ((CodePoint >> 12) & 0x3F)));
+    Out.push_back(static_cast<char>(0x80 | ((CodePoint >> 6) & 0x3F)));
+    Out.push_back(static_cast<char>(0x80 | (CodePoint & 0x3F)));
+  }
+  return Out;
+}
+
+// Parse a character datum. The lexer distinguishes plain characters (#\a),
+// named characters (#\space) and hex-escaped characters (#\uHHHH); all three
+// are Char value nodes. Named characters keep their name; hex escapes decode to
+// the represented glyph.
 std::unique_ptr<ast::Char> Parse::parseChar(SourceStream &S) {
   size_t Start = S.getPosition();
   Tok T = gettok(S);
-  if (!T.is(Tok::TokType::CHAR)) {
-    S.rewindTo(Start);
-    return nullptr;
+  if (T.is(Tok::TokType::CHAR) || T.is(Tok::TokType::CHAR_NAMED)) {
+    return std::make_unique<ast::Char>(T.Value);
   }
-  return std::make_unique<ast::Char>(T.Value);
+  if (T.is(Tok::TokType::CHAR_HEX)) {
+    return std::make_unique<ast::Char>(decodeHexChar(T.Value));
+  }
+  S.rewindTo(Start);
+  return nullptr;
 }
 
 // Parse a string datum ("z"). The lexer produces a STRING token whose value is
