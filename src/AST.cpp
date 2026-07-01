@@ -59,6 +59,7 @@ Identifier::Identifier(llvm::StringRef Id)
 
 Identifier &Identifier::operator=(Identifier &&I) noexcept {
   Id = I.Id;
+  setRange(I.getRange());
   return *this;
 }
 

@@ -137,10 +137,16 @@ public:
 class Identifier : public ClonableNode<Identifier, ExprNode> {
 public:
   Identifier(const Identifier &I)
-      : ClonableNode(ASTNodeKind::AST_Identifier), Id(I.Id) {}
+      : ClonableNode(ASTNodeKind::AST_Identifier), Id(I.Id) {
+    // The base copy is bypassed by delegating to ClonableNode(Kind), so carry
+    // the source range across explicitly; diagnostics anchored at a copied
+    // identifier (e.g. a set! target inside a cloned lambda body) rely on it.
+    setRange(I.getRange());
+  }
   Identifier(Identifier &&) = default;
   Identifier &operator=(const Identifier &I) {
     Id = I.Id;
+    setRange(I.getRange());
     return *this;
   }
   Identifier &operator=(Identifier &&I) noexcept;
