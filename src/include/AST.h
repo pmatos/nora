@@ -43,12 +43,15 @@ public:
     AST_SetBang,
     First_ValueNode, // all ValueNodes must be after this
     AST_BooleanLiteral,
+    AST_Char,
     AST_Closure, // result of evaluating a Lambda expression
     AST_Integer,
     AST_Lambda,
     AST_List,
+    AST_String,
     AST_Symbol,
     AST_Values,
+    AST_Vector,
     AST_Void,
     AST_RuntimeFunction,
     AST_QuotedExpr // result of a quote expression
@@ -143,6 +146,30 @@ private:
   friend class ::IdPool;
   explicit Identifier(llvm::StringRef Id);
   llvm::StringRef Id;
+};
+
+// A string datum, e.g. "z". Value holds the string's read lexeme including the
+// surrounding double quotes, which is also its Racket `print` form for the
+// escapes we currently support. Strings are self-quoting.
+class String : public ClonableNode<String, ValueNode> {
+public:
+  explicit String(llvm::StringRef Value)
+      : ClonableNode(ASTNodeKind::AST_String), Value(Value) {}
+  String(const String &S)
+      : ClonableNode(ASTNodeKind::AST_String), Value(S.Value) {}
+  String(String &&) = default;
+  ~String() = default;
+
+  [[nodiscard]] llvm::StringRef getValue() const { return Value; }
+  LLVM_DUMP_METHOD void dump() const override;
+  void write() const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == ASTNodeKind::AST_String;
+  }
+
+private:
+  llvm::SmallString<16> Value;
 };
 
 class Symbol : public ClonableNode<Symbol, ValueNode> {
@@ -322,6 +349,28 @@ public:
 
 private:
   bool Value;
+};
+
+// A character datum, e.g. #\a. Value holds the character's printed glyph(s)
+// without the leading #\ (so "a" for #\a). Characters are self-quoting.
+class Char : public ClonableNode<Char, ValueNode> {
+public:
+  explicit Char(llvm::StringRef Value)
+      : ClonableNode(ASTNodeKind::AST_Char), Value(Value) {}
+  Char(const Char &C) : ClonableNode(ASTNodeKind::AST_Char), Value(C.Value) {}
+  Char(Char &&) = default;
+  ~Char() = default;
+
+  [[nodiscard]] llvm::StringRef getValue() const { return Value; }
+  LLVM_DUMP_METHOD void dump() const override;
+  void write() const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == ASTNodeKind::AST_Char;
+  }
+
+private:
+  llvm::SmallString<8> Value;
 };
 
 class DefineValues : public ClonableNode<DefineValues, TLNode> {
@@ -613,6 +662,12 @@ public:
   [[nodiscard]] size_t length() const { return Values.size(); }
   [[nodiscard]] ValueNode const &operator[](size_t I) const;
 
+  // A dotted (improper) list carries a non-list tail after the last element,
+  // e.g. (1 2 . the-end). A null tail denotes a proper list.
+  void setTail(std::unique_ptr<ValueNode> &&T) { Tail = std::move(T); }
+  [[nodiscard]] bool hasTail() const { return Tail != nullptr; }
+  [[nodiscard]] const ValueNode *getTail() const { return Tail.get(); }
+
   LLVM_DUMP_METHOD void dump() const override;
   void write() const override;
 
@@ -624,6 +679,7 @@ public:
 
 private:
   llvm::SmallVector<std::unique_ptr<ast::ValueNode>> Values;
+  std::unique_ptr<ast::ValueNode> Tail;
 };
 
 class SetBang : public ClonableNode<SetBang, ExprNode> {
@@ -687,6 +743,33 @@ public:
 
 private:
   llvm::SmallVector<std::unique_ptr<ExprNode>> Exprs;
+};
+
+// A vector datum, e.g. #(1 2). Unlike lists, vectors are NOT self-quoting, so
+// at the top level QuotedExpr prints a leading quote ('#(1 2)); nested inside
+// other data they print in bare read syntax (#(1 2)).
+class Vector : public ClonableNode<Vector, ValueNode> {
+public:
+  Vector() : ClonableNode(ASTNodeKind::AST_Vector) {}
+  Vector(Vector const &V);
+  Vector(Vector &&V) = default;
+  ~Vector() = default;
+
+  void appendExpr(std::unique_ptr<ValueNode> &&Expr);
+  [[nodiscard]] size_t length() const { return Values.size(); }
+  [[nodiscard]] ValueNode const &operator[](size_t I) const;
+
+  LLVM_DUMP_METHOD void dump() const override;
+  void write() const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == ASTNodeKind::AST_Vector;
+  }
+
+  auto const &values() const { return Values; }
+
+private:
+  llvm::SmallVector<std::unique_ptr<ast::ValueNode>> Values;
 };
 
 // This class represents the void constant.

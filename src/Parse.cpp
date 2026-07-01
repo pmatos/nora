@@ -246,6 +246,15 @@ std::unique_ptr<ast::ValueNode> Parse::parseValue(SourceStream &S) {
   if (auto Bool = parseBooleanLiteral(S)) {
     return Bool;
   }
+  if (auto C = parseChar(S)) {
+    return C;
+  }
+  if (auto Str = parseString(S)) {
+    return Str;
+  }
+  if (auto Vec = parseVector(S)) {
+    return Vec;
+  }
   // 'x and (quote x) nested inside data read as a (quoted) datum.
   if (auto Q = parseQuote(S)) {
     return Q;
@@ -287,6 +296,30 @@ static bool isSymbolTok(const Tok &T) {
          T.is(Tok::TokType::RAISE_ARGUMENT_ERROR) ||
          T.is(Tok::TokType::PROCEDURE_ARITY_INCLUDES_C) ||
          T.is(Tok::TokType::MAKE_STRUCT_TYPE);
+}
+
+// Parse a character datum (#\a). The lexer produces a CHAR token whose value
+// is the character's glyph; store it verbatim in a Char value node.
+std::unique_ptr<ast::Char> Parse::parseChar(SourceStream &S) {
+  size_t Start = S.getPosition();
+  Tok T = gettok(S);
+  if (!T.is(Tok::TokType::CHAR)) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+  return std::make_unique<ast::Char>(T.Value);
+}
+
+// Parse a string datum ("z"). The lexer produces a STRING token whose value is
+// the string's read lexeme (including the surrounding quotes).
+std::unique_ptr<ast::String> Parse::parseString(SourceStream &S) {
+  size_t Start = S.getPosition();
+  Tok T = gettok(S);
+  if (!T.is(Tok::TokType::STRING)) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+  return std::make_unique<ast::String>(T.Value);
 }
 
 std::unique_ptr<ast::Symbol> Parse::parseSymbol(SourceStream &S) {
@@ -907,6 +940,38 @@ std::unique_ptr<ast::QuotedExpr> Parse::parseQuote(SourceStream &S) {
   return nullptr;
 }
 
+// Parse a vector datum: #( datum ... ). The lexer produces a VECTOR_START token
+// for the leading #(; elements are data parsed until the closing paren.
+std::unique_ptr<ast::Vector> Parse::parseVector(SourceStream &S) {
+  size_t Start = S.getPosition();
+
+  Tok T = gettok(S);
+  if (!T.is(Tok::TokType::VECTOR_START)) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  auto V = std::make_unique<ast::Vector>();
+
+  while (true) {
+    size_t Before = S.getPosition();
+    T = gettok(S);
+    if (T.is(Tok::TokType::RPAREN)) {
+      break;
+    }
+    S.rewindTo(Before);
+
+    std::unique_ptr<ast::ValueNode> Elem = parseValue(S);
+    if (!Elem) {
+      S.rewindTo(Start);
+      return nullptr;
+    }
+    V->appendExpr(std::move(Elem));
+  }
+
+  return V;
+}
+
 // Parse a literal (proper or dotted) list of data: ( datum ... )
 // A dotted tail whose value is itself a list is spliced, so (1 2 . (3)) reads
 // as (1 2 3). A dotted tail that is a non-list atom (a true improper list) is
@@ -941,14 +1006,19 @@ std::unique_ptr<ast::List> Parse::parseLiteralList(SourceStream &S) {
         return nullptr;
       }
 
-      auto *TailList = llvm::dyn_cast<ast::List>(Tail.get());
-      if (!TailList) {
-        // FIXME: improper lists with a non-list tail are not supported yet.
-        S.rewindTo(Start);
-        return nullptr;
-      }
-      for (auto const &V : TailList->values()) {
-        L->appendExpr(std::unique_ptr<ast::ValueNode>(V->clone()));
+      if (auto *TailList = llvm::dyn_cast<ast::List>(Tail.get())) {
+        // A list tail splices into this list: (1 2 . (3)) reads as (1 2 3).
+        // If that tail is itself dotted, its improper tail carries over.
+        for (auto const &V : TailList->values()) {
+          L->appendExpr(std::unique_ptr<ast::ValueNode>(V->clone()));
+        }
+        if (TailList->hasTail()) {
+          L->setTail(
+              std::unique_ptr<ast::ValueNode>(TailList->getTail()->clone()));
+        }
+      } else {
+        // A non-list tail makes this an improper (dotted) list: (1 2 . x).
+        L->setTail(std::move(Tail));
       }
       break;
     }

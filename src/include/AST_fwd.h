@@ -5,6 +5,7 @@ namespace ast {
 class Application;
 class Begin;
 class BooleanLiteral;
+class Char;
 class Closure;
 class DefineValues;
 class Identifier;
@@ -17,7 +18,9 @@ class List;
 class QuotedExpr;
 class RuntimeFunction;
 class SetBang;
+class String;
 class Symbol;
 class Values;
+class Vector;
 class Void;
 }; // namespace ast
