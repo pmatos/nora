@@ -12,42 +12,57 @@ on:
       - '**.def'
       - '**.h.in'
 
+permissions:
+  contents: read
+
+concurrency:
+  group: scan-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  LLVM_VERSION: "22"
+  CMAKE_PREFIX_PATH: /usr/lib/llvm-22
+
 jobs:
   analyze:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Install LLVM ${{ env.LLVM_VERSION }}
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh "$LLVM_VERSION"
 
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake clang-15 clang-tools-15 llvm-15-dev llvm-15-tools mlir-15-tools libmlir-15-dev git ninja-build python3-pip
+          sudo apt-get install -y ninja-build libgmp-dev "clang-${LLVM_VERSION}" \
+            "clang-tools-${LLVM_VERSION}" "llvm-${LLVM_VERSION}-dev" "llvm-${LLVM_VERSION}-tools"
+          echo "/usr/lib/llvm-${LLVM_VERSION}/bin" >> "$GITHUB_PATH"
 
-      - name: Install FileCheck alternative
-        run: | 
-          sudo update-alternatives --install /usr/bin/FileCheck FileCheck /usr/bin/FileCheck-15 1
-          sudo update-alternatives --install /usr/bin/scan-build scan-build /usr/bin/scan-build-15 1
-
-      - name: Run scan-build
+      - name: Analyze base (main)
         run: |
-          git fetch origin main
-          git checkout main
-          mkdir build
-          cd build
-          cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH="/usr/lib/llvm-15/cmake;/usr/lib/llvm-15/lib/cmake/mlir/" -DCMAKE_VERBOSE_MAKEFILE=1 -DCMAKE_C_COMPILER=clang-15 -DCMAKE_CXX_COMPILER=clang++-15 ..
-          scan-build -o ../base-analysis make
-          cd ..
-          rm -Rf build
-          git checkout ${{ github.sha }}
-          mkdir build
-          cd build
-          cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH="/usr/lib/llvm-15/cmake;/usr/lib/llvm-15/lib/cmake/mlir/" -DCMAKE_VERBOSE_MAKEFILE=1 -DCMAKE_C_COMPILER=clang-15 -DCMAKE_CXX_COMPILER=clang++-15 ..
-          scan-build -o ../pr-analysis make
+          git checkout "origin/${GITHUB_BASE_REF:-main}"
+          scan-build --use-cc="clang-${LLVM_VERSION}" --use-c++="clang++-${LLVM_VERSION}" \
+            -o base-analysis cmake -G Ninja -S . -B build-base -DCMAKE_BUILD_TYPE=Release
+          scan-build --use-cc="clang-${LLVM_VERSION}" --use-c++="clang++-${LLVM_VERSION}" \
+            -o base-analysis cmake --build build-base --target norac
+
+      - name: Analyze pull request head
+        run: |
+          git checkout "${{ github.sha }}"
+          scan-build --use-cc="clang-${LLVM_VERSION}" --use-c++="clang++-${LLVM_VERSION}" \
+            -o pr-analysis cmake -G Ninja -S . -B build-pr -DCMAKE_BUILD_TYPE=Release
+          scan-build --use-cc="clang-${LLVM_VERSION}" --use-c++="clang++-${LLVM_VERSION}" \
+            -o pr-analysis cmake --build build-pr --target norac
 
       - name: Compare scan-build results
         run: |
-          python3 -m pip install beautifulsoup4
+          python3 -m pip install --break-system-packages beautifulsoup4
           python3 scripts/compare_scan_build_reports.py base-analysis pr-analysis
-

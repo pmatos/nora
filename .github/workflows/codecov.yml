@@ -1,4 +1,5 @@
 name: Codecov
+
 on:
   push:
     branches:
@@ -6,41 +7,66 @@ on:
   pull_request:
     branches:
       - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codecov-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  LLVM_VERSION: "22"
+  CMAKE_PREFIX_PATH: /usr/lib/llvm-22
+  CC: gcc-14
+  CXX: g++-14
+
 jobs:
-  test-with-coverage:
-    runs-on: ubuntu-latest
+  coverage:
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v3
-      - name: Install dependencies
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install LLVM ${{ env.LLVM_VERSION }}
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh "$LLVM_VERSION"
+
+      - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y lcov cmake gcc g++ clang-15 llvm-15-dev llvm-15-tools mlir-15-tools libmlir-15-dev git ninja-build python3-pip
-      - name: Install FileCheck alternative
-        run: sudo update-alternatives --install /usr/bin/FileCheck FileCheck /usr/bin/FileCheck-15 1
+          sudo apt-get install -y ninja-build libgmp-dev lcov gcc-14 g++-14 \
+            "llvm-${LLVM_VERSION}-dev" "llvm-${LLVM_VERSION}-tools" python3-pip
+          echo "/usr/lib/llvm-${LLVM_VERSION}/bin" >> "$GITHUB_PATH"
+
       - name: Install lit
-        run: pip3 install lit
+        run: pip3 install --break-system-packages lit
+
       - name: Configure
-        run: |
-          mkdir build
-          cd build
-          cmake -G Ninja -DCMAKE_BUILD_TYPE=Coverage -DCMAKE_PREFIX_PATH="/usr/lib/llvm-15/cmake;/usr/lib/llvm-15/lib/cmake/mlir/" -DCMAKE_VERBOSE_MAKEFILE=1 -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ ..
+        run: cmake --preset coverage
+
       - name: Build
-        working-directory: ./build
-        run: ninja norac
-      - name: Integration Testing
-        working-directory: ./build
-        run: bin/nora-lit ../test/integration -v
-      - name: Run lcov
-        working-directory: ./build
+        run: cmake --build --preset coverage
+
+      - name: Run tests
+        run: ctest --test-dir build/coverage --output-on-failure
+
+      - name: Collect coverage
         run: |
-          lcov --capture --directory . --output-file coverage.info
-          lcov --remove coverage.info '/usr/*' --output-file coverage.info
+          lcov --capture --directory build/coverage --output-file coverage.info \
+            --gcov-tool gcov-14 \
+            --ignore-errors mismatch,gcov,source,unused,empty,inconsistent,negative
+          lcov --remove coverage.info '/usr/*' '*/build/*/_deps/*' \
+            --output-file coverage.info \
+            --ignore-errors unused,empty
           lcov --list coverage.info
+
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
           flags: integration
           verbose: true
-          file: ./build/coverage.info
+          files: ./coverage.info
