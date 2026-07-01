@@ -4,21 +4,53 @@ NORA is an experimental Racket implementation written with a LLVM backend.
 
 # Building & Testing
 
-There's not much happening right now, but the right way to try this is by running a `cmake` configuration build and running the unit and integration tests.
+## Prerequisites
+
+- [CMake](https://cmake.org) >= 3.24 and [Ninja](https://ninja-build.org)
+- [LLVM](https://llvm.org) 22, built with either its matching Clang or GCC >= 13
+- [GMP](https://gmplib.org) including the C++ bindings (`gmpxx`)
+- Python 3 with [lit](https://pypi.org/project/lit/) for the integration tests
+
+The default build depends only on LLVM and GMP. The experimental NIR MLIR
+dialect is **opt-in** and is not needed to build or run the interpreter — see
+[The NIR MLIR dialect](#the-nir-mlir-dialect) below.
+
+## Build and run the tests
+
+The project ships [CMake presets](CMakePresets.json):
 
 ```
 $ git clone https://github.com/pmatos/nora
-$ cd nora 
-$ mkdir build && cd build
-$ cmake -G Ninja ..
-$ ninja test
+$ cd nora
+$ cmake --preset debug
+$ cmake --build --preset debug
+$ ctest --preset debug
 ```
 
-All tests should pass. If you do modifications, you can run the testing workflow with [act](https://github.com/nektos/act) inside the nora directory with the following command line:
+Other presets are available: `release`, `asan`, `ubsan`, `coverage`, and
+`mlir` (builds the opt-in NIR dialect and requires MLIR to be installed).
+
+Run the interpreter on a linklet directly:
 
 ```
-$ act -P ubuntu-22.04=ghcr.io/catthehacker/ubuntu:act-22.04 -j test
+$ ./build/debug/bin/norac test/integration/arithplus.rkt
+2
 ```
+
+If you modify the project you can run the CI test workflow locally with
+[act](https://github.com/nektos/act):
+
+```
+$ act -P ubuntu-24.04=ghcr.io/catthehacker/ubuntu:act-24.04 -j test
+```
+
+## The NIR MLIR dialect
+
+NORA's planned compiler backend will lower to an MLIR dialect called NIR (Nora
+IR; see the [roadmap](#compilation-of-racket)). It is currently an empty
+scaffold that the interpreter does not use, so MLIR is opt-in and off by
+default. Enable it with `cmake --preset mlir` or `-DNORA_ENABLE_MLIR=ON` once
+MLIR is installed.
 
 # Linklets
 
