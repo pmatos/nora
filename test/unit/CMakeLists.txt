@@ -19,7 +19,10 @@ llvm_map_components_to_libnames(LLVM_LIBS support)
 
 add_executable(test_parse
   test_parse.cpp
+  ${PROJECT_SOURCE_DIR}/src/AnalysisFreeVars.cpp
   ${PROJECT_SOURCE_DIR}/src/AST.cpp
+  ${PROJECT_SOURCE_DIR}/src/ASTRuntime.cpp
+  ${PROJECT_SOURCE_DIR}/src/Environment.cpp
   ${PROJECT_SOURCE_DIR}/src/IdPool.cpp
   ${PROJECT_SOURCE_DIR}/src/Lex.cpp
   ${PROJECT_SOURCE_DIR}/src/Parse.cpp
