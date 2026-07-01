@@ -262,6 +262,9 @@ std::unique_ptr<ast::ValueNode> Parse::parseValue(SourceStream &S) {
   if (auto Sym = parseSymbol(S)) {
     return Sym;
   }
+  if (auto Kw = parseKeyword(S)) {
+    return Kw;
+  }
   if (auto L = parseLiteralList(S)) {
     return L;
   }
@@ -409,6 +412,17 @@ std::unique_ptr<ast::Symbol> Parse::parseSymbol(SourceStream &S) {
     return nullptr;
   }
   return std::make_unique<ast::Symbol>(T.Value);
+}
+
+// Parse a keyword datum (#:foo). The lexer emits a KEYWORD token whose value is
+// the bare keyword (without the leading #:).
+std::unique_ptr<ast::Keyword> Parse::parseKeyword(SourceStream &S) {
+  Tok T = gettok(S);
+  if (!T.is(Tok::TokType::KEYWORD)) {
+    S.rewind(T.size());
+    return nullptr;
+  }
+  return std::make_unique<ast::Keyword>(T.Value);
 }
 
 // Parses an expression of the form:

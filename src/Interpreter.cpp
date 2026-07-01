@@ -490,3 +490,8 @@ void Interpreter::visit(ast::Symbol const &Sym) {
   LLVM_DEBUG(llvm::dbgs() << "Interpreting Symbol\n");
   Result = std::unique_ptr<ast::ValueNode>(Sym.clone());
 }
+
+void Interpreter::visit(ast::Keyword const &K) {
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting Keyword\n");
+  Result = std::unique_ptr<ast::ValueNode>(K.clone());
+}

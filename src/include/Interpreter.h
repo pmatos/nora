@@ -29,6 +29,7 @@ public:
   virtual void visit(ast::Identifier const &Id) override;
   virtual void visit(ast::IfCond const &If) override;
   virtual void visit(ast::Integer const &Int) override;
+  virtual void visit(ast::Keyword const &K) override;
   virtual void visit(ast::Lambda const &L) override;
   virtual void visit(ast::LetValues const &LV) override;
   virtual void visit(ast::Linklet const &Linklet) override;

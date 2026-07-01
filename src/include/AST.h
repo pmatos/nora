@@ -46,6 +46,7 @@ public:
     AST_Char,
     AST_Closure, // result of evaluating a Lambda expression
     AST_Integer,
+    AST_Keyword,
     AST_Lambda,
     AST_List,
     AST_String,
@@ -193,6 +194,34 @@ public:
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_Symbol;
+  }
+
+private:
+  llvm::SmallString<32> Name;
+};
+
+// A keyword datum, e.g. #:foo. Name holds the bare keyword (without the leading
+// #:), matching the lexer's KEYWORD token. Like symbols, keywords are not
+// self-quoting, so the enclosing QuotedExpr emits a leading quote ('#:foo).
+class Keyword : public ClonableNode<Keyword, ValueNode> {
+public:
+  explicit Keyword(llvm::StringRef Name)
+      : ClonableNode(ASTNodeKind::AST_Keyword), Name(Name) {}
+  Keyword(const Keyword &K)
+      : ClonableNode(ASTNodeKind::AST_Keyword), Name(K.Name) {}
+  Keyword(Keyword &&) = default;
+  Keyword &operator=(const Keyword &K) = delete;
+  Keyword &operator=(Keyword &&K) = delete;
+  virtual ~Keyword() = default;
+
+  bool operator==(const Keyword &K) const { return getName() == K.getName(); }
+
+  [[nodiscard]] llvm::StringRef getName() const { return Name; }
+  LLVM_DUMP_METHOD void dump() const override;
+  void write() const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == ASTNodeKind::AST_Keyword;
   }
 
 private:

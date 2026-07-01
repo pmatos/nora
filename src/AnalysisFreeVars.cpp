@@ -162,3 +162,8 @@ void AnalysisFreeVars::visit(ast::Symbol const &Sym) {
   // Symbols have no free variables.
   // Nothing to do.
 }
+
+void AnalysisFreeVars::visit(ast::Keyword const &K) {
+  // Keywords have no free variables.
+  // Nothing to do.
+}

@@ -83,6 +83,16 @@ void Symbol::dump() const { llvm::dbgs() << "#<symbol:" << Name << ">"; }
 void Symbol::write() const { std::cout << getName().str(); }
 
 //
+// Implementation of Keyword node.
+//
+void Keyword::dump() const { llvm::dbgs() << "#<keyword:" << Name << ">"; }
+
+// Keywords print in Racket read syntax (#:foo); Name holds the bare keyword, so
+// the #: prefix is restored here. The leading quote (if any) is emitted by the
+// enclosing QuotedExpr, since keywords are not self-quoting.
+void Keyword::write() const { std::cout << "#:" << getName().str(); }
+
+//
 // Implementation of Char node.
 //
 void Char::dump() const { llvm::dbgs() << "#\\" << Value; }

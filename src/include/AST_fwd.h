@@ -11,6 +11,7 @@ class DefineValues;
 class Identifier;
 class IfCond;
 class Integer;
+class Keyword;
 class Lambda;
 class LetValues;
 class Linklet;
