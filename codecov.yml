@@ -1,0 +1,12 @@
+# Coverage is advisory for this research prototype. Cleanup/refactor PRs that
+# touch untested debug-only code (e.g. dump() helpers) or rename files should
+# not fail CI on coverage, so the project and patch statuses are informational:
+# Codecov still posts the coverage delta, but the check never blocks.
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
