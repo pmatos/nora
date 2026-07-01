@@ -396,3 +396,27 @@ TEST_CASE("DiagnosticEngine renders line and column", "[diagnostics]") {
   REQUIRE(Buf.find("error: boom") != std::string::npos);
   REQUIRE(Buf.find("1:4") != std::string::npos);
 }
+
+TEST_CASE("Parsing variable references", "[parser]") {
+  SourceStream V1("(#%variable-reference)");
+  std::unique_ptr<ast::VariableReference> V = parseVariableReference(V1);
+  REQUIRE(V);
+  REQUIRE_FALSE(V->hasId());
+
+  SourceStream V2("(#%variable-reference x)");
+  V = parseVariableReference(V2);
+  REQUIRE(V);
+  REQUIRE(V->hasId());
+  REQUIRE(V->getId().getName() == "x");
+
+  SourceStream V3("(#%variable-reference (#%top . x))");
+  V = parseVariableReference(V3);
+  REQUIRE(V);
+  REQUIRE(V->hasId());
+  REQUIRE(V->getId().getName() == "x");
+
+  // A plain application must not be misparsed as a variable reference.
+  SourceStream V4("(f x)");
+  V = parseVariableReference(V4);
+  REQUIRE_FALSE(V);
+}

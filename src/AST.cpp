@@ -433,6 +433,22 @@ void Values::write() const {
 }
 
 //
+// Implementation of VariableReference node.
+//
+void VariableReference::dump() const {
+  llvm::dbgs() << "(#%variable-reference";
+  if (hasId()) {
+    llvm::dbgs() << " ";
+    getId().dump();
+  }
+  llvm::dbgs() << ")";
+}
+
+// A variable reference is opaque: it always prints as #<variable-reference>,
+// independent of the referenced binding.
+void VariableReference::write() const { std::cout << "#<variable-reference>"; }
+
+//
 // Implementation of LetValues node.
 //
 

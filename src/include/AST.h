@@ -13,6 +13,7 @@
 #include <gmp.h>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <utility>
 
@@ -55,6 +56,7 @@ public:
     AST_String,
     AST_Symbol,
     AST_Values,
+    AST_VariableReference,
     AST_Vector,
     AST_Void,
     AST_RuntimeFunction,
@@ -825,6 +827,34 @@ public:
 
 private:
   llvm::SmallVector<std::unique_ptr<ExprNode>> Exprs;
+};
+
+// The result of a (#%variable-reference ...) form. A variable reference is an
+// opaque runtime value; it prints as #<variable-reference> regardless of the
+// referenced binding. The optional Id records the referenced identifier for the
+// (#%variable-reference id) / (#%variable-reference (#%top . id)) forms; the
+// bare (#%variable-reference) form leaves it empty.
+// https://docs.racket-lang.org/reference/__top.html
+class VariableReference : public ClonableNode<VariableReference, ValueNode> {
+public:
+  VariableReference() : ClonableNode(ASTNodeKind::AST_VariableReference) {}
+  VariableReference(const VariableReference &V) = default;
+  VariableReference(VariableReference &&V) = default;
+  ~VariableReference() = default;
+
+  void setId(const Identifier &I) { Id = I; }
+  [[nodiscard]] bool hasId() const { return Id.has_value(); }
+  [[nodiscard]] const Identifier &getId() const { return *Id; }
+
+  LLVM_DUMP_METHOD void dump() const override;
+  void write() const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == ASTNodeKind::AST_VariableReference;
+  }
+
+private:
+  std::optional<Identifier> Id;
 };
 
 // A vector datum, e.g. #(1 2). Unlike lists, vectors are NOT self-quoting, so
