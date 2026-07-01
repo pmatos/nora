@@ -42,4 +42,4 @@ void Closure::dump() const {
   // TODO: Implement.
   llvm::dbgs() << "<closure: not implemented>\n";
 }
-void Closure::write() const { llvm::outs() << "<closure>\n"; }
+void Closure::write() const {}
