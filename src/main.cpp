@@ -9,6 +9,7 @@
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/InitLLVM.h>
 
+#include "Diagnostics.h"
 #include "Interpreter.h"
 #include "Parse.h"
 #include "SourceStream.h"
@@ -45,12 +46,17 @@ int main(int argc, char *argv[]) {
     std::cout << "Parsing linklet in file " << InputFilename << std::endl;
   }
 
-  SourceStream Input(InputFilename);
+  nora::DiagnosticEngine Diags;
+  SourceStream Input(InputFilename, &Diags);
   std::unique_ptr<ast::Linklet> AST = Parse::parseLinklet(Input);
 
-  if (!AST) {
-    std::cerr << "Parsing failed!" << std::endl;
-    exit(EXIT_FAILURE);
+  if (!AST || Diags.hadError()) {
+    // parseLinklet reports a precise diagnostic on failure; guard against the
+    // unlikely case where it returned null without emitting one.
+    if (!Diags.hadError()) {
+      Diags.error("failed to parse linklet");
+    }
+    return EXIT_FAILURE;
   }
 
   if (Verbose) {
@@ -62,18 +68,16 @@ int main(int argc, char *argv[]) {
     AST->dump();
   }
 
-  Interpreter I;
+  Interpreter I(Diags);
   AST->accept(I);
-  auto const &Result = I.getResult();
 
-  if (!Result) {
-    std::cerr << "Interpretation failed!" << std::endl;
-    exit(EXIT_FAILURE);
+  if (Diags.hadError()) {
+    return EXIT_FAILURE;
   }
   if (Verbose)
     std::cout << "Interpretation successful!" << std::endl;
 
-  Result->write();
+  I.getResult()->write();
   std::cout << std::endl;
 
   return 0;

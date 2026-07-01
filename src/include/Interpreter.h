@@ -10,6 +10,7 @@
 
 #include "AST.h"
 #include "ASTVisitor.h"
+#include "Diagnostics.h"
 #include "Environment.h"
 #include "Runtime.h"
 
@@ -17,7 +18,7 @@
 
 class Interpreter : public ASTVisitor {
 public:
-  Interpreter();
+  explicit Interpreter(nora::DiagnosticEngine &Diag);
 
   // Note: keep the list sorted alphabetically.
   virtual void visit(ast::Application const &A) override;
@@ -68,6 +69,7 @@ private:
                     const Environment &CapturedEnv,
                     std::vector<std::unique_ptr<ast::ValueNode>> &Args);
 
-  std::vector<Environment> Envs;          /// Environment map for identifiers.
+  nora::DiagnosticEngine &Diag;  /// Diagnostics sink for runtime errors.
+  std::vector<Environment> Envs; /// Environment map for identifiers.
   std::unique_ptr<ast::ValueNode> Result; /// Result of the last evaluation.
 };

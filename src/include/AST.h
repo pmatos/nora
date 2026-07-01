@@ -5,6 +5,7 @@
 #include <llvm/ADT/SmallString.h>
 #include <llvm/Support/Compiler.h>
 #include <llvm/Support/Debug.h>
+#include <llvm/Support/SMLoc.h>
 #include <llvm/Support/raw_ostream.h>
 
 #include <cassert>
@@ -70,8 +71,16 @@ public:
   virtual ASTNode *clone() const = 0;
   virtual void accept(ASTVisitor &Visitor) const = 0;
 
+  // Source range this node was parsed from, used to anchor diagnostics. It may
+  // be invalid for synthesised nodes (e.g. results of evaluation).
+  void setRange(llvm::SMRange R) { Range = R; }
+  void setLoc(llvm::SMLoc L) { Range = llvm::SMRange(L, L); }
+  [[nodiscard]] llvm::SMLoc getLoc() const { return Range.Start; }
+  [[nodiscard]] llvm::SMRange getRange() const { return Range; }
+
 private:
   const ASTNodeKind Kind;
+  llvm::SMRange Range;
 };
 
 class TLNode : public ASTNode {
@@ -118,7 +127,11 @@ public:
   ClonableNode(ASTNode::ASTNodeKind Kind) : Base(Kind) {}
 
   Base *clone() const override {
-    return new Derived(static_cast<const Derived &>(*this));
+    auto *Cloned = new Derived(static_cast<const Derived &>(*this));
+    // Several node copy constructors reset the base subobject, so copy the
+    // source range explicitly to keep locations available on clones.
+    Cloned->setRange(this->getRange());
+    return Cloned;
   }
   void accept(ASTVisitor &Visitor) const override {
     Visitor.visit(static_cast<const Derived &>(*this));
@@ -129,10 +142,16 @@ public:
 class Identifier : public ClonableNode<Identifier, ExprNode> {
 public:
   Identifier(const Identifier &I)
-      : ClonableNode(ASTNodeKind::AST_Identifier), Id(I.Id) {}
+      : ClonableNode(ASTNodeKind::AST_Identifier), Id(I.Id) {
+    // The base copy is bypassed by delegating to ClonableNode(Kind), so carry
+    // the source range across explicitly; diagnostics anchored at a copied
+    // identifier (e.g. a set! target inside a cloned lambda body) rely on it.
+    setRange(I.getRange());
+  }
   Identifier(Identifier &&) = default;
   Identifier &operator=(const Identifier &I) {
     Id = I.Id;
+    setRange(I.getRange());
     return *this;
   }
   Identifier &operator=(Identifier &&I) noexcept;

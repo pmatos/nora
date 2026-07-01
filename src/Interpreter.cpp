@@ -17,7 +17,7 @@
 #define DEBUG_TYPE "Interpreter"
 
 // Constructor for interpreter sets up initial environment.
-Interpreter::Interpreter() {
+Interpreter::Interpreter(nora::DiagnosticEngine &Diag) : Diag(Diag) {
   // Add initial environment.
   Envs.emplace_back();
 }
@@ -63,8 +63,7 @@ void Interpreter::visit(ast::Identifier const &Id) {
     return;
   }
 
-  // FIXME: error here UndefineIdentifier.
-  llvm::errs() << "Undefined Identifier: " << Id.getName() << "\n";
+  Diag.error(Id.getLoc(), llvm::Twine("unbound identifier: ") + Id.getName());
   Result = nullptr;
 }
 
@@ -93,7 +92,9 @@ void Interpreter::visit(ast::Values const &V) {
   std::vector<std::unique_ptr<ast::ValueNode>> ValuesVec;
   for (const auto &Expr : V.getExprs()) {
     Expr->accept(*this);
-    assert(Result);
+    if (!Result) {
+      return;
+    }
     ValuesVec.emplace_back(std::move(Result));
   }
 
@@ -132,7 +133,8 @@ void Interpreter::visit(ast::DefineValues const &DV) {
 
   // Check if the expression is a Values.
   if (!llvm::isa<ast::Values>(*Result)) {
-    llvm::errs() << "Expected Values in DefineValues.\n";
+    Diag.error(DV.getLoc(),
+               "define-values expected multiple values from its body");
     Result = nullptr;
     return;
   }
@@ -140,8 +142,9 @@ void Interpreter::visit(ast::DefineValues const &DV) {
 
   // Check if the number of values is equal to the number of identifiers.
   if (DV.countIds() != V->countExprs()) {
-    llvm::errs() << "Expected " << DV.countIds() << " values, got "
-                 << V->countExprs() << "\n";
+    Diag.error(DV.getLoc(), llvm::Twine("define-values expected ") +
+                                llvm::Twine(DV.countIds()) + " values, got " +
+                                llvm::Twine(V->countExprs()));
     Result = nullptr;
     return;
   }
@@ -199,18 +202,14 @@ void Interpreter::visit(ast::Begin const &B) {
   std::unique_ptr<ast::ValueNode> D;
   bool First = true;
   for (const auto &BodyExpr : B.getBody()) {
-    if (B.isZero()) { // begin0 so only store result of first expression
-      if (First) {
-        BodyExpr->accept(*this);
-        D = std::move(Result);
-      } else {
-        BodyExpr->accept(*this);
-      }
-    } else { // normal begin
-      BodyExpr->accept(*this);
+    BodyExpr->accept(*this);
+    if (!Result) {
+      return; // error while evaluating a body expression
+    }
+    // begin0 keeps the first expression's value; begin keeps the last.
+    if (!B.isZero() || First) {
       D = std::move(Result);
     }
-
     First = false;
   }
 
@@ -295,6 +294,9 @@ void Interpreter::visit(ast::Application const &A) {
   // which should evaluate to a lambda expression.
   A[0].accept(*this);
   std::unique_ptr<ast::ValueNode> D = std::move(Result);
+  if (!D) {
+    return;
+  }
 
   // Error out if not a Closure, CaseLambdaClosure, or Runtime function.
   std::unique_ptr<ast::Closure> C = dyn_castU<ast::Closure>(D);
@@ -307,8 +309,9 @@ void Interpreter::visit(ast::Application const &A) {
     std::unique_ptr<ast::RuntimeFunction> RF =
         dyn_castU<ast::RuntimeFunction>(D);
     if (!RF) {
-      llvm::errs() << "Expected closure or runtime function expression in "
-                      "application.\n";
+      Diag.error(A[0].getLoc(),
+                 "application: expected a procedure in operator position");
+      Result = nullptr;
       return;
     }
 
@@ -326,7 +329,9 @@ void Interpreter::visit(ast::Application const &A) {
     Args.reserve(A.length() - 1);
     for (size_t Idx = 0; Idx < A.length() - 1; ++Idx) {
       A[Idx + 1].accept(*this);
-      assert(Result && "Expected result from expression.");
+      if (!Result) {
+        return;
+      }
       ArgHolder.emplace_back(std::move(Result));
       Args.emplace_back(ArgHolder.back().get());
     }
@@ -344,6 +349,10 @@ void Interpreter::visit(ast::Application const &A) {
 
     // Call the runtime function.
     Result = Runtime::getInstance().callFunction(RF->getName(), Args);
+    if (!Result) {
+      Diag.error(A.getLoc(),
+                 llvm::Twine("invalid arguments to '") + RF->getName() + "'");
+    }
     return;
   }
 
@@ -352,7 +361,9 @@ void Interpreter::visit(ast::Application const &A) {
   Args.reserve(A.length() - 1);
   for (size_t Idx = 1; Idx < A.length(); ++Idx) {
     A[Idx].accept(*this);
-    assert(Result && "Expected result from expression.");
+    if (!Result) {
+      return;
+    }
     Args.emplace_back(std::move(Result));
   }
   // 3. Single-clause closure: check arity and apply.
@@ -365,16 +376,20 @@ void Interpreter::visit(ast::Application const &A) {
     if (F.getType() == ast::Formal::Type::List) {
       auto LF = static_cast<const ast::ListFormal &>(F);
       if (Args.size() != LF.size()) {
-        std::cerr << "Expected " << LF.size() << " arguments, got "
-                  << Args.size() << std::endl;
+        Diag.error(A.getLoc(), llvm::Twine("arity mismatch: expected ") +
+                                   llvm::Twine(LF.size()) +
+                                   " argument(s), got " +
+                                   llvm::Twine(Args.size()));
         Result = nullptr;
         return;
       }
     } else if (F.getType() == ast::Formal::Type::ListRest) {
       auto LRF = static_cast<const ast::ListRestFormal &>(F);
       if (Args.size() < LRF.size()) {
-        std::cerr << "Expected at least " << LRF.size() << " arguments, got "
-                  << Args.size() << std::endl;
+        Diag.error(A.getLoc(),
+                   llvm::Twine("arity mismatch: expected at least ") +
+                       llvm::Twine(LRF.size()) + " argument(s), got " +
+                       llvm::Twine(Args.size()));
         Result = nullptr;
         return;
       }
@@ -396,8 +411,8 @@ void Interpreter::visit(ast::Application const &A) {
     }
   }
 
-  std::cerr << "case-lambda: no matching clause for " << Args.size()
-            << " arguments" << std::endl;
+  Diag.error(A.getLoc(), llvm::Twine("case-lambda: no matching clause for ") +
+                             llvm::Twine(Args.size()) + " argument(s)");
   Result = nullptr;
 }
 
@@ -409,6 +424,9 @@ void Interpreter::visit(ast::SetBang const &SB) {
   // 1. Evaluate the expression.
   SB.getExpr().accept(*this);
   std::unique_ptr<ast::ValueNode> D = std::move(Result);
+  if (!D) {
+    return;
+  }
 
   // 2. Set the value of the identifier in the current set of environments.
   // We need to search the environments in reverse order.
@@ -422,10 +440,10 @@ void Interpreter::visit(ast::SetBang const &SB) {
   }
 
   // If we get here, we couldn't find the identifier.
-  llvm::errs() << "Cannot set undefined identifier.\n";
-
-  // 3. Return void.
-  Result = std::unique_ptr<ast::ValueNode>(new ast::Void());
+  Diag.error(SB.getIdentifier().getLoc(),
+             llvm::Twine("cannot set unbound identifier: ") +
+                 SB.getIdentifier().getName());
+  Result = nullptr;
 }
 
 void Interpreter::visit(ast::IfCond const &I) {
@@ -434,6 +452,9 @@ void Interpreter::visit(ast::IfCond const &I) {
   // 1. Evaluate the predicate.
   I.getCond().accept(*this);
   std::unique_ptr<ast::ValueNode> D = std::move(Result);
+  if (!D) {
+    return;
+  }
 
   // 2. If the predicate is false, evaluate the alternative.
   std::unique_ptr<ast::BooleanLiteral> Bool = dyn_castU<ast::BooleanLiteral>(D);
@@ -464,7 +485,8 @@ void Interpreter::visit(ast::String const &Str) {
 // Bind one let-values / letrec-values clause into Env: a single identifier
 // takes the whole value, while several identifiers require a Values result
 // whose arity matches. Returns false (after reporting) on a mismatch.
-static bool bindClause(Environment &Env, const ast::LetValues::IdRange &Ids,
+static bool bindClause(nora::DiagnosticEngine &Diag, llvm::SMLoc Loc,
+                       Environment &Env, const ast::LetValues::IdRange &Ids,
                        std::unique_ptr<ast::ValueNode> Val) {
   if (std::ranges::size(Ids) == 1) {
     Env.add(Ids[0], std::move(Val));
@@ -473,13 +495,14 @@ static bool bindClause(Environment &Env, const ast::LetValues::IdRange &Ids,
 
   auto Vs = dyn_castU<ast::Values>(Val);
   if (!Vs) {
-    std::cerr << "Expected a values node, got ";
-    Val->dump();
+    Diag.error(Loc, "let-values binding expected multiple values");
     return false;
   }
-  if (std::ranges::size(Ids) != Vs->countExprs()) {
-    std::cerr << "Expected " << std::ranges::size(Ids) << " values, got "
-              << Vs->countExprs() << std::endl;
+  const size_t Expected = std::ranges::size(Ids);
+  if (Expected != Vs->countExprs()) {
+    Diag.error(Loc, llvm::Twine("let-values binding expected ") +
+                        llvm::Twine(Expected) + " values, got " +
+                        llvm::Twine(Vs->countExprs()));
     return false;
   }
 
@@ -505,8 +528,12 @@ void Interpreter::visit(ast::LetValues const &L) {
     Envs.emplace_back();
     for (size_t Idx = 0; Idx < L.exprsCount(); ++Idx) {
       L.getBindingExpr(Idx).accept(*this);
-      assert(Result);
-      if (!bindClause(Envs.back(), L.getBindingIds(Idx), std::move(Result))) {
+      if (!Result) {
+        Envs.pop_back();
+        return;
+      }
+      if (!bindClause(Diag, L.getLoc(), Envs.back(), L.getBindingIds(Idx),
+                      std::move(Result))) {
         Result = nullptr;
         Envs.pop_back();
         return;
@@ -524,14 +551,17 @@ void Interpreter::visit(ast::LetValues const &L) {
   ExprValues.reserve(L.exprsCount());
   for (size_t Idx = 0; Idx < L.exprsCount(); ++Idx) {
     L.getBindingExpr(Idx).accept(*this);
-    assert(Result);
+    if (!Result) {
+      return;
+    }
     ExprValues.emplace_back(std::move(Result));
   }
 
   LLVM_DEBUG(llvm::dbgs() << "Creating environment for LetValues\n");
   Environment Env;
   for (size_t Idx = 0; Idx < ExprValues.size(); ++Idx) {
-    if (!bindClause(Env, L.getBindingIds(Idx), std::move(ExprValues[Idx]))) {
+    if (!bindClause(Diag, L.getLoc(), Env, L.getBindingIds(Idx),
+                    std::move(ExprValues[Idx]))) {
       Result = nullptr;
       return;
     }
