@@ -109,9 +109,8 @@ void Interpreter::continueStep() {
       M = Mode::Eval;
     } else {
       std::vector<std::unique_ptr<ast::ValueNode>> Vals = std::move(Top.Done);
-      EnvPtr ApplyEnv = Top.Env;
       Kont.pop_back();
-      applyProcedure(std::move(Vals), ApplyEnv);
+      applyProcedure(std::move(Vals));
     }
     break;
   }
@@ -281,7 +280,7 @@ void Interpreter::continueStep() {
 //
 
 void Interpreter::applyProcedure(
-    std::vector<std::unique_ptr<ast::ValueNode>> Vals, const EnvPtr &ApplyEnv) {
+    std::vector<std::unique_ptr<ast::ValueNode>> Vals) {
   std::unique_ptr<ast::ValueNode> Op = std::move(Vals[0]);
   const size_t NArgs = Vals.size() - 1;
 
@@ -324,9 +323,15 @@ void Interpreter::applyProcedure(
   const ast::Lambda &L = C->getLambda();
   const ast::Formal &F = L.getFormals();
 
-  // Build the callee environment: the caller's environment, extended with the
-  // closure's captured bindings, extended with the argument bindings.
-  EnvPtr AfterClosure = envExtend(ApplyEnv, C->getEnvironment());
+  // Build the callee environment lexically: the persistent top-level scope
+  // (so later top-level define-values remain visible), extended with the
+  // closure's captured bindings, extended with the argument bindings. The
+  // caller's environment is deliberately NOT part of the chain - splicing it in
+  // would leak caller locals into the callee and let a free variable that is
+  // unbound at the closure's definition site resolve to a same-named binding at
+  // the call site (dynamic scoping) instead of raising an unbound-identifier
+  // error.
+  EnvPtr AfterClosure = envExtend(GlobalEnv, C->getEnvironment());
   auto CalleeScope = std::make_shared<Scope>();
   CalleeScope->Parent = AfterClosure;
 

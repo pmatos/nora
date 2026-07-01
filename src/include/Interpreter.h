@@ -60,9 +60,12 @@ public:
   // Checks if an identifier is bound in the top-level environment.
   bool isBound(const ast::Identifier &Id) const;
 
-  // Get the current saved result.
+  // Get the current saved result, or null if interpretation failed (e.g. an
+  // unbound identifier). main() reports the failure and exits non-zero.
   std::unique_ptr<ast::ValueNode> getResult() const {
-    assert(Result && "No result has been recorded during interpretation.");
+    if (!Result) {
+      return nullptr;
+    }
     return std::unique_ptr<ast::ValueNode>(Result->clone());
   };
   std::unique_ptr<ast::ValueNode>
@@ -136,9 +139,8 @@ private:
   void run();
   // Deliver the value register to the top continuation frame.
   void continueStep();
-  // Apply Vals[0] to Vals[1..], with ApplyEnv the caller's environment.
-  void applyProcedure(std::vector<std::unique_ptr<ast::ValueNode>> Vals,
-                      const EnvPtr &ApplyEnv);
+  // Apply Vals[0] to Vals[1..].
+  void applyProcedure(std::vector<std::unique_ptr<ast::ValueNode>> Vals);
   // Evaluate a (non-empty) body sequence in environment E.
   void evalBody(llvm::SmallVector<const ast::ExprNode *> Body, const EnvPtr &E);
   // Snapshot the marks on the current continuation, innermost frame first.
