@@ -279,8 +279,9 @@ std::optional<Tok> Lex::maybeLexSchemeChar(SourceStream &S) {
   std::string MaybeName;
   if (isCharacterName(S, MaybeName)) {
     std::string_view Value = S.getSubviewAndSkip(MaybeName.size());
-    Tok T(Tok::TokType::CHAR_NAMED, Value, S.getPosition() - 2,
-          S.getPosition());
+    // Span from the opening #\ to the last consumed char so Tok::size() equals
+    // the number of bytes consumed; a wrong size makes callers over-rewind.
+    Tok T(Tok::TokType::CHAR_NAMED, Value, LexStart, S.getPosition() - 1);
     return {T};
   }
 
