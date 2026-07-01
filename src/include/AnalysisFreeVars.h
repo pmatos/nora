@@ -19,6 +19,8 @@ public:
   virtual void visit(ast::Application const &A) override;
   virtual void visit(ast::Begin const &B) override;
   virtual void visit(ast::BooleanLiteral const &Bool) override;
+  virtual void visit(ast::CaseLambda const &CL) override;
+  virtual void visit(ast::CaseLambdaClosure const &CL) override;
   virtual void visit(ast::Char const &C) override;
   virtual void visit(ast::Closure const &L) override;
   virtual void visit(ast::DefineValues const &DV) override;

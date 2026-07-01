@@ -23,6 +23,8 @@ public:
   virtual void visit(ast::Application const &A) override;
   virtual void visit(ast::Begin const &B) override;
   virtual void visit(ast::BooleanLiteral const &Bool) override;
+  virtual void visit(ast::CaseLambda const &CL) override;
+  virtual void visit(ast::CaseLambdaClosure const &CL) override;
   virtual void visit(ast::Char const &C) override;
   virtual void visit(ast::Closure const &L) override;
   virtual void visit(ast::DefineValues const &DV) override;
@@ -58,6 +60,13 @@ public:
   }
 
 private:
+  // Binds Args to the formals F in a fresh environment, then evaluates Body
+  // with CapturedEnv and that environment pushed, leaving the value in Result.
+  // Precondition: F accepts Args.size() arguments.
+  void applyFormals(const ast::Formal &F, const ast::ExprNode &Body,
+                    const Environment &CapturedEnv,
+                    std::vector<std::unique_ptr<ast::ValueNode>> &Args);
+
   std::vector<Environment> Envs;          /// Environment map for identifiers.
   std::unique_ptr<ast::ValueNode> Result; /// Result of the last evaluation.
 };

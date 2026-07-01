@@ -180,6 +180,18 @@ void Interpreter::visit(ast::Closure const &C) {
   Result = std::unique_ptr<ast::ValueNode>(C.clone());
 }
 
+void Interpreter::visit(ast::CaseLambda const &CL) {
+  // The interpretation of a case-lambda expression is a closure,
+  // even if no variables are captured.
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting CaseLambda\n");
+  Result = std::make_unique<ast::CaseLambdaClosure>(CL, Envs);
+}
+
+void Interpreter::visit(ast::CaseLambdaClosure const &C) {
+  LLVM_DEBUG(llvm::dbgs() << "Interpreting CaseLambdaClosure\n");
+  Result = std::unique_ptr<ast::ValueNode>(C.clone());
+}
+
 void Interpreter::visit(ast::Begin const &B) {
   LLVM_DEBUG(llvm::dbgs() << "Interpreting Begin\n");
 
@@ -215,15 +227,76 @@ void Interpreter::visit(ast::Vector const &Vec) {
   Result = std::unique_ptr<ast::ValueNode>(Vec.clone());
 }
 
+// Returns true if the formals F accept NArgs supplied arguments.
+static bool formalsAccept(const ast::Formal &F, size_t NArgs) {
+  switch (F.getType()) {
+  case ast::Formal::Type::List:
+    return static_cast<const ast::ListFormal &>(F).size() == NArgs;
+  case ast::Formal::Type::ListRest:
+    return static_cast<const ast::ListRestFormal &>(F).size() <= NArgs;
+  case ast::Formal::Type::Identifier:
+    return true;
+  }
+  llvm_unreachable("unknown formal type");
+}
+
+void Interpreter::applyFormals(
+    const ast::Formal &F, const ast::ExprNode &Body,
+    const Environment &CapturedEnv,
+    std::vector<std::unique_ptr<ast::ValueNode>> &Args) {
+  // Create an environment where each argument is bound to the corresponding
+  // value. Then evaluate the body in this environment.
+  Environment Env;
+  if (F.getType() == ast::Formal::Type::List) {
+    auto LF = static_cast<const ast::ListFormal &>(F);
+    for (size_t Idx = 0; Idx < Args.size(); ++Idx) {
+      Env.add(LF[Idx], std::move(Args[Idx]));
+    }
+  } else if (F.getType() == ast::Formal::Type::ListRest) {
+    auto LRF = static_cast<const ast::ListRestFormal &>(F);
+    size_t Idx = 0;
+    for (; Idx < LRF.size(); ++Idx) {
+      Env.add(LRF[Idx], std::move(Args[Idx]));
+    }
+    // Create a list of the remaining arguments.
+    auto L = std::make_unique<ast::List>();
+    for (; Idx < Args.size(); ++Idx) {
+      L->appendExpr(std::move(Args[Idx]));
+    }
+    Env.add(LRF.getRestFormal(), std::unique_ptr<ast::ValueNode>(L->clone()));
+  } else if (F.getType() == ast::Formal::Type::Identifier) {
+    auto IF = static_cast<const ast::IdentifierFormal &>(F);
+    auto L = std::make_unique<ast::List>();
+    for (size_t Idx = 0; Idx < Args.size(); ++Idx) {
+      L->appendExpr(std::move(Args[Idx]));
+    }
+    Env.add(IF.getIdentifier(), std::unique_ptr<ast::ValueNode>(L->clone()));
+  } else {
+    llvm_unreachable("unknown formal type");
+  }
+
+  Envs.push_back(CapturedEnv); // Pushes the closure environment first.
+  Envs.push_back(Env);         // Then pushes the environment with the args.
+
+  Body.accept(*this);
+
+  Envs.pop_back();
+  Envs.pop_back();
+}
+
 void Interpreter::visit(ast::Application const &A) {
   // 1. Evaluate the first expression.
   // which should evaluate to a lambda expression.
   A[0].accept(*this);
   std::unique_ptr<ast::ValueNode> D = std::move(Result);
 
-  // Error out if not a Closure expression or Runtime expression.
+  // Error out if not a Closure, CaseLambdaClosure, or Runtime function.
   std::unique_ptr<ast::Closure> C = dyn_castU<ast::Closure>(D);
+  std::unique_ptr<ast::CaseLambdaClosure> CLC;
   if (!C) {
+    CLC = dyn_castU<ast::CaseLambdaClosure>(D);
+  }
+  if (!C && !CLC) {
     // maybe a runtime function?
     std::unique_ptr<ast::RuntimeFunction> RF =
         dyn_castU<ast::RuntimeFunction>(D);
@@ -276,70 +349,50 @@ void Interpreter::visit(ast::Application const &A) {
     assert(Result && "Expected result from expression.");
     Args.emplace_back(std::move(Result));
   }
+  // 3. Single-clause closure: check arity and apply.
   // If we have a list formals then, error out of args diff than formals.
   // If we have a list rest formals then, error out if args less than formals.
   // If it's identifier formals then it does not matter.
-  const ast::Lambda &L = C->getLambda();
-  const ast::Formal &F = L.getFormals();
-  if (F.getType() == ast::Formal::Type::List) {
-    auto LF = static_cast<const ast::ListFormal &>(F);
-    if (Args.size() != LF.size()) {
-      std::cerr << "Expected " << LF.size() << " arguments, got " << Args.size()
-                << std::endl;
-      Result = nullptr;
-      return;
+  if (C) {
+    const ast::Lambda &L = C->getLambda();
+    const ast::Formal &F = L.getFormals();
+    if (F.getType() == ast::Formal::Type::List) {
+      auto LF = static_cast<const ast::ListFormal &>(F);
+      if (Args.size() != LF.size()) {
+        std::cerr << "Expected " << LF.size() << " arguments, got "
+                  << Args.size() << std::endl;
+        Result = nullptr;
+        return;
+      }
+    } else if (F.getType() == ast::Formal::Type::ListRest) {
+      auto LRF = static_cast<const ast::ListRestFormal &>(F);
+      if (Args.size() < LRF.size()) {
+        std::cerr << "Expected at least " << LRF.size() << " arguments, got "
+                  << Args.size() << std::endl;
+        Result = nullptr;
+        return;
+      }
     }
-  } else if (F.getType() == ast::Formal::Type::ListRest) {
-    auto LRF = static_cast<const ast::ListRestFormal &>(F);
-    if (Args.size() < LRF.size()) {
-      std::cerr << "Expected at least " << LRF.size() << " arguments, got "
-                << Args.size() << std::endl;
-      Result = nullptr;
+
+    applyFormals(F, L.getBody(), C->getEnvironment(), Args);
+    return;
+  }
+
+  // 4. Case-lambda closure: apply the first clause whose formals accept the
+  // number of supplied arguments.
+  const ast::CaseLambda &CL = CLC->getCaseLambda();
+  for (size_t Idx = 0; Idx < CL.size(); ++Idx) {
+    const ast::Lambda &Clause = CL[Idx];
+    if (formalsAccept(Clause.getFormals(), Args.size())) {
+      applyFormals(Clause.getFormals(), Clause.getBody(), CLC->getEnvironment(),
+                   Args);
       return;
     }
   }
 
-  // 3. Apply the lambda expression to the evaluated expressions.
-  // Create an environment where each argument is bound to the corresponding
-  // value. Then evaluate the lambda body in this environment.
-  Environment Env;
-  if (F.getType() == ast::Formal::Type::List) {
-    auto LF = static_cast<const ast::ListFormal &>(F);
-    for (size_t Idx = 0; Idx < Args.size(); ++Idx) {
-      Env.add(LF[Idx], std::move(Args[Idx]));
-    }
-  } else if (F.getType() == ast::Formal::Type::ListRest) {
-    auto LRF = static_cast<const ast::ListRestFormal &>(F);
-    size_t Idx = 0;
-    for (; Idx < LRF.size(); ++Idx) {
-      Env.add(LRF[Idx], std::move(Args[Idx]));
-    }
-    // Create a list of the remaining arguments.
-    auto L = std::make_unique<ast::List>();
-    for (; Idx < Args.size(); ++Idx) {
-      L->appendExpr(std::move(Args[Idx]));
-    }
-
-    Env.add(LRF.getRestFormal(), std::unique_ptr<ast::ValueNode>(L->clone()));
-  } else if (F.getType() == ast::Formal::Type::Identifier) {
-    auto IF = static_cast<const ast::IdentifierFormal &>(F);
-    auto L = std::make_unique<ast::List>();
-    for (size_t Idx = 0; Idx < Args.size(); ++Idx) {
-      L->appendExpr(std::move(Args[Idx]));
-    }
-    Env.add(IF.getIdentifier(), std::unique_ptr<ast::ValueNode>(L->clone()));
-  } else {
-    llvm_unreachable("unknown formal type");
-  }
-
-  Envs.push_back(C->getEnvironment()); // Pushes the closure environment first.
-  Envs.push_back(Env); // Then pushes the environment with the args.
-
-  // 4. Return the result of the application.
-  L.getBody().accept(*this);
-
-  Envs.pop_back();
-  Envs.pop_back();
+  std::cerr << "case-lambda: no matching clause for " << Args.size()
+            << " arguments" << std::endl;
+  Result = nullptr;
 }
 
 // To interpret a set! expression we set the value of the identifier in the

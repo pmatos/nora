@@ -5,6 +5,8 @@ namespace ast {
 class Application;
 class Begin;
 class BooleanLiteral;
+class CaseLambda;
+class CaseLambdaClosure;
 class Char;
 class Closure;
 class DefineValues;
