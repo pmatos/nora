@@ -294,6 +294,28 @@ TEST_CASE("Parsing lambdas", "[parser]") {
   REQUIRE(Var.getName() == "x");
 }
 
+TEST_CASE("Parsing case-lambda", "[parser]") {
+  SourceStream CL1("(case-lambda ((x) x) ((x y) (+ x y)))");
+  std::unique_ptr<ast::CaseLambda> CL = parseCaseLambda(CL1);
+  REQUIRE(CL);
+  REQUIRE(CL->size() == 2);
+  REQUIRE((*CL)[0].getFormalsType() == ast::Formal::Type::List);
+  REQUIRE((*CL)[1].getFormalsType() == ast::Formal::Type::List);
+
+  // A clause may use a rest formal.
+  SourceStream CL2("(case-lambda ((x) x) ((x . y) y))");
+  CL = parseCaseLambda(CL2);
+  REQUIRE(CL);
+  REQUIRE(CL->size() == 2);
+  REQUIRE((*CL)[1].getFormalsType() == ast::Formal::Type::ListRest);
+
+  // A case-lambda with no clauses is valid.
+  SourceStream CL3("(case-lambda)");
+  CL = parseCaseLambda(CL3);
+  REQUIRE(CL);
+  REQUIRE(CL->size() == 0);
+}
+
 TEST_CASE("Parsing begin", "[parser]") {
   SourceStream B1("(begin 1 2 3)");
   std::unique_ptr<ast::Begin> B = parseBegin(B1);

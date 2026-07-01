@@ -43,3 +43,42 @@ void Closure::dump() const {
   llvm::dbgs() << "<closure: not implemented>\n";
 }
 void Closure::write() const {}
+
+CaseLambdaClosure::CaseLambdaClosure(const CaseLambda &CLbd,
+                                     const std::vector<Environment> &Envs)
+    : ClonableNode(ASTNodeKind::AST_CaseLambdaClosure),
+      CL(std::unique_ptr<CaseLambda>(static_cast<CaseLambda *>(CLbd.clone()))) {
+
+  // Capture the free variables across all clauses, mirroring Closure.
+
+  // 1. Find the free variables in the case-lambda.
+  AnalysisFreeVars AFV;
+  CL->accept(AFV);
+  auto const &FreeVars = AFV.getResult();
+
+  // 2. Find in the current environment, the values of the free variables
+  // and save them.
+  for (auto const &Var : FreeVars) {
+    for (auto const &E : llvm::reverse(Envs)) {
+      auto const &Val = E.lookup(Var);
+      if (Val) {
+        Env.add(Var, std::unique_ptr<ValueNode>(Val->clone()));
+        break;
+      }
+    }
+  }
+}
+
+CaseLambdaClosure::CaseLambdaClosure(const CaseLambdaClosure &Other)
+    : ClonableNode(ASTNodeKind::AST_CaseLambdaClosure),
+      CL(std::unique_ptr<CaseLambda>(
+          static_cast<CaseLambda *>(Other.CL->clone()))) {
+  for (auto const &E : Other.Env) {
+    Env.add(E.first, std::unique_ptr<ValueNode>(E.second->clone()));
+  }
+}
+
+void CaseLambdaClosure::dump() const {
+  llvm::dbgs() << "<case-lambda closure: not implemented>\n";
+}
+void CaseLambdaClosure::write() const {}

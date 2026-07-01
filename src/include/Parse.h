@@ -32,6 +32,7 @@ bool isSpecialInitial(SourceStream &S, size_t Offset = 0);
 std::unique_ptr<ast::Application> parseApplication(SourceStream &S);
 std::unique_ptr<ast::Begin> parseBegin(SourceStream &S);
 std::unique_ptr<ast::BooleanLiteral> parseBooleanLiteral(SourceStream &S);
+std::unique_ptr<ast::CaseLambda> parseCaseLambda(SourceStream &S);
 std::unique_ptr<ast::Char> parseChar(SourceStream &S);
 std::unique_ptr<ast::DefineValues> parseDefineValues(SourceStream &S);
 std::unique_ptr<ast::ExprNode> parseExpr(SourceStream &S);

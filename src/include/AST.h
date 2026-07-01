@@ -43,6 +43,8 @@ public:
     AST_SetBang,
     First_ValueNode, // all ValueNodes must be after this
     AST_BooleanLiteral,
+    AST_CaseLambda,
+    AST_CaseLambdaClosure, // result of evaluating a CaseLambda expression
     AST_Char,
     AST_Closure, // result of evaluating a Lambda expression
     AST_Integer,
@@ -592,6 +594,33 @@ public:
 private:
   std::unique_ptr<Formal> Formals;
   std::unique_ptr<ExprNode> Body;
+};
+
+// A case-lambda is a sequence of lambda clauses. When applied, the first
+// clause whose formals accept the number of supplied arguments is selected.
+// Defined in terms of Lambda, so it is placed right after it.
+class CaseLambda : public ClonableNode<CaseLambda, ValueNode> {
+public:
+  CaseLambda() : ClonableNode(ASTNodeKind::AST_CaseLambda) {}
+  CaseLambda(CaseLambda const &CL);
+  CaseLambda(CaseLambda &&CL) = default;
+  ~CaseLambda() = default;
+
+  void addClause(std::unique_ptr<Lambda> C) { Clauses.push_back(std::move(C)); }
+  [[nodiscard]] size_t size() const { return Clauses.size(); }
+  [[nodiscard]] Lambda const &operator[](size_t Idx) const {
+    return *Clauses[Idx];
+  }
+
+  LLVM_DUMP_METHOD void dump() const override;
+  void write() const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == ASTNodeKind::AST_CaseLambda;
+  }
+
+private:
+  llvm::SmallVector<std::unique_ptr<Lambda>> Clauses;
 };
 
 class LetValues : public ClonableNode<LetValues, ExprNode> {

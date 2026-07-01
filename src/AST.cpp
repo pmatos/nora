@@ -238,6 +238,30 @@ void Lambda::dump() const {
 void Lambda::write() const { std::cout << "#<procedure>"; }
 
 //
+// Implementation of CaseLambda node.
+//
+
+CaseLambda::CaseLambda(CaseLambda const &CL)
+    : ClonableNode(ASTNodeKind::AST_CaseLambda) {
+  Clauses.reserve(CL.Clauses.size());
+  for (auto const &C : CL.Clauses) {
+    Clauses.push_back(
+        std::unique_ptr<Lambda>(static_cast<Lambda *>(C->clone())));
+  }
+}
+
+void CaseLambda::dump() const {
+  llvm::dbgs() << "(case-lambda";
+  for (auto const &C : Clauses) {
+    llvm::dbgs() << " ";
+    C->dump();
+  }
+  llvm::dbgs() << ")";
+}
+
+void CaseLambda::write() const { std::cout << "#<procedure>"; }
+
+//
 // Implementation of DefineValues node.
 //
 DefineValues::DefineValues(const DefineValues &DV)

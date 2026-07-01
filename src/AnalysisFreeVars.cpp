@@ -66,8 +66,21 @@ void AnalysisFreeVars::visit(ast::Lambda const &L) {
   Vars.pop_back();
 }
 
+void AnalysisFreeVars::visit(ast::CaseLambda const &CL) {
+  // A case-lambda's free variables are the union over all its clauses. Each
+  // clause is a Lambda that binds its own formals around its own body.
+  for (size_t Idx = 0; Idx < CL.size(); ++Idx) {
+    CL[Idx].accept(*this);
+  }
+}
+
 void AnalysisFreeVars::visit(ast::Closure const &L) {
   // Closures by definition do not have free variables.
+  // Nothing to do.
+}
+
+void AnalysisFreeVars::visit(ast::CaseLambdaClosure const &CL) {
+  // Case-lambda closures by definition do not have free variables.
   // Nothing to do.
 }
 

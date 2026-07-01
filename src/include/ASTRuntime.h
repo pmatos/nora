@@ -33,4 +33,25 @@ private:
   Environment Env;
 };
 
+// A CaseLambdaClosure is the runtime manifestation of a CaseLambda.
+class CaseLambdaClosure : public ClonableNode<CaseLambdaClosure, ValueNode> {
+public:
+  CaseLambdaClosure(const CaseLambda &CL, const std::vector<Environment> &Envs);
+  CaseLambdaClosure(const CaseLambdaClosure &Other);
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == ASTNodeKind::AST_CaseLambdaClosure;
+  }
+
+  LLVM_DUMP_METHOD void dump() const override;
+  void write() const override;
+
+  const CaseLambda &getCaseLambda() const { return *CL; }
+  const Environment &getEnvironment() const { return Env; }
+
+private:
+  std::unique_ptr<CaseLambda> CL;
+  Environment Env;
+};
+
 }; // namespace ast
