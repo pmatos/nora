@@ -34,7 +34,6 @@ std::unique_ptr<ast::Begin> parseBegin(SourceStream &S);
 std::unique_ptr<ast::BooleanLiteral> parseBooleanLiteral(SourceStream &S);
 std::unique_ptr<ast::DefineValues> parseDefineValues(SourceStream &S);
 std::unique_ptr<ast::ExprNode> parseExpr(SourceStream &S);
-std::unique_ptr<ast::ExprNode> parseExpr(SourceStream &S);
 std::unique_ptr<ast::Formal> parseFormals(SourceStream &S);
 std::unique_ptr<ast::Identifier> parseIdentifier(SourceStream &S);
 std::unique_ptr<ast::IfCond> parseIfCond(SourceStream &S);
@@ -42,10 +41,13 @@ std::unique_ptr<ast::Integer> parseInteger(SourceStream &S);
 std::unique_ptr<ast::Lambda> parseLambda(SourceStream &S);
 std::unique_ptr<ast::LetValues> parseLetValues(SourceStream &S);
 std::unique_ptr<ast::Linklet> parseLinklet(SourceStream &S);
-std::unique_ptr<ast::SetBang> parseSetBang(SourceStream &S);
+std::unique_ptr<ast::List> parseLiteralList(SourceStream &S);
 std::unique_ptr<ast::QuotedExpr> parseQuote(SourceStream &S);
+std::unique_ptr<ast::SetBang> parseSetBang(SourceStream &S);
+std::unique_ptr<ast::Symbol> parseSymbol(SourceStream &S);
 std::unique_ptr<ast::TLNode> parseDefn(SourceStream &S);
 std::unique_ptr<ast::TLNode> parseDefnOrExpr(SourceStream &S);
+std::unique_ptr<ast::ValueNode> parseValue(SourceStream &S);
 std::unique_ptr<ast::Values> parseValues(SourceStream &S);
 
 }; // namespace Parse

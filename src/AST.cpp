@@ -73,6 +73,16 @@ std::strong_ordering Identifier::operator<=>(const Identifier &I) const {
 void Identifier::dump() const { llvm::dbgs() << Id; }
 
 //
+// Implementation of Symbol node.
+//
+void Symbol::dump() const { llvm::dbgs() << "#<symbol:" << Name << ">"; }
+
+// Symbols print as their bare name; the leading quote (if any) is emitted by
+// the enclosing QuotedExpr. Use std::cout so output interleaves correctly with
+// the other value writers (List, Integer via gmp_printf).
+void Symbol::write() const { std::cout << getName().str(); }
+
+//
 // Implementation of IfCond node.
 //
 
@@ -144,7 +154,8 @@ Integer &Integer::operator*=(const Integer &Int) {
 
 void Integer::dump() const {
   // FIXME: print to err using llvm::dbgs()
-  // FIXME: why doesn't this work properly ? gmp_fprintf(stderr, "%Zd", Value);
+  // FIXME: why doesn't this work properly ? gmp_fprintf(stderr, "%Zd",
+  // Value);
   std::cerr << asString();
 }
 
@@ -471,11 +482,12 @@ void List::write() const {
 //
 // Implementation of QuotedExpr node.
 //
-QuotedExpr::QuotedExpr(const ASTNode *N)
-    : ClonableNode(ASTNodeKind::AST_QuotedExpr), Node(N->clone()) {}
+QuotedExpr::QuotedExpr() : ClonableNode(ASTNodeKind::AST_QuotedExpr), Node() {}
 
-QuotedExpr::QuotedExpr(const QuotedExpr &V)
-    : ClonableNode(ASTNodeKind::AST_QuotedExpr), Node(V.Node->clone()) {}
+QuotedExpr::QuotedExpr(const QuotedExpr &QE)
+    : ClonableNode(ASTNodeKind::AST_QuotedExpr) {
+  Node = std::unique_ptr<ValueNode>(QE.Node->clone());
+}
 
 bool QuotedExpr::operator==(const QuotedExpr &V) const {
   // FIXME: this is not correct, we need to compare the AST nodes.
@@ -483,9 +495,28 @@ bool QuotedExpr::operator==(const QuotedExpr &V) const {
 };
 
 LLVM_DUMP_METHOD void QuotedExpr::dump() const {
-  // FIXME: this is not correct, we need to print the AST nodes.
+  llvm::dbgs() << "(quote ";
+  if (Node)
+    Node->dump();
+  llvm::dbgs() << ")";
 }
 
+// Print a quoted datum in Racket's `print` form. Self-quoting data (numbers,
+// booleans) print as-is; everything else (symbols, lists, nested quotes) is
+// prefixed with a single quote. A nested QuotedExpr therefore prints as ''x.
 void QuotedExpr::write() const {
-  // FIXME: this is not correct, we need to print the AST nodes.
+  if (!Node)
+    return;
+
+  if (llvm::isa<Integer>(*Node) || llvm::isa<BooleanLiteral>(*Node)) {
+    Node->write();
+    return;
+  }
+
+  std::cout << "'";
+  Node->write();
+}
+
+void QuotedExpr::setQuotedExpr(std::unique_ptr<ValueNode> &&E) {
+  Node = std::move(E);
 }

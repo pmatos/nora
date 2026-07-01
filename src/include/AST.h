@@ -145,6 +145,33 @@ private:
   llvm::StringRef Id;
 };
 
+class Symbol : public ClonableNode<Symbol, ValueNode> {
+public:
+  explicit Symbol(llvm::StringRef Name)
+      : ClonableNode(ASTNodeKind::AST_Symbol), Name(Name) {}
+  Symbol(const Symbol &S)
+      : ClonableNode(ASTNodeKind::AST_Symbol), Name(S.Name) {}
+  Symbol(Symbol &&) = default;
+  Symbol &operator=(const Symbol &S) = delete;
+  Symbol &operator=(Symbol &&S) = delete;
+  virtual ~Symbol() = default;
+
+  // FIXME: symbols are not interned yet, so eq?/eqv? identity is approximated
+  // by comparing names. Interning is future work.
+  bool operator==(const Symbol &S) const { return getName() == S.getName(); }
+
+  [[nodiscard]] llvm::StringRef getName() const { return Name; }
+  LLVM_DUMP_METHOD void dump() const override;
+  void write() const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == ASTNodeKind::AST_Symbol;
+  }
+
+private:
+  llvm::SmallString<32> Name;
+};
+
 class Linklet : public ClonableNode<Linklet, ASTNode> {
 public:
   // helper type
@@ -687,12 +714,15 @@ private:
 // https://docs.racket-lang.org/reference/quote.html
 class QuotedExpr : public ClonableNode<QuotedExpr, ValueNode> {
 public:
-  QuotedExpr(const ASTNode *N);
-  QuotedExpr(const QuotedExpr &V);
+  QuotedExpr();
+  QuotedExpr(const QuotedExpr &QE);
   QuotedExpr(QuotedExpr &&V) = default;
   QuotedExpr &operator=(const QuotedExpr &V) = delete;
   bool operator==(const QuotedExpr &V) const;
   ~QuotedExpr() = default;
+
+  void setQuotedExpr(std::unique_ptr<ValueNode> &&Expr);
+  [[nodiscard]] const ValueNode &getQuotedExpr() const { return *Node; }
 
   LLVM_DUMP_METHOD void dump() const override;
   void write() const override;
@@ -702,7 +732,7 @@ public:
   }
 
 private:
-  std::unique_ptr<ASTNode> Node;
+  std::unique_ptr<ValueNode> Node;
 };
 
 class RuntimeFunction : public ValueNode {
@@ -731,41 +761,6 @@ public:
 
 private:
   std::string Name;
-};
-
-class Symbol : public ClonableNode<Symbol, ValueNode> {
-public:
-  Symbol(const std::string &Name)
-      : ClonableNode(ASTNodeKind::AST_Symbol), Name(Name) {}
-  Symbol(const llvm::StringRef &Name)
-      : ClonableNode(ASTNodeKind::AST_Symbol), Name(Name) {}
-  bool operator==(const Symbol &V) const {
-    // FIXME: probably wrong due to symbol interning
-    // might end up depending on how we implement symbol interning, eq?, eqv?
-    // and equal?
-    return Name == V.Name;
-  }
-
-  virtual Symbol *clone() const override { return new Symbol(Name.str()); }
-
-  static bool classof(const ASTNode *N) {
-    return N->getKind() == ASTNodeKind::AST_Symbol;
-  }
-
-  const llvm::SmallString<4> &getName() const { return Name; }
-
-  LLVM_DUMP_METHOD void dump() const override {
-    // FIXME
-    llvm::dbgs() << "#<symbol:" << getName() << ">";
-  }
-
-  void write() const override {
-    // FIXME
-    llvm::outs() << "#<symbol:" << getName() << ">";
-  }
-
-private:
-  llvm::SmallString<4> Name;
 };
 
 }; // namespace ast

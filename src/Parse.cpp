@@ -185,6 +185,7 @@ std::unique_ptr<ast::ExprNode> Parse::parseExpr(SourceStream &S) {
     return Bool;
   }
 
+  // If the expression is quoted, then identifier is a symbol.
   std::unique_ptr<ast::Identifier> Id = parseIdentifier(S);
   if (Id) {
     return Id;
@@ -220,16 +221,41 @@ std::unique_ptr<ast::ExprNode> Parse::parseExpr(SourceStream &S) {
     return LV;
   }
 
-  std::unique_ptr<ast::Application> A = parseApplication(S);
-  if (A) {
-    return A;
-  }
-
+  // quote must be tried before application so that (quote datum) is not
+  // greedily consumed as a plain application of `quote`.
   std::unique_ptr<ast::QuotedExpr> Q = parseQuote(S);
   if (Q) {
     return Q;
   }
 
+  std::unique_ptr<ast::Application> A = parseApplication(S);
+  if (A) {
+    return A;
+  }
+
+  return nullptr;
+}
+
+// Parse a quoted datum (self-quoting value). Inside quoted data every compound
+// form is just a list and identifiers (even keywords) are symbols; special
+// forms such as lambda/values are NOT recognised here.
+std::unique_ptr<ast::ValueNode> Parse::parseValue(SourceStream &S) {
+  if (auto I = parseInteger(S)) {
+    return I;
+  }
+  if (auto Bool = parseBooleanLiteral(S)) {
+    return Bool;
+  }
+  // 'x and (quote x) nested inside data read as a (quoted) datum.
+  if (auto Q = parseQuote(S)) {
+    return Q;
+  }
+  if (auto Sym = parseSymbol(S)) {
+    return Sym;
+  }
+  if (auto L = parseLiteralList(S)) {
+    return L;
+  }
   return nullptr;
 }
 
@@ -239,8 +265,37 @@ std::unique_ptr<ast::Identifier> Parse::parseIdentifier(SourceStream &S) {
     S.rewind(IDTok.size());
     return nullptr;
   }
-  return std::make_unique<ast::Identifier>(
-      IdPool::instance().create(IDTok.Value));
+  auto Id =
+      std::make_unique<ast::Identifier>(IdPool::instance().create(IDTok.Value));
+
+  return Id;
+}
+
+// Inside quoted data an identifier is a symbol. The lexer eagerly turns known
+// keywords (lambda, quote, define-values, ...) into dedicated tokens, but as
+// data they are ordinary symbols, so accept them here too.
+static bool isSymbolTok(const Tok &T) {
+  return T.is(Tok::TokType::ID) || T.is(Tok::TokType::LAMBDA) ||
+         T.is(Tok::TokType::QUOTE) || T.is(Tok::TokType::DEFINE_VALUES) ||
+         T.is(Tok::TokType::VALUES) || T.is(Tok::TokType::LINKLET) ||
+         T.is(Tok::TokType::LETREC_VALUES) || T.is(Tok::TokType::BEGIN) ||
+         T.is(Tok::TokType::BEGIN0) || T.is(Tok::TokType::CASE_LAMBDA) ||
+         T.is(Tok::TokType::IF) || T.is(Tok::TokType::VOID) ||
+         T.is(Tok::TokType::LET_VALUES) || T.is(Tok::TokType::SETBANG) ||
+         T.is(Tok::TokType::WITH_CONTINUATION_MARK) ||
+         T.is(Tok::TokType::K_VARIABLE_REFERENCE) ||
+         T.is(Tok::TokType::RAISE_ARGUMENT_ERROR) ||
+         T.is(Tok::TokType::PROCEDURE_ARITY_INCLUDES_C) ||
+         T.is(Tok::TokType::MAKE_STRUCT_TYPE);
+}
+
+std::unique_ptr<ast::Symbol> Parse::parseSymbol(SourceStream &S) {
+  Tok T = gettok(S);
+  if (!isSymbolTok(T)) {
+    S.rewind(T.size());
+    return nullptr;
+  }
+  return std::make_unique<ast::Symbol>(T.Value);
 }
 
 // Parses an expression of the form:
@@ -800,24 +855,112 @@ std::unique_ptr<ast::LetValues> Parse::parseLetValues(SourceStream &S) {
   return Let;
 }
 
-// Parse a quoted form.
-// (quote form)
-// or 'form
+// Parse a quoted form, in either surface syntax:
+//   (quote datum)
+//   'datum
+// The datum is any self-quoting value (see parseValue). Characters, strings
+// and vectors are not represented yet and will fail to parse.
 std::unique_ptr<ast::QuotedExpr> Parse::parseQuote(SourceStream &S) {
   size_t Start = S.getPosition();
 
   Tok T = gettok(S);
-  if (T.is(Tok::TokType::QUOTE) || T.is(Tok::TokType::SYMBOLMARK)) {
-    std::unique_ptr<ast::ExprNode> Exp = parseExpr(S);
-    if (!Exp) {
+
+  // (quote datum): the leading paren followed by the quote keyword.
+  if (T.is(Tok::TokType::LPAREN)) {
+    Tok Q = gettok(S);
+    if (!Q.is(Tok::TokType::QUOTE)) {
       S.rewindTo(Start);
       return nullptr;
     }
 
-    ast::ASTNode *Node = Exp.release();
-    return std::make_unique<ast::QuotedExpr>(Node);
+    std::unique_ptr<ast::ValueNode> Datum = parseValue(S);
+    if (!Datum) {
+      S.rewindTo(Start);
+      return nullptr;
+    }
+
+    Tok RP = gettok(S);
+    if (!RP.is(Tok::TokType::RPAREN)) {
+      S.rewindTo(Start);
+      return nullptr;
+    }
+
+    auto QE = std::make_unique<ast::QuotedExpr>();
+    QE->setQuotedExpr(std::move(Datum));
+    return QE;
+  }
+
+  // 'datum
+  if (T.is(Tok::TokType::SYMBOLMARK)) {
+    std::unique_ptr<ast::ValueNode> Datum = parseValue(S);
+    if (!Datum) {
+      S.rewindTo(Start);
+      return nullptr;
+    }
+
+    auto QE = std::make_unique<ast::QuotedExpr>();
+    QE->setQuotedExpr(std::move(Datum));
+    return QE;
   }
 
   S.rewindTo(Start);
   return nullptr;
+}
+
+// Parse a literal (proper or dotted) list of data: ( datum ... )
+// A dotted tail whose value is itself a list is spliced, so (1 2 . (3)) reads
+// as (1 2 3). A dotted tail that is a non-list atom (a true improper list) is
+// not represented yet.
+std::unique_ptr<ast::List> Parse::parseLiteralList(SourceStream &S) {
+  size_t Start = S.getPosition();
+
+  Tok T = gettok(S);
+  if (!T.is(Tok::TokType::LPAREN)) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  auto L = std::make_unique<ast::List>();
+
+  while (true) {
+    T = gettok(S);
+    if (T.is(Tok::TokType::RPAREN)) {
+      break;
+    }
+
+    if (T.is(Tok::TokType::DOT)) {
+      std::unique_ptr<ast::ValueNode> Tail = parseValue(S);
+      if (!Tail) {
+        S.rewindTo(Start);
+        return nullptr;
+      }
+
+      T = gettok(S);
+      if (!T.is(Tok::TokType::RPAREN)) {
+        S.rewindTo(Start);
+        return nullptr;
+      }
+
+      auto *TailList = llvm::dyn_cast<ast::List>(Tail.get());
+      if (!TailList) {
+        // FIXME: improper lists with a non-list tail are not supported yet.
+        S.rewindTo(Start);
+        return nullptr;
+      }
+      for (auto const &V : TailList->values()) {
+        L->appendExpr(std::unique_ptr<ast::ValueNode>(V->clone()));
+      }
+      break;
+    }
+
+    S.rewind(T.size());
+    std::unique_ptr<ast::ValueNode> Exp = parseValue(S);
+    if (!Exp) {
+      S.rewindTo(Start);
+      return nullptr;
+    }
+    L->appendExpr(std::move(Exp));
+  }
+
+  return L;
 }
