@@ -53,6 +53,7 @@ std::unique_ptr<ast::TLNode> parseDefn(SourceStream &S);
 std::unique_ptr<ast::TLNode> parseDefnOrExpr(SourceStream &S);
 std::unique_ptr<ast::ValueNode> parseValue(SourceStream &S);
 std::unique_ptr<ast::Values> parseValues(SourceStream &S);
+std::unique_ptr<ast::VariableReference> parseVariableReference(SourceStream &S);
 std::unique_ptr<ast::Vector> parseVector(SourceStream &S);
 
 }; // namespace Parse

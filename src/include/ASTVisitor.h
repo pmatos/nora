@@ -30,6 +30,7 @@ public:
   virtual void visit(ast::String const &Str) = 0;
   virtual void visit(ast::Symbol const &Sym) = 0;
   virtual void visit(ast::Values const &V) = 0;
+  virtual void visit(ast::VariableReference const &VR) = 0;
   virtual void visit(ast::Vector const &Vec) = 0;
   virtual void visit(ast::Void const &Vd) = 0;
 };

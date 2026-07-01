@@ -68,9 +68,9 @@ using namespace Lex;
 //       | (quote <datum>)                                  - parseQuote
 //       | (with-continuation-mark <expr> <expr> <expr>)
 //       | (<expr> ...+)                                    - parseApplication
-//       | (%variable-reference <id>)
-//       | (%variable-reference (%top . id))  <- Allowed?
-//       | (%variable-reference)              <- Allowed?
+//       | (#%variable-reference)                 - parseVariableReference
+//       | (#%variable-reference <id>)            - parseVariableReference
+//       | (#%variable-reference (#%top . id))    - parseVariableReference
 //
 // formals := <id>                                          - parseFormals
 //          | (<id> ...+ . id)
@@ -231,6 +231,11 @@ std::unique_ptr<ast::ExprNode> Parse::parseExpr(SourceStream &S) {
   std::unique_ptr<ast::QuotedExpr> Q = parseQuote(S);
   if (Q) {
     return Q;
+  }
+
+  std::unique_ptr<ast::VariableReference> VR = parseVariableReference(S);
+  if (VR) {
+    return VR;
   }
 
   std::unique_ptr<ast::Application> A = parseApplication(S);
@@ -882,6 +887,81 @@ std::unique_ptr<ast::SetBang> Parse::parseSetBang(SourceStream &S) {
   }
 
   return Set;
+}
+
+// Parse a variable reference, in any of its three fully-expanded forms:
+//   (#%variable-reference)
+//   (#%variable-reference id)
+//   (#%variable-reference (#%top . id))
+std::unique_ptr<ast::VariableReference>
+Parse::parseVariableReference(SourceStream &S) {
+  size_t Start = S.getPosition();
+
+  Tok T = gettok(S);
+  if (!T.is(Tok::TokType::LPAREN)) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  T = gettok(S);
+  if (!T.is(Tok::TokType::K_VARIABLE_REFERENCE)) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  auto VarRef = std::make_unique<ast::VariableReference>();
+
+  // The bare (#%variable-reference) form has no operand.
+  size_t BeforeOperand = S.getPosition();
+  T = gettok(S);
+  if (T.is(Tok::TokType::RPAREN)) {
+    return VarRef;
+  }
+
+  if (T.is(Tok::TokType::LPAREN)) {
+    // (#%variable-reference (#%top . id))
+    Tok Top = gettok(S);
+    if (!Top.is(Tok::TokType::ID) || Top.Value != "#%top") {
+      S.rewindTo(Start);
+      return nullptr;
+    }
+
+    T = gettok(S);
+    if (!T.is(Tok::TokType::DOT)) {
+      S.rewindTo(Start);
+      return nullptr;
+    }
+
+    std::unique_ptr<ast::Identifier> Id = parseIdentifier(S);
+    if (!Id) {
+      S.rewindTo(Start);
+      return nullptr;
+    }
+    VarRef->setId(*Id);
+
+    T = gettok(S);
+    if (!T.is(Tok::TokType::RPAREN)) {
+      S.rewindTo(Start);
+      return nullptr;
+    }
+  } else {
+    // (#%variable-reference id)
+    S.rewindTo(BeforeOperand);
+    std::unique_ptr<ast::Identifier> Id = parseIdentifier(S);
+    if (!Id) {
+      S.rewindTo(Start);
+      return nullptr;
+    }
+    VarRef->setId(*Id);
+  }
+
+  T = gettok(S);
+  if (!T.is(Tok::TokType::RPAREN)) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  return VarRef;
 }
 
 std::unique_ptr<ast::IfCond> Parse::parseIfCond(SourceStream &S) {
