@@ -41,10 +41,12 @@ public:
     AST_IfCond,
     AST_LetValues,
     AST_SetBang,
+    AST_WithContinuationMark,
     First_ValueNode, // all ValueNodes must be after this
     AST_BooleanLiteral,
     AST_Char,
-    AST_Closure, // result of evaluating a Lambda expression
+    AST_Closure,             // result of evaluating a Lambda expression
+    AST_ContinuationMarkSet, // result of (current-continuation-marks)
     AST_Integer,
     AST_Lambda,
     AST_List,
@@ -702,6 +704,39 @@ public:
 private:
   std::unique_ptr<Identifier> Id;
   std::unique_ptr<ExprNode> Expr;
+};
+
+// AST node for (with-continuation-mark key-expr val-expr result-expr).
+// key-expr and val-expr are evaluated in non-tail position; the resulting
+// key/value pair is installed as a continuation mark on the current
+// continuation frame while result-expr is evaluated in tail position.
+class WithContinuationMark
+    : public ClonableNode<WithContinuationMark, ExprNode> {
+public:
+  WithContinuationMark()
+      : ClonableNode(ASTNodeKind::AST_WithContinuationMark) {}
+  WithContinuationMark(const WithContinuationMark &W);
+  WithContinuationMark(WithContinuationMark &&) = default;
+  ~WithContinuationMark() = default;
+
+  void setKey(std::unique_ptr<ExprNode> &&K);
+  void setVal(std::unique_ptr<ExprNode> &&V);
+  void setResult(std::unique_ptr<ExprNode> &&R);
+
+  [[nodiscard]] ExprNode const &getKey() const;
+  [[nodiscard]] ExprNode const &getVal() const;
+  [[nodiscard]] ExprNode const &getResult() const;
+
+  LLVM_DUMP_METHOD void dump() const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == ASTNodeKind::AST_WithContinuationMark;
+  }
+
+private:
+  std::unique_ptr<ExprNode> Key;
+  std::unique_ptr<ExprNode> Val;
+  std::unique_ptr<ExprNode> Result;
 };
 
 class Values : public ClonableNode<Values, ValueNode> {

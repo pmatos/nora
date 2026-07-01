@@ -351,6 +351,38 @@ void SetBang::dump() const {
 }
 
 //
+// Implementation of WithContinuationMark node.
+//
+
+WithContinuationMark::WithContinuationMark(const WithContinuationMark &W)
+    : ClonableNode(ASTNodeKind::AST_WithContinuationMark), Key(W.Key->clone()),
+      Val(W.Val->clone()), Result(W.Result->clone()) {}
+
+void WithContinuationMark::setKey(std::unique_ptr<ExprNode> &&K) {
+  Key = std::move(K);
+}
+void WithContinuationMark::setVal(std::unique_ptr<ExprNode> &&V) {
+  Val = std::move(V);
+}
+void WithContinuationMark::setResult(std::unique_ptr<ExprNode> &&R) {
+  Result = std::move(R);
+}
+
+ExprNode const &WithContinuationMark::getKey() const { return *Key; }
+ExprNode const &WithContinuationMark::getVal() const { return *Val; }
+ExprNode const &WithContinuationMark::getResult() const { return *Result; }
+
+void WithContinuationMark::dump() const {
+  llvm::dbgs() << "(with-continuation-mark ";
+  Key->dump();
+  llvm::dbgs() << " ";
+  Val->dump();
+  llvm::dbgs() << " ";
+  Result->dump();
+  llvm::dbgs() << ")";
+}
+
+//
 // Implementation of Values node.
 //
 

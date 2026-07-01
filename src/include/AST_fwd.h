@@ -7,6 +7,7 @@ class Begin;
 class BooleanLiteral;
 class Char;
 class Closure;
+class ContinuationMarkSet;
 class DefineValues;
 class Identifier;
 class IfCond;
@@ -23,4 +24,5 @@ class Symbol;
 class Values;
 class Vector;
 class Void;
+class WithContinuationMark;
 }; // namespace ast
