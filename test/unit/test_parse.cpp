@@ -180,6 +180,20 @@ TEST_CASE("Lexing Symbol tokens", "[parser]") {
   REQUIRE(Tok.Value == R"(\)");
 }
 
+TEST_CASE("Lexing Keyword tokens", "[parser]") {
+  SourceStream Kw("#:foo");
+  Tok Tok = gettok(Kw);
+  REQUIRE(Tok.is(Tok::TokType::KEYWORD));
+  REQUIRE(Tok.Value == "foo");
+
+  SourceStream QuotedKw("'#:bar");
+  Tok = gettok(QuotedKw);
+  REQUIRE(Tok.is(Tok::TokType::SYMBOLMARK));
+  Tok = gettok(QuotedKw);
+  REQUIRE(Tok.is(Tok::TokType::KEYWORD));
+  REQUIRE(Tok.Value == "bar");
+}
+
 TEST_CASE("Lexing identifiers starting with numbers", "[parser]") {
   SourceStream Sym("1/bound-identifier=?");
   Tok Tok = gettok(Sym);

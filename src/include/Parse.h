@@ -39,6 +39,7 @@ std::unique_ptr<ast::Formal> parseFormals(SourceStream &S);
 std::unique_ptr<ast::Identifier> parseIdentifier(SourceStream &S);
 std::unique_ptr<ast::IfCond> parseIfCond(SourceStream &S);
 std::unique_ptr<ast::Integer> parseInteger(SourceStream &S);
+std::unique_ptr<ast::Keyword> parseKeyword(SourceStream &S);
 std::unique_ptr<ast::Lambda> parseLambda(SourceStream &S);
 std::unique_ptr<ast::LetValues> parseLetValues(SourceStream &S);
 std::unique_ptr<ast::Linklet> parseLinklet(SourceStream &S);
