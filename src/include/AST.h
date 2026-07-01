@@ -336,12 +336,10 @@ public:
     else
       llvm::dbgs() << "#f";
   }
-  void write() const override {
-    if (Value)
-      llvm::outs() << "#t";
-    else
-      llvm::outs() << "#f";
-  }
+  // Use std::cout, like the other value writers, so booleans interleave in
+  // order with the surrounding quote/list/vector output (llvm::outs() buffers
+  // independently and would reorder e.g. '(#t 1 #f 2)).
+  void write() const override { std::cout << (Value ? "#t" : "#f"); }
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_BooleanLiteral;
