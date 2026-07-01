@@ -434,7 +434,7 @@ void Values::write() const {
 //
 
 LetValues::LetValues(const LetValues &DV)
-    : ClonableNode(ASTNodeKind::AST_LetValues) {
+    : ClonableNode(ASTNodeKind::AST_LetValues), Rec(DV.Rec) {
   for (auto const &Id : DV.Ids) {
     Ids.emplace_back(Id);
   }
@@ -466,7 +466,7 @@ ExprNode const &LetValues::getBodyExpr(size_t Idx) const { return *Body[Idx]; }
 size_t LetValues::exprsCount() const { return Exprs.size(); }
 
 void LetValues::dump() const {
-  llvm::dbgs() << "(let-values (";
+  llvm::dbgs() << (Rec ? "(letrec-values (" : "(let-values (");
   for (size_t Idx = 0; Idx < bindingCount(); Idx++) {
     llvm::dbgs() << "[";
     for (const auto &Id : getBindingIds(Idx)) {
