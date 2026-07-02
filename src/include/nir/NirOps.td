@@ -52,8 +52,9 @@ def NIR_ConstantOp : NIR_Op<"constant", [Pure]> {
     freeze (docs/value-model-abi.md).
 
     ```mlir
-    %0 = nir.constant 42 : i64
+    %0 = nir.constant 42
     ```
+    (The result type is a fixed i64, so the custom form omits `: i64`.)
   }];
   let arguments = (ins I64Attr:$value);
   let results = (outs I64:$result);

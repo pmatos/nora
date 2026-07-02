@@ -2,6 +2,8 @@ add_mlir_dialect_library(nirLib
     nora.cpp
     Dialect.cpp
 
+    PARTIAL_SOURCES_INTENDED
+
     ADDITIONAL_HEADER_DIRS
     ${PROJECT_SOURCE_DIR}/include/nir
 
@@ -18,7 +20,7 @@ add_mlir_dialect_library(nirLib
 # NORA_ENABLE_MLIR is ON (this whole directory is added under that guard).
 get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
 get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
-add_llvm_executable(nir-opt nir-opt.cpp)
+add_llvm_executable(nir-opt nir-opt.cpp PARTIAL_SOURCES_INTENDED)
 llvm_update_compile_flags(nir-opt)
 target_link_libraries(nir-opt
     PRIVATE
@@ -26,6 +28,8 @@ target_link_libraries(nir-opt
     ${dialect_libs}
     ${conversion_libs}
     MLIROptLib
+    MLIRRegisterAllDialects
+    MLIRRegisterAllPasses
     MLIRIR
     MLIRParser
     MLIRSupport
