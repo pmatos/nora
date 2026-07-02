@@ -83,7 +83,8 @@ nr_value nrt_intern(const char *name) {
 
 // --- closures (flat capture) ----------------------------------------------
 nr_value nrt_make_closure(nr_code code, uint32_t nfree, const nr_value *freev) {
-  auto *c = (NrClosure *)alloc(sizeof(NrClosure) + (size_t)nfree * sizeof(nr_value));
+  auto *c =
+      (NrClosure *)alloc(sizeof(NrClosure) + (size_t)nfree * sizeof(nr_value));
   c->h = {OBJ_CLOSURE, nfree};
   c->code = code;
   c->nfree = nfree;
