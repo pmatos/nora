@@ -5,12 +5,12 @@ Racket-level optimizations run before lowering NIR → LLVM IR. This directory i
 **opt-in** (`-DNORA_ENABLE_MLIR=ON`, the `mlir` CMake preset) and is **not** part
 of the default `norac` build.
 
-## Status: prepared, NOT yet verified (blocked on MLIR install)
+## Status: built and round-trip-verified (MLIR 22)
 
-R5's rewrite of the previously broken scaffold is done, but it **has not been
-compiled or round-tripped**, because MLIR 22 is not installed on this machine
-(LLVM 22 is; MLIR is a separate package). Until MLIR is present, `find_package(MLIR
-REQUIRED CONFIG)` fails and none of this builds.
+R5 is complete: the dialect builds under the `mlir` preset and
+`test/mlir/nir-roundtrip.mlir` round-trips through `nir-opt | nir-opt` (FileCheck
+passes). Requires MLIR 22 (`find_package(MLIR REQUIRED CONFIG)`); the default
+`norac` build is unaffected and stays green.
 
 What the rewrite changed vs. the old scaffold:
 
