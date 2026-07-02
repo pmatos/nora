@@ -297,6 +297,9 @@ public:
     } else if (auto const *PA = llvm::dyn_cast<ast::Pair>(A)) {
       auto const *PB = llvm::dyn_cast<ast::Pair>(B);
       Eq = (PB != nullptr) && PA->identity() == PB->identity();
+    } else if (auto const *SA = llvm::dyn_cast<ast::Symbol>(A)) {
+      auto const *SB = llvm::dyn_cast<ast::Symbol>(B);
+      Eq = (SB != nullptr) && SA->identity() == SB->identity();
     } else {
       Eq = ast::valueEq(*A, *B);
     }
@@ -416,6 +419,58 @@ public:
   void accept(ASTVisitor &V) const override { V.visit(*this); }
 };
 
+// (string->uninterned-symbol s) makes a fresh uninterned symbol: distinct from
+// every other symbol (interned or not), even one with the same name. Interned
+// symbols, by contrast, are canonical by name, so eq? on symbols is identity.
+class StringToUninternedSymbolFunction : public ast::RuntimeFunction {
+public:
+  StringToUninternedSymbolFunction(const std::string &Name)
+      : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 1) {
+      return nullptr;
+    }
+    if (auto const *S = llvm::dyn_cast<ast::String>(Args[0])) {
+      return ast::Symbol::makeUninterned(S->getValue());
+    }
+    return nullptr;
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new StringToUninternedSymbolFunction(*this);
+  }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+// (gensym [base]) returns a fresh uninterned symbol, never eq? to any other.
+// A monotonic counter gives it a readable, unique name; distinctness comes from
+// its uninterned identity, not the name.
+class GensymFunction : public ast::RuntimeFunction {
+public:
+  GensymFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    static unsigned Counter = 0;
+    std::string Base = "g";
+    if (Args.size() == 1) {
+      if (auto const *S = llvm::dyn_cast<ast::Symbol>(Args[0])) {
+        Base = S->getName().str();
+      } else if (auto const *Str = llvm::dyn_cast<ast::String>(Args[0])) {
+        Base = Str->getValue().str();
+      }
+    }
+    return ast::Symbol::makeUninterned(Base + std::to_string(++Counter));
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new GensymFunction(*this);
+  }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
 #define RUNTIME_FUNC(Identifier, Name)                                         \
   RuntimeFunctions[Identifier] = std::make_shared<Name>(Identifier);
 Runtime::Runtime() {
@@ -437,6 +492,8 @@ Runtime::Runtime() {
   RUNTIME_FUNC("cdr", CdrFunction);
   RUNTIME_FUNC("set-car!", SetCarFunction);
   RUNTIME_FUNC("set-cdr!", SetCdrFunction);
+  RUNTIME_FUNC("string->uninterned-symbol", StringToUninternedSymbolFunction);
+  RUNTIME_FUNC("gensym", GensymFunction);
 }
 
 std::unique_ptr<ast::ValueNode>
