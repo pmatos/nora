@@ -46,6 +46,7 @@ public:
     AST_WithContinuationMark,
     First_ValueNode, // all ValueNodes must be after this
     AST_BooleanLiteral,
+    AST_Box, // result of (box v)
     AST_CaseLambda,
     AST_CaseLambdaClosure, // result of evaluating a CaseLambda expression
     AST_Char,

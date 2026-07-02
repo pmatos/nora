@@ -11,6 +11,7 @@ public:
   virtual void visit(ast::Application const &A) = 0;
   virtual void visit(ast::Begin const &B) = 0;
   virtual void visit(ast::BooleanLiteral const &Bool) = 0;
+  virtual void visit(ast::Box const &B) = 0;
   virtual void visit(ast::CaseLambda const &CL) = 0;
   virtual void visit(ast::CaseLambdaClosure const &CL) = 0;
   virtual void visit(ast::Char const &C) = 0;

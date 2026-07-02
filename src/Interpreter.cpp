@@ -755,6 +755,10 @@ void Interpreter::visit(ast::BooleanLiteral const &Bool) {
   deliver(std::unique_ptr<ast::ValueNode>(Bool.clone()));
 }
 
+void Interpreter::visit(ast::Box const &B) {
+  deliver(std::unique_ptr<ast::ValueNode>(B.clone()));
+}
+
 void Interpreter::visit(ast::Char const &C) {
   deliver(std::unique_ptr<ast::ValueNode>(C.clone()));
 }
