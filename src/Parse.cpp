@@ -225,6 +225,13 @@ std::unique_ptr<ast::ExprNode> Parse::parseExpr(SourceStream &S) {
     return Bool;
   }
 
+  // A string literal is a self-evaluating expression (its leading '"' matches
+  // no other expression parser).
+  std::unique_ptr<ast::String> Str = parseString(S);
+  if (Str) {
+    return Str;
+  }
+
   // If the expression is quoted, then identifier is a symbol.
   std::unique_ptr<ast::Identifier> Id = parseIdentifier(S);
   if (Id) {

@@ -187,6 +187,34 @@ TEST_CASE("eq? distinguishes pair identity", "[interp][m2]") {
   REQUIRE_FALSE(D->value());
 }
 
+TEST_CASE("symbol eq? is identity, not name", "[interp][m2]") {
+  // Two uninterned symbols with the same name are distinct objects...
+  Run Un = runLinklet("(linklet () () (eq? (string->uninterned-symbol \"s\") "
+                      "(string->uninterned-symbol \"s\")))");
+  REQUIRE(Un.ok);
+  REQUIRE(Un.result);
+  auto *U = llvm::dyn_cast<ast::BooleanLiteral>(Un.result.get());
+  REQUIRE(U);
+  REQUIRE_FALSE(U->value());
+
+  // ...while interned symbols with the same name are eq?.
+  Run In = runLinklet("(linklet () () (eq? 'a 'a))");
+  REQUIRE(In.ok);
+  REQUIRE(In.result);
+  auto *I = llvm::dyn_cast<ast::BooleanLiteral>(In.result.get());
+  REQUIRE(I);
+  REQUIRE(I->value());
+}
+
+TEST_CASE("gensym produces fresh distinct symbols", "[interp][m2]") {
+  Run R = runLinklet("(linklet () () (eq? (gensym) (gensym)))");
+  REQUIRE(R.ok);
+  REQUIRE(R.result);
+  auto *B = llvm::dyn_cast<ast::BooleanLiteral>(R.result.get());
+  REQUIRE(B);
+  REQUIRE_FALSE(B->value());
+}
+
 TEST_CASE("mutual tail recursion is bounded and correct", "[interp][tco]") {
   // ev/od tail-call each other: the reused activation frame belongs to a
   // *different* closure than the caller, so this exercises tail-call handling
