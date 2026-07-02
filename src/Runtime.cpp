@@ -209,6 +209,101 @@ public:
   void accept(ASTVisitor &V) const override { V.visit(*this); }
 };
 
+// (box v) allocates a fresh mutable cell holding v. (unbox b) reads it. The
+// box's cell is shared across copies of the Box value, so mutation and identity
+// survive the interpreter's clone-on-lookup - the start of M2's shared value
+// model.
+class BoxFunction : public ast::RuntimeFunction {
+public:
+  BoxFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 1) {
+      return nullptr;
+    }
+    return std::make_unique<ast::Box>(
+        std::unique_ptr<ast::ValueNode>(Args[0]->clone()));
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new BoxFunction(*this);
+  }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+class UnboxFunction : public ast::RuntimeFunction {
+public:
+  UnboxFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 1) {
+      return nullptr;
+    }
+    if (auto const *B = llvm::dyn_cast<ast::Box>(Args[0])) {
+      return B->get();
+    }
+    return nullptr;
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new UnboxFunction(*this);
+  }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+class SetBoxFunction : public ast::RuntimeFunction {
+public:
+  SetBoxFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 2) {
+      return nullptr;
+    }
+    if (auto const *B = llvm::dyn_cast<ast::Box>(Args[0])) {
+      B->set(std::unique_ptr<ast::ValueNode>(Args[1]->clone()));
+      return std::make_unique<ast::Void>();
+    }
+    return nullptr;
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new SetBoxFunction(*this);
+  }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+// (eq? a b): object identity. Heap objects with a cell (boxes) compare by cell
+// pointer; other values fall back to the structural valueEq approximation
+// (interned symbols, fixnums, chars, booleans). This is the identity operation
+// the clone-everything model could not provide.
+class EqFunction : public ast::RuntimeFunction {
+public:
+  EqFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 2) {
+      return nullptr;
+    }
+    const ast::ValueNode *A = Args[0];
+    const ast::ValueNode *B = Args[1];
+    bool Eq;
+    if (auto const *BA = llvm::dyn_cast<ast::Box>(A)) {
+      auto const *BB = llvm::dyn_cast<ast::Box>(B);
+      Eq = (BB != nullptr) && BA->identity() == BB->identity();
+    } else {
+      Eq = ast::valueEq(*A, *B);
+    }
+    return std::make_unique<ast::BooleanLiteral>(Eq);
+  }
+
+  ast::RuntimeFunction *clone() const override { return new EqFunction(*this); }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
 #define RUNTIME_FUNC(Identifier, Name)                                         \
   RuntimeFunctions[Identifier] = std::make_shared<Name>(Identifier);
 Runtime::Runtime() {
@@ -221,6 +316,10 @@ Runtime::Runtime() {
   RUNTIME_FUNC("continuation-mark-set->list",
                ContinuationMarkSetToListFunction);
   RUNTIME_FUNC("zero?", ZeroPredicateFunction);
+  RUNTIME_FUNC("box", BoxFunction);
+  RUNTIME_FUNC("unbox", UnboxFunction);
+  RUNTIME_FUNC("set-box!", SetBoxFunction);
+  RUNTIME_FUNC("eq?", EqFunction);
 }
 
 std::unique_ptr<ast::ValueNode>

@@ -44,6 +44,26 @@ void CaseLambdaClosure::dump() const {
 }
 void CaseLambdaClosure::write() const {}
 
+Box::Box(std::unique_ptr<ValueNode> V)
+    : ClonableNode(ASTNodeKind::AST_Box), C(std::make_shared<Cell>()) {
+  C->Value = std::move(V);
+}
+
+Box::Box(const Box &Other) : ClonableNode(ASTNodeKind::AST_Box), C(Other.C) {}
+
+std::unique_ptr<ValueNode> Box::get() const {
+  return std::unique_ptr<ValueNode>(C->Value->clone());
+}
+
+void Box::set(std::unique_ptr<ValueNode> V) const { C->Value = std::move(V); }
+
+void Box::dump() const { llvm::dbgs() << "#&<box>\n"; }
+
+void Box::write() const {
+  std::cout << "#&";
+  C->Value->write();
+}
+
 //
 // Continuation marks
 //
