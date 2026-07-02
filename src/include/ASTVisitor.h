@@ -11,6 +11,8 @@ public:
   virtual void visit(ast::Application const &A) = 0;
   virtual void visit(ast::Begin const &B) = 0;
   virtual void visit(ast::BooleanLiteral const &Bool) = 0;
+  virtual void visit(ast::CaseLambda const &CL) = 0;
+  virtual void visit(ast::CaseLambdaClosure const &CL) = 0;
   virtual void visit(ast::Char const &C) = 0;
   virtual void visit(ast::Closure const &L) = 0;
   virtual void visit(ast::ContinuationMarkSet const &CMS) = 0;
@@ -18,6 +20,7 @@ public:
   virtual void visit(ast::Identifier const &Id) = 0;
   virtual void visit(ast::IfCond const &If) = 0;
   virtual void visit(ast::Integer const &Int) = 0;
+  virtual void visit(ast::Keyword const &K) = 0;
   virtual void visit(ast::Lambda const &L) = 0;
   virtual void visit(ast::LetValues const &LV) = 0;
   virtual void visit(ast::Linklet const &Linklet) = 0;
@@ -28,6 +31,7 @@ public:
   virtual void visit(ast::String const &Str) = 0;
   virtual void visit(ast::Symbol const &Sym) = 0;
   virtual void visit(ast::Values const &V) = 0;
+  virtual void visit(ast::VariableReference const &VR) = 0;
   virtual void visit(ast::Vector const &Vec) = 0;
   virtual void visit(ast::Void const &Vd) = 0;
   virtual void visit(ast::WithContinuationMark const &WCM) = 0;

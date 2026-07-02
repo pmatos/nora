@@ -1,6 +1,5 @@
 #include "ASTRuntime.h"
 
-#include "AnalysisFreeVars.h"
 #include "Casting.h"
 
 #include <iostream>
@@ -8,39 +7,42 @@
 
 using namespace ast;
 
-Closure::Closure(const Lambda &Lbd, const EnvPtr &Env)
+// A closure captures the lexical environment (shared scope chain) in which the
+// lambda was evaluated. Capturing the live chain - rather than a copy of the
+// free variables - gives correct lexical scoping (a free variable unbound at
+// the definition site stays unbound) and lets letrec forward/mutual references
+// resolve once the shared scope is filled in.
+Closure::Closure(const Lambda &Lbd, EnvPtr Env)
     : ClonableNode(ASTNodeKind::AST_Closure),
-      L(std::unique_ptr<Lambda>(static_cast<Lambda *>(Lbd.clone()))) {
-
-  // To create a closure we need to:
-
-  // 1. Find the free variables in the lambda.
-  AnalysisFreeVars AFV;
-  L->accept(AFV);
-  auto const &FreeVars = AFV.getResult();
-
-  // 2. Find in the current environment the values of the free variables and
-  // save a copy of each into the closure's captured environment.
-  for (auto const &Var : FreeVars) {
-    if (auto Val = envLookup(Env, Var)) {
-      this->Env.add(Var, std::move(Val));
-    }
-  }
-}
+      L(std::unique_ptr<Lambda>(static_cast<Lambda *>(Lbd.clone()))),
+      Env(std::move(Env)) {}
 
 Closure::Closure(const Closure &Other)
     : ClonableNode(ASTNodeKind::AST_Closure),
-      L(std::unique_ptr<Lambda>(static_cast<Lambda *>(Other.L->clone()))) {
-  for (auto const &E : Other.Env) {
-    Env.add(E.first, std::unique_ptr<ValueNode>(E.second->clone()));
-  }
-}
+      L(std::unique_ptr<Lambda>(static_cast<Lambda *>(Other.L->clone()))),
+      Env(Other.Env) {}
 
 void Closure::dump() const {
   // TODO: Implement.
   llvm::dbgs() << "<closure: not implemented>\n";
 }
 void Closure::write() const {}
+
+CaseLambdaClosure::CaseLambdaClosure(const CaseLambda &CLbd, EnvPtr Env)
+    : ClonableNode(ASTNodeKind::AST_CaseLambdaClosure),
+      CL(std::unique_ptr<CaseLambda>(static_cast<CaseLambda *>(CLbd.clone()))),
+      Env(std::move(Env)) {}
+
+CaseLambdaClosure::CaseLambdaClosure(const CaseLambdaClosure &Other)
+    : ClonableNode(ASTNodeKind::AST_CaseLambdaClosure),
+      CL(std::unique_ptr<CaseLambda>(
+          static_cast<CaseLambda *>(Other.CL->clone()))),
+      Env(Other.Env) {}
+
+void CaseLambdaClosure::dump() const {
+  llvm::dbgs() << "<case-lambda closure: not implemented>\n";
+}
+void CaseLambdaClosure::write() const {}
 
 //
 // Continuation marks

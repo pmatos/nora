@@ -5,6 +5,7 @@
 #include <llvm/ADT/SmallString.h>
 #include <llvm/Support/Compiler.h>
 #include <llvm/Support/Debug.h>
+#include <llvm/Support/SMLoc.h>
 #include <llvm/Support/raw_ostream.h>
 
 #include <cassert>
@@ -12,6 +13,7 @@
 #include <gmp.h>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <utility>
 
@@ -44,15 +46,19 @@ public:
     AST_WithContinuationMark,
     First_ValueNode, // all ValueNodes must be after this
     AST_BooleanLiteral,
+    AST_CaseLambda,
+    AST_CaseLambdaClosure, // result of evaluating a CaseLambda expression
     AST_Char,
     AST_Closure,             // result of evaluating a Lambda expression
     AST_ContinuationMarkSet, // result of (current-continuation-marks)
     AST_Integer,
+    AST_Keyword,
     AST_Lambda,
     AST_List,
     AST_String,
     AST_Symbol,
     AST_Values,
+    AST_VariableReference,
     AST_Vector,
     AST_Void,
     AST_RuntimeFunction,
@@ -67,8 +73,16 @@ public:
   virtual ASTNode *clone() const = 0;
   virtual void accept(ASTVisitor &Visitor) const = 0;
 
+  // Source range this node was parsed from, used to anchor diagnostics. It may
+  // be invalid for synthesised nodes (e.g. results of evaluation).
+  void setRange(llvm::SMRange R) { Range = R; }
+  void setLoc(llvm::SMLoc L) { Range = llvm::SMRange(L, L); }
+  [[nodiscard]] llvm::SMLoc getLoc() const { return Range.Start; }
+  [[nodiscard]] llvm::SMRange getRange() const { return Range; }
+
 private:
   const ASTNodeKind Kind;
+  llvm::SMRange Range;
 };
 
 class TLNode : public ASTNode {
@@ -115,7 +129,11 @@ public:
   ClonableNode(ASTNode::ASTNodeKind Kind) : Base(Kind) {}
 
   Base *clone() const override {
-    return new Derived(static_cast<const Derived &>(*this));
+    auto *Cloned = new Derived(static_cast<const Derived &>(*this));
+    // Several node copy constructors reset the base subobject, so copy the
+    // source range explicitly to keep locations available on clones.
+    Cloned->setRange(this->getRange());
+    return Cloned;
   }
   void accept(ASTVisitor &Visitor) const override {
     Visitor.visit(static_cast<const Derived &>(*this));
@@ -126,10 +144,16 @@ public:
 class Identifier : public ClonableNode<Identifier, ExprNode> {
 public:
   Identifier(const Identifier &I)
-      : ClonableNode(ASTNodeKind::AST_Identifier), Id(I.Id) {}
+      : ClonableNode(ASTNodeKind::AST_Identifier), Id(I.Id) {
+    // The base copy is bypassed by delegating to ClonableNode(Kind), so carry
+    // the source range across explicitly; diagnostics anchored at a copied
+    // identifier (e.g. a set! target inside a cloned lambda body) rely on it.
+    setRange(I.getRange());
+  }
   Identifier(Identifier &&) = default;
   Identifier &operator=(const Identifier &I) {
     Id = I.Id;
+    setRange(I.getRange());
     return *this;
   }
   Identifier &operator=(Identifier &&I) noexcept;
@@ -195,6 +219,34 @@ public:
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_Symbol;
+  }
+
+private:
+  llvm::SmallString<32> Name;
+};
+
+// A keyword datum, e.g. #:foo. Name holds the bare keyword (without the leading
+// #:), matching the lexer's KEYWORD token. Like symbols, keywords are not
+// self-quoting, so the enclosing QuotedExpr emits a leading quote ('#:foo).
+class Keyword : public ClonableNode<Keyword, ValueNode> {
+public:
+  explicit Keyword(llvm::StringRef Name)
+      : ClonableNode(ASTNodeKind::AST_Keyword), Name(Name) {}
+  Keyword(const Keyword &K)
+      : ClonableNode(ASTNodeKind::AST_Keyword), Name(K.Name) {}
+  Keyword(Keyword &&) = default;
+  Keyword &operator=(const Keyword &K) = delete;
+  Keyword &operator=(Keyword &&K) = delete;
+  virtual ~Keyword() = default;
+
+  bool operator==(const Keyword &K) const { return getName() == K.getName(); }
+
+  [[nodiscard]] llvm::StringRef getName() const { return Name; }
+  LLVM_DUMP_METHOD void dump() const override;
+  void write() const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == ASTNodeKind::AST_Keyword;
   }
 
 private:
@@ -596,6 +648,33 @@ private:
   std::unique_ptr<ExprNode> Body;
 };
 
+// A case-lambda is a sequence of lambda clauses. When applied, the first
+// clause whose formals accept the number of supplied arguments is selected.
+// Defined in terms of Lambda, so it is placed right after it.
+class CaseLambda : public ClonableNode<CaseLambda, ValueNode> {
+public:
+  CaseLambda() : ClonableNode(ASTNodeKind::AST_CaseLambda) {}
+  CaseLambda(CaseLambda const &CL);
+  CaseLambda(CaseLambda &&CL) = default;
+  ~CaseLambda() = default;
+
+  void addClause(std::unique_ptr<Lambda> C) { Clauses.push_back(std::move(C)); }
+  [[nodiscard]] size_t size() const { return Clauses.size(); }
+  [[nodiscard]] Lambda const &operator[](size_t Idx) const {
+    return *Clauses[Idx];
+  }
+
+  LLVM_DUMP_METHOD void dump() const override;
+  void write() const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == ASTNodeKind::AST_CaseLambda;
+  }
+
+private:
+  llvm::SmallVector<std::unique_ptr<Lambda>> Clauses;
+};
+
 class LetValues : public ClonableNode<LetValues, ExprNode> {
 public:
   LetValues() : ClonableNode(ASTNodeKind::AST_LetValues) {}
@@ -639,6 +718,12 @@ public:
   size_t exprsCount() const;
   size_t bodyCount() const { return Body.size(); }
 
+  // A letrec-values form binds its identifiers over the binding expressions as
+  // well as the body, enabling recursive and mutually-recursive definitions; a
+  // plain let-values evaluates its binding expressions in the outer scope.
+  bool isRec() const { return Rec; }
+  void setRec(bool R) { Rec = R; }
+
   LLVM_DUMP_METHOD void dump() const override;
 
   static bool classof(const ASTNode *N) {
@@ -649,6 +734,7 @@ private:
   llvm::SmallVector<llvm::SmallVector<Identifier>> Ids;
   llvm::SmallVector<std::unique_ptr<ExprNode>> Exprs;
   llvm::SmallVector<std::unique_ptr<ExprNode>> Body;
+  bool Rec = false;
 };
 
 class List : public ClonableNode<List, ValueNode> {
@@ -776,6 +862,34 @@ public:
 
 private:
   llvm::SmallVector<std::unique_ptr<ExprNode>> Exprs;
+};
+
+// The result of a (#%variable-reference ...) form. A variable reference is an
+// opaque runtime value; it prints as #<variable-reference> regardless of the
+// referenced binding. The optional Id records the referenced identifier for the
+// (#%variable-reference id) / (#%variable-reference (#%top . id)) forms; the
+// bare (#%variable-reference) form leaves it empty.
+// https://docs.racket-lang.org/reference/__top.html
+class VariableReference : public ClonableNode<VariableReference, ValueNode> {
+public:
+  VariableReference() : ClonableNode(ASTNodeKind::AST_VariableReference) {}
+  VariableReference(const VariableReference &V) = default;
+  VariableReference(VariableReference &&V) = default;
+  ~VariableReference() = default;
+
+  void setId(const Identifier &I) { Id = I; }
+  [[nodiscard]] bool hasId() const { return Id.has_value(); }
+  [[nodiscard]] const Identifier &getId() const { return *Id; }
+
+  LLVM_DUMP_METHOD void dump() const override;
+  void write() const override;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == ASTNodeKind::AST_VariableReference;
+  }
+
+private:
+  std::optional<Identifier> Id;
 };
 
 // A vector datum, e.g. #(1 2). Unlike lists, vectors are NOT self-quoting, so

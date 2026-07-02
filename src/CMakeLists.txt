@@ -26,6 +26,7 @@ add_llvm_executable(norac
         AnalysisFreeVars.cpp
         AST.cpp
         ASTRuntime.cpp
+        Diagnostics.cpp
         Environment.cpp
         IdPool.cpp
         Interpreter.cpp

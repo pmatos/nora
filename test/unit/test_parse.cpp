@@ -2,12 +2,17 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
+#include "Diagnostics.h"
 #include "Lex.h"
 #include "Parse.h"
+#include "SourceStream.h"
 
 #include <llvm/Support/Casting.h>
+#include <llvm/Support/SourceMgr.h>
+#include <llvm/Support/raw_ostream.h>
 
 #include <optional>
+#include <string>
 
 using namespace Lex;
 using namespace Parse;
@@ -180,6 +185,20 @@ TEST_CASE("Lexing Symbol tokens", "[parser]") {
   REQUIRE(Tok.Value == R"(\)");
 }
 
+TEST_CASE("Lexing Keyword tokens", "[parser]") {
+  SourceStream Kw("#:foo");
+  Tok Tok = gettok(Kw);
+  REQUIRE(Tok.is(Tok::TokType::KEYWORD));
+  REQUIRE(Tok.Value == "foo");
+
+  SourceStream QuotedKw("'#:bar");
+  Tok = gettok(QuotedKw);
+  REQUIRE(Tok.is(Tok::TokType::SYMBOLMARK));
+  Tok = gettok(QuotedKw);
+  REQUIRE(Tok.is(Tok::TokType::KEYWORD));
+  REQUIRE(Tok.Value == "bar");
+}
+
 TEST_CASE("Lexing identifiers starting with numbers", "[parser]") {
   SourceStream Sym("1/bound-identifier=?");
   Tok Tok = gettok(Sym);
@@ -222,6 +241,22 @@ TEST_CASE("Lexing full expressions 2", "[parser]") {
   REQUIRE(Tok.is(Tok::TokType::LPAREN));
   Tok = gettok(Letvals);
   REQUIRE(Tok.is(Tok::TokType::LET_VALUES));
+  Tok = gettok(Letvals);
+  REQUIRE(Tok.is(Tok::TokType::LPAREN));
+  Tok = gettok(Letvals);
+  REQUIRE(Tok.is(Tok::TokType::RPAREN));
+  Tok = gettok(Letvals);
+  REQUIRE(Tok.is(Tok::TokType::BOOL_FALSE));
+  Tok = gettok(Letvals);
+  REQUIRE(Tok.is(Tok::TokType::RPAREN));
+}
+
+TEST_CASE("Lexing letrec-values", "[parser]") {
+  SourceStream Letvals("(letrec-values () #f)");
+  Tok Tok = gettok(Letvals);
+  REQUIRE(Tok.is(Tok::TokType::LPAREN));
+  Tok = gettok(Letvals);
+  REQUIRE(Tok.is(Tok::TokType::LETREC_VALUES));
   Tok = gettok(Letvals);
   REQUIRE(Tok.is(Tok::TokType::LPAREN));
   Tok = gettok(Letvals);
@@ -294,6 +329,28 @@ TEST_CASE("Parsing lambdas", "[parser]") {
   REQUIRE(Var.getName() == "x");
 }
 
+TEST_CASE("Parsing case-lambda", "[parser]") {
+  SourceStream CL1("(case-lambda ((x) x) ((x y) (+ x y)))");
+  std::unique_ptr<ast::CaseLambda> CL = parseCaseLambda(CL1);
+  REQUIRE(CL);
+  REQUIRE(CL->size() == 2);
+  REQUIRE((*CL)[0].getFormalsType() == ast::Formal::Type::List);
+  REQUIRE((*CL)[1].getFormalsType() == ast::Formal::Type::List);
+
+  // A clause may use a rest formal.
+  SourceStream CL2("(case-lambda ((x) x) ((x . y) y))");
+  CL = parseCaseLambda(CL2);
+  REQUIRE(CL);
+  REQUIRE(CL->size() == 2);
+  REQUIRE((*CL)[1].getFormalsType() == ast::Formal::Type::ListRest);
+
+  // A case-lambda with no clauses is valid.
+  SourceStream CL3("(case-lambda)");
+  CL = parseCaseLambda(CL3);
+  REQUIRE(CL);
+  REQUIRE(CL->size() == 0);
+}
+
 TEST_CASE("Parsing begin", "[parser]") {
   SourceStream B1("(begin 1 2 3)");
   std::unique_ptr<ast::Begin> B = parseBegin(B1);
@@ -315,4 +372,66 @@ TEST_CASE("Parsing with-continuation-mark", "[parser]") {
   // is missing the result expression must not parse.
   SourceStream W2("(with-continuation-mark 1 2)");
   REQUIRE(!parseWithContinuationMark(W2));
+}
+
+TEST_CASE("DiagnosticEngine counts diagnostics", "[diagnostics]") {
+  nora::DiagnosticEngine Diag;
+  REQUIRE_FALSE(Diag.hadError());
+  REQUIRE(Diag.getNumErrors() == 0);
+  REQUIRE(Diag.getNumWarnings() == 0);
+
+  Diag.error("first failure");
+  Diag.error("second failure");
+  REQUIRE(Diag.hadError());
+  REQUIRE(Diag.getNumErrors() == 2);
+  REQUIRE(Diag.getNumWarnings() == 0);
+}
+
+TEST_CASE("SourceStream getLoc maps offsets into the buffer", "[diagnostics]") {
+  nora::DiagnosticEngine Diag;
+  SourceStream S("(+ 1 2)", &Diag);
+
+  llvm::SMLoc L0 = S.getLoc(0);
+  llvm::SMLoc L3 = S.getLoc(3);
+  REQUIRE(L0.isValid());
+  REQUIRE(L3.isValid());
+  REQUIRE(L3.getPointer() - L0.getPointer() == 3);
+}
+
+TEST_CASE("DiagnosticEngine renders line and column", "[diagnostics]") {
+  nora::DiagnosticEngine Diag;
+  SourceStream S("(+ 1 2)", &Diag);
+
+  std::string Buf;
+  llvm::raw_string_ostream OS(Buf);
+  // Offset 3 is the digit '1' -> line 1, column 4.
+  Diag.getSourceMgr().PrintMessage(OS, S.getLoc(3), llvm::SourceMgr::DK_Error,
+                                   "boom");
+  OS.flush();
+  REQUIRE(Buf.find("error: boom") != std::string::npos);
+  REQUIRE(Buf.find("1:4") != std::string::npos);
+}
+
+TEST_CASE("Parsing variable references", "[parser]") {
+  SourceStream V1("(#%variable-reference)");
+  std::unique_ptr<ast::VariableReference> V = parseVariableReference(V1);
+  REQUIRE(V);
+  REQUIRE_FALSE(V->hasId());
+
+  SourceStream V2("(#%variable-reference x)");
+  V = parseVariableReference(V2);
+  REQUIRE(V);
+  REQUIRE(V->hasId());
+  REQUIRE(V->getId().getName() == "x");
+
+  SourceStream V3("(#%variable-reference (#%top . x))");
+  V = parseVariableReference(V3);
+  REQUIRE(V);
+  REQUIRE(V->hasId());
+  REQUIRE(V->getId().getName() == "x");
+
+  // A plain application must not be misparsed as a variable reference.
+  SourceStream V4("(f x)");
+  V = parseVariableReference(V4);
+  REQUIRE_FALSE(V);
 }

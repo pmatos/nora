@@ -1,6 +1,7 @@
 #include "AST.h"
 
 #include <llvm/Support/Casting.h>
+#include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace ast;
@@ -58,6 +59,7 @@ Identifier::Identifier(llvm::StringRef Id)
 
 Identifier &Identifier::operator=(Identifier &&I) noexcept {
   Id = I.Id;
+  setRange(I.getRange());
   return *this;
 }
 
@@ -81,6 +83,16 @@ void Symbol::dump() const { llvm::dbgs() << "#<symbol:" << Name << ">"; }
 // the enclosing QuotedExpr. Use std::cout so output interleaves correctly with
 // the other value writers (List, Integer via gmp_printf).
 void Symbol::write() const { std::cout << getName().str(); }
+
+//
+// Implementation of Keyword node.
+//
+void Keyword::dump() const { llvm::dbgs() << "#<keyword:" << Name << ">"; }
+
+// Keywords print in Racket read syntax (#:foo); Name holds the bare keyword, so
+// the #: prefix is restored here. The leading quote (if any) is emitted by the
+// enclosing QuotedExpr, since keywords are not self-quoting.
+void Keyword::write() const { std::cout << "#:" << getName().str(); }
 
 //
 // Implementation of Char node.
@@ -236,6 +248,30 @@ void Lambda::dump() const {
 }
 
 void Lambda::write() const { std::cout << "#<procedure>"; }
+
+//
+// Implementation of CaseLambda node.
+//
+
+CaseLambda::CaseLambda(CaseLambda const &CL)
+    : ClonableNode(ASTNodeKind::AST_CaseLambda) {
+  Clauses.reserve(CL.Clauses.size());
+  for (auto const &C : CL.Clauses) {
+    Clauses.push_back(
+        std::unique_ptr<Lambda>(static_cast<Lambda *>(C->clone())));
+  }
+}
+
+void CaseLambda::dump() const {
+  llvm::dbgs() << "(case-lambda";
+  for (auto const &C : Clauses) {
+    llvm::dbgs() << " ";
+    C->dump();
+  }
+  llvm::dbgs() << ")";
+}
+
+void CaseLambda::write() const { std::cout << "#<procedure>"; }
 
 //
 // Implementation of DefineValues node.
@@ -421,18 +457,35 @@ void Values::write() const {
       V->write();
       std::cout << std::endl;
     } else {
-      std::cerr << "Error: non-value in values expression" << std::endl;
-      exit(1);
+      // A fully evaluated Values node only ever holds value nodes; anything
+      // else is an internal invariant violation.
+      llvm_unreachable("non-value in values expression");
     }
   }
 }
+
+//
+// Implementation of VariableReference node.
+//
+void VariableReference::dump() const {
+  llvm::dbgs() << "(#%variable-reference";
+  if (hasId()) {
+    llvm::dbgs() << " ";
+    getId().dump();
+  }
+  llvm::dbgs() << ")";
+}
+
+// A variable reference is opaque: it always prints as #<variable-reference>,
+// independent of the referenced binding.
+void VariableReference::write() const { std::cout << "#<variable-reference>"; }
 
 //
 // Implementation of LetValues node.
 //
 
 LetValues::LetValues(const LetValues &DV)
-    : ClonableNode(ASTNodeKind::AST_LetValues) {
+    : ClonableNode(ASTNodeKind::AST_LetValues), Rec(DV.Rec) {
   for (auto const &Id : DV.Ids) {
     Ids.emplace_back(Id);
   }
@@ -464,7 +517,7 @@ ExprNode const &LetValues::getBodyExpr(size_t Idx) const { return *Body[Idx]; }
 size_t LetValues::exprsCount() const { return Exprs.size(); }
 
 void LetValues::dump() const {
-  llvm::dbgs() << "(let-values (";
+  llvm::dbgs() << (Rec ? "(letrec-values (" : "(let-values (");
   for (size_t Idx = 0; Idx < bindingCount(); Idx++) {
     llvm::dbgs() << "[";
     for (const auto &Id : getBindingIds(Idx)) {

@@ -22,12 +22,14 @@
 #include "AST.h"
 #include "ASTRuntime.h"
 #include "ASTVisitor.h"
+#include "Diagnostics.h"
 #include "Environment.h"
 #include "Runtime.h"
 
 class Interpreter : public ASTVisitor {
 public:
-  Interpreter();
+  explicit Interpreter(nora::DiagnosticEngine &Diag);
+  ~Interpreter() override;
 
   // The visit methods below are single-step Eval transitions of the machine,
   // except visit(Linklet), which is the driver that runs the machine to
@@ -36,6 +38,8 @@ public:
   virtual void visit(ast::Application const &A) override;
   virtual void visit(ast::Begin const &B) override;
   virtual void visit(ast::BooleanLiteral const &Bool) override;
+  virtual void visit(ast::CaseLambda const &CL) override;
+  virtual void visit(ast::CaseLambdaClosure const &CL) override;
   virtual void visit(ast::Char const &C) override;
   virtual void visit(ast::Closure const &L) override;
   virtual void visit(ast::ContinuationMarkSet const &CMS) override;
@@ -43,6 +47,7 @@ public:
   virtual void visit(ast::Identifier const &Id) override;
   virtual void visit(ast::IfCond const &If) override;
   virtual void visit(ast::Integer const &Int) override;
+  virtual void visit(ast::Keyword const &K) override;
   virtual void visit(ast::Lambda const &L) override;
   virtual void visit(ast::LetValues const &LV) override;
   virtual void visit(ast::Linklet const &Linklet) override;
@@ -53,6 +58,7 @@ public:
   virtual void visit(ast::String const &Str) override;
   virtual void visit(ast::Symbol const &Sym) override;
   virtual void visit(ast::Values const &V) override;
+  virtual void visit(ast::VariableReference const &VR) override;
   virtual void visit(ast::Vector const &Vec) override;
   virtual void visit(ast::Void const &Vd) override;
   virtual void visit(ast::WithContinuationMark const &WCM) override;
@@ -87,6 +93,7 @@ private:
       App,      // application: accumulate operator + args, then apply
       MkValues, // (values ...): accumulate then build a Values
       LetBind,  // let-values: accumulate binding values, then bind + body
+      LetRec,   // letrec-values: bind each value into the recursive scope
       Define,   // top-level define-values: bind then produce void
       Set,      // set!: mutate then produce void
       WcmKey,   // with-continuation-mark: after key, evaluate val
@@ -116,10 +123,14 @@ private:
     const ast::ExprNode *ThenE = nullptr;
     const ast::ExprNode *ElseE = nullptr;
 
-    // LetBind / Define reference their source node for ids and body.
+    // LetBind / LetRec / Define reference their source node for ids and body.
     const ast::LetValues *Let = nullptr;
     const ast::DefineValues *Def = nullptr;
-    EnvPtr DefEnv; // Define: the scope to define into.
+    EnvPtr DefEnv;   // Define: the scope to define into.
+    EnvPtr RecScope; // LetRec: the recursive scope being filled in.
+
+    // App: source location of the application, for arity/procedure errors.
+    llvm::SMLoc AppLoc;
 
     // Set.
     const ast::Identifier *SetId = nullptr;
@@ -140,10 +151,14 @@ private:
   void run();
   // Deliver the value register to the top continuation frame.
   void continueStep();
-  // Apply Vals[0] to Vals[1..].
-  void applyProcedure(std::vector<std::unique_ptr<ast::ValueNode>> Vals);
+  // Apply Vals[0] to Vals[1..]. AppLoc/OpLoc anchor arity/procedure errors.
+  void applyProcedure(std::vector<std::unique_ptr<ast::ValueNode>> Vals,
+                      llvm::SMLoc AppLoc, llvm::SMLoc OpLoc);
   // Evaluate a (non-empty) body sequence in environment E.
   void evalBody(llvm::SmallVector<const ast::ExprNode *> Body, const EnvPtr &E);
+  // Create a fresh scope enclosed by Parent, tracked so its bindings can be
+  // cleared at teardown to break closure/scope reference cycles.
+  EnvPtr newScope(const EnvPtr &Parent);
   // Snapshot the marks on the current continuation, innermost frame first.
   std::vector<ast::MarkFrame> snapshotMarks() const;
   // Set the value register and switch to Continue mode.
@@ -168,4 +183,12 @@ private:
   std::unique_ptr<ast::ValueNode> Val;    // value register (Continue mode)
   EnvPtr GlobalEnv;                       // top-level scope, persists per form
   std::unique_ptr<ast::ValueNode> Result; // result of the whole linklet
+
+  // Every scope created during evaluation, so their bindings can be cleared in
+  // the destructor. Live-environment closures capture the scope that binds them
+  // (top-level lambdas capture GlobalEnv; letrec closures capture the recursive
+  // scope), forming shared_ptr cycles that would otherwise never be reclaimed.
+  std::vector<EnvPtr> AllScopes;
+
+  nora::DiagnosticEngine &Diag; // diagnostics sink for runtime errors
 };

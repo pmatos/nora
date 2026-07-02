@@ -66,8 +66,21 @@ void AnalysisFreeVars::visit(ast::Lambda const &L) {
   Vars.pop_back();
 }
 
+void AnalysisFreeVars::visit(ast::CaseLambda const &CL) {
+  // A case-lambda's free variables are the union over all its clauses. Each
+  // clause is a Lambda that binds its own formals around its own body.
+  for (size_t Idx = 0; Idx < CL.size(); ++Idx) {
+    CL[Idx].accept(*this);
+  }
+}
+
 void AnalysisFreeVars::visit(ast::Closure const &L) {
   // Closures by definition do not have free variables.
+  // Nothing to do.
+}
+
+void AnalysisFreeVars::visit(ast::CaseLambdaClosure const &CL) {
+  // Case-lambda closures by definition do not have free variables.
   // Nothing to do.
 }
 
@@ -93,6 +106,11 @@ void AnalysisFreeVars::visit(ast::Vector const &Vec) {
   for (auto const &Expr : Vec.values()) {
     Expr->accept(*this);
   }
+}
+
+void AnalysisFreeVars::visit(ast::VariableReference const &VR) {
+  // A variable reference is an opaque value with no free variables.
+  // Nothing to do.
 }
 
 void AnalysisFreeVars::visit(ast::Application const &A) {
@@ -140,7 +158,19 @@ void AnalysisFreeVars::visit(ast::LetValues const &LV) {
     for (auto const &Var : LV.getBindingIds(Idx))
       LVVars.insert(Var);
 
+  // In let-values the binding expressions are evaluated in the enclosing scope,
+  // so the bound identifiers do not shadow them. In letrec-values the
+  // identifiers are in scope for the binding expressions too, enabling
+  // recursion, so those references must not be reported as free.
+  if (!LV.isRec())
+    for (size_t Idx = 0; Idx < LV.bindingCount(); Idx++)
+      LV.getBindingExpr(Idx).accept(*this);
+
   Vars.push_back(LVVars);
+
+  if (LV.isRec())
+    for (size_t Idx = 0; Idx < LV.bindingCount(); Idx++)
+      LV.getBindingExpr(Idx).accept(*this);
 
   for (size_t Idx = 0; Idx < LV.bodyCount(); Idx++)
     LV.getBodyExpr(Idx).accept(*this);
@@ -172,5 +202,10 @@ void AnalysisFreeVars::visit(ast::WithContinuationMark const &WCM) {
 
 void AnalysisFreeVars::visit(ast::ContinuationMarkSet const &CMS) {
   // Continuation mark sets are runtime values with no free variables.
+  // Nothing to do.
+}
+
+void AnalysisFreeVars::visit(ast::Keyword const &K) {
+  // Keywords have no free variables.
   // Nothing to do.
 }

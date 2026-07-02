@@ -22,6 +22,7 @@ add_executable(test_parse
   ${PROJECT_SOURCE_DIR}/src/AnalysisFreeVars.cpp
   ${PROJECT_SOURCE_DIR}/src/AST.cpp
   ${PROJECT_SOURCE_DIR}/src/ASTRuntime.cpp
+  ${PROJECT_SOURCE_DIR}/src/Diagnostics.cpp
   ${PROJECT_SOURCE_DIR}/src/Environment.cpp
   ${PROJECT_SOURCE_DIR}/src/IdPool.cpp
   ${PROJECT_SOURCE_DIR}/src/Lex.cpp

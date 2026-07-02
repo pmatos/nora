@@ -251,9 +251,12 @@ std::optional<Tok> Lex::maybeLexByteString(SourceStream &S) {
 }
 
 bool isCharacterName(SourceStream &S, std::string &Found) {
-  static const std::array Names = {"space",     "newline", "alarm",
-                                   "backspace", "delete",  "escape",
-                                   "null",      "return",  "tab"};
+  // Accepts both the reader's traditional names and the print names emitted by
+  // charReprFromCodePoint (nul/vtab/page/rubout) so printed control characters
+  // round-trip. "null" must precede "nul" so #\null is not truncated to #\nul.
+  static const std::array Names = {
+      "space",  "newline", "alarm", "backspace", "delete", "escape", "null",
+      "return", "tab",     "nul",   "vtab",      "page",   "rubout"};
 
   for (const auto *Name : Names) {
     if (S.isPrefix(Name)) {
@@ -317,9 +320,11 @@ std::optional<Tok> Lex::maybeLexSchemeChar(SourceStream &S) {
       (UTF8::isUTF8ReplacementCharacter(StartPtr, EndPtr) ||
        UTF8::isGraphUTF8(StartPtr, EndPtr)) &&
 
-      // followup character
-      (isDelimiter(S, 1) || S.peekChar(1) == EOF ||
-       std::isspace(S.peekChar(1)))) {
+      // followup character: the byte right after the glyph, at offset Bytes.
+      // Using offset 1 would land inside a multi-byte glyph (e.g. #\λ), so its
+      // printed form failed to lex back as a character.
+      (isDelimiter(S, Bytes) || S.peekChar(Bytes) == EOF ||
+       std::isspace(static_cast<unsigned char>(S.peekChar(Bytes))))) {
     auto Subview = S.getSubviewAndSkip(Bytes);
     // End is the index of the last consumed char, so that Tok::size() equals
     // the number of bytes consumed (#\ plus the character). Using getPosition()

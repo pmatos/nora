@@ -20,6 +20,10 @@ public:
   // Lookup an identifier in the environment.
   std::unique_ptr<ast::ValueNode> lookup(ast::Identifier const &Id) const;
 
+  // Drop all bindings. Used to break reference cycles at interpreter teardown
+  // (a closure can capture the very scope that binds it).
+  void clear() { Env.clear(); }
+
   // Implement range style access to the Env map.
   auto begin() const { return Env.begin(); }
   auto end() const { return Env.end(); }

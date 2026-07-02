@@ -19,6 +19,8 @@ public:
   virtual void visit(ast::Application const &A) override;
   virtual void visit(ast::Begin const &B) override;
   virtual void visit(ast::BooleanLiteral const &Bool) override;
+  virtual void visit(ast::CaseLambda const &CL) override;
+  virtual void visit(ast::CaseLambdaClosure const &CL) override;
   virtual void visit(ast::Char const &C) override;
   virtual void visit(ast::Closure const &L) override;
   virtual void visit(ast::ContinuationMarkSet const &CMS) override;
@@ -26,6 +28,7 @@ public:
   virtual void visit(ast::Identifier const &Id) override;
   virtual void visit(ast::IfCond const &If) override;
   virtual void visit(ast::Integer const &Int) override;
+  virtual void visit(ast::Keyword const &K) override;
   virtual void visit(ast::Lambda const &L) override;
   virtual void visit(ast::LetValues const &LV) override;
   virtual void visit(ast::Linklet const &Linklet) override;
@@ -36,6 +39,7 @@ public:
   virtual void visit(ast::String const &Str) override;
   virtual void visit(ast::Symbol const &Sym) override;
   virtual void visit(ast::Values const &V) override;
+  virtual void visit(ast::VariableReference const &VR) override;
   virtual void visit(ast::Vector const &Vec) override;
   virtual void visit(ast::Void const &Vd) override;
   virtual void visit(ast::WithContinuationMark const &WCM) override;
