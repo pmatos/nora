@@ -122,6 +122,9 @@ void Interpreter::visit(ast::Linklet const &Linklet) {
 
 void Interpreter::run() {
   while (true) {
+    if (Kont.size() > PeakKont) {
+      PeakKont = Kont.size();
+    }
     if (M == Mode::Eval) {
       Control->accept(*this);
     } else {
@@ -149,11 +152,27 @@ void Interpreter::continueStep() {
       Top.Saved = std::move(Val);
     }
     if (Top.Idx < Top.Exprs.size()) {
-      Control = Top.Exprs[Top.Idx];
-      Env = Top.Env;
-      Top.Idx++;
-      M = Mode::Eval;
+      const bool IsLast = Top.Idx + 1 == Top.Exprs.size();
+      if (IsLast && !Top.Begin0) {
+        // Tail position: drop the sequence frame before its final expression
+        // (mirrors IfBranch) so a tail call there reuses the enclosing
+        // activation frame rather than stacking a new one.
+        const ast::ExprNode *E = Top.Exprs[Top.Idx];
+        EnvPtr SeqEnv = Top.Env;
+        Kont.pop_back();
+        Control = E;
+        Env = SeqEnv;
+        M = Mode::Eval;
+      } else {
+        Control = Top.Exprs[Top.Idx];
+        Env = Top.Env;
+        Top.Idx++;
+        M = Mode::Eval;
+      }
     } else {
+      // Only begin0 reaches here: its frame persists to the end to return the
+      // saved first value; a plain sequence's final expression is handled
+      // above.
       std::unique_ptr<ast::ValueNode> R =
           Top.Begin0 ? std::move(Top.Saved) : std::move(Val);
       Kont.pop_back();
@@ -505,6 +524,20 @@ void Interpreter::applyProcedure(
     CalleeScope->Vars.add(IF.getIdentifier(), std::move(Lst));
     break;
   }
+  }
+
+  // Tail call: if the enclosing continuation frame is the caller's own
+  // activation (Frame::Call), reuse it instead of stacking a new one. Together
+  // with popping Seq/if/let-body frames before their tail sub-expression, this
+  // makes self- and mutual tail recursion run in O(1) continuation space.
+  if (!Kont.empty() && Kont.back().K == Frame::Call) {
+    Frame &Enc = Kont.back();
+    Enc.Callee = std::move(Op); // frees the previous activation's closure
+    Enc.Marks.clear();          // the reused frame begins a fresh activation
+    Control = &Clause->getBody();
+    Env = CalleeScope;
+    M = Mode::Eval;
+    return;
   }
 
   Kont.emplace_back(Frame::Call);
