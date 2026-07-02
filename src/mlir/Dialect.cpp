@@ -2,6 +2,7 @@
 
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/Interfaces/ControlFlowInterfaces.h"
 
 using namespace mlir;
 using namespace mlir::nir;
