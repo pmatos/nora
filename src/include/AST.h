@@ -56,6 +56,7 @@ public:
     AST_Keyword,
     AST_Lambda,
     AST_List,
+    AST_Pair, // result of (cons a d)
     AST_String,
     AST_Symbol,
     AST_Values,

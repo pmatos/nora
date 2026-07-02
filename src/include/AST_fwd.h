@@ -20,6 +20,7 @@ class Lambda;
 class LetValues;
 class Linklet;
 class List;
+class Pair;
 class QuotedExpr;
 class RuntimeFunction;
 class SetBang;
