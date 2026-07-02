@@ -74,6 +74,9 @@ public:
     }
     return std::unique_ptr<ast::ValueNode>(Result->clone());
   };
+  // Peak continuation depth reached across every top-level form run so far.
+  // Exposed for the tail-call tests: proper tail calls keep this bounded.
+  size_t getPeakKont() const { return PeakKont; }
   std::unique_ptr<ast::ValueNode>
   callFunction(const std::string &Name,
                const llvm::SmallVector<const ast::ValueNode *> &Args) {
@@ -183,6 +186,7 @@ private:
   std::unique_ptr<ast::ValueNode> Val;    // value register (Continue mode)
   EnvPtr GlobalEnv;                       // top-level scope, persists per form
   std::unique_ptr<ast::ValueNode> Result; // result of the whole linklet
+  size_t PeakKont = 0;                    // peak |Kont| seen (tail-call tests)
 
   // Every scope created during evaluation, so their bindings can be cleared in
   // the destructor. Live-environment closures capture the scope that binds them

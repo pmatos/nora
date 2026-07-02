@@ -184,6 +184,31 @@ public:
   void accept(ASTVisitor &V) const override { V.visit(*this); }
 };
 
+// (zero? n) is a minimal integer predicate. It exists so a terminating
+// tail-recursive loop can be written to exercise proper tail calls (M1); the
+// full numeric tower and its predicates arrive in M4.
+class ZeroPredicateFunction : public ast::RuntimeFunction {
+public:
+  ZeroPredicateFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 1) {
+      return nullptr;
+    }
+    if (auto const *I = llvm::dyn_cast<ast::Integer>(Args[0])) {
+      return std::make_unique<ast::BooleanLiteral>(*I == 0);
+    }
+    return nullptr;
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new ZeroPredicateFunction(*this);
+  }
+
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
 #define RUNTIME_FUNC(Identifier, Name)                                         \
   RuntimeFunctions[Identifier] = std::make_shared<Name>(Identifier);
 Runtime::Runtime() {
@@ -195,6 +220,7 @@ Runtime::Runtime() {
   RUNTIME_FUNC("continuation-mark-set-first", ContinuationMarkSetFirstFunction);
   RUNTIME_FUNC("continuation-mark-set->list",
                ContinuationMarkSetToListFunction);
+  RUNTIME_FUNC("zero?", ZeroPredicateFunction);
 }
 
 std::unique_ptr<ast::ValueNode>

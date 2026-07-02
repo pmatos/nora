@@ -34,3 +34,22 @@ add_executable(test_parse
 target_link_libraries(test_parse PRIVATE Catch2::Catch2 gmp gmpxx ${LLVM_LIBS})
 
 catch_discover_tests(test_parse)
+
+add_executable(test_interpreter
+  test_interpreter.cpp
+  ${PROJECT_SOURCE_DIR}/src/AnalysisFreeVars.cpp
+  ${PROJECT_SOURCE_DIR}/src/AST.cpp
+  ${PROJECT_SOURCE_DIR}/src/ASTRuntime.cpp
+  ${PROJECT_SOURCE_DIR}/src/Diagnostics.cpp
+  ${PROJECT_SOURCE_DIR}/src/Environment.cpp
+  ${PROJECT_SOURCE_DIR}/src/IdPool.cpp
+  ${PROJECT_SOURCE_DIR}/src/Interpreter.cpp
+  ${PROJECT_SOURCE_DIR}/src/Lex.cpp
+  ${PROJECT_SOURCE_DIR}/src/Parse.cpp
+  ${PROJECT_SOURCE_DIR}/src/Runtime.cpp
+  ${PROJECT_SOURCE_DIR}/src/SourceStream.cpp
+  ${PROJECT_SOURCE_DIR}/src/UTF8.cpp
+)
+target_link_libraries(test_interpreter PRIVATE Catch2::Catch2 gmp gmpxx ${LLVM_LIBS})
+
+catch_discover_tests(test_interpreter)
