@@ -9,8 +9,8 @@
 #ifndef NRT_H
 #define NRT_H
 
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 
 // ---------------------------------------------------------------------------
 // nr_value: a tagged 64-bit word.
@@ -28,17 +28,17 @@
 typedef uint64_t nr_value;
 
 static constexpr uint64_t NR_TAG_MASK = 0x7;
-static constexpr uint64_t NR_TAG_PTR = 0x0;  // heap pointer
-static constexpr uint64_t NR_TAG_FIX = 0x1;  // fixnum (any odd word)
-static constexpr uint64_t NR_TAG_IMM = 0x2;  // singleton immediate
-static constexpr uint64_t NR_TAG_CHR = 0x6;  // character
+static constexpr uint64_t NR_TAG_PTR = 0x0; // heap pointer
+static constexpr uint64_t NR_TAG_FIX = 0x1; // fixnum (any odd word)
+static constexpr uint64_t NR_TAG_IMM = 0x2; // singleton immediate
+static constexpr uint64_t NR_TAG_CHR = 0x6; // character
 
 // Singleton immediates: subtype << 3 | NR_TAG_IMM.
 enum NrImm : uint64_t {
   NR_IMM_FALSE = 0,
   NR_IMM_TRUE = 1,
-  NR_IMM_NULL = 2,   // '()
-  NR_IMM_VOID = 3,   // (void)
+  NR_IMM_NULL = 2, // '()
+  NR_IMM_VOID = 3, // (void)
   NR_IMM_EOF = 4,
   NR_IMM_UNDEF = 5,  // unsafe-undefined sentinel (729x in the expander)
   NR_IMM_UNINIT = 6, // letrec pre-initialisation hole
@@ -58,8 +58,12 @@ static inline bool nr_is_fixnum(nr_value w) { return (w & NR_TAG_FIX) != 0; }
 static inline bool nr_is_ptr(nr_value w) {
   return w != 0 && (w & NR_TAG_MASK) == NR_TAG_PTR;
 }
-static inline bool nr_is_imm(nr_value w) { return (w & NR_TAG_MASK) == NR_TAG_IMM; }
-static inline bool nr_is_char(nr_value w) { return (w & NR_TAG_MASK) == NR_TAG_CHR; }
+static inline bool nr_is_imm(nr_value w) {
+  return (w & NR_TAG_MASK) == NR_TAG_IMM;
+}
+static inline bool nr_is_char(nr_value w) {
+  return (w & NR_TAG_MASK) == NR_TAG_CHR;
+}
 
 static inline nr_value nr_fixnum(int64_t v) {
   return (nr_value)((uint64_t)v << 1) | NR_TAG_FIX;
