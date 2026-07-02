@@ -77,12 +77,12 @@ Legend: **[S]** spine · **[A]** Track A · **[B]** Track B. Effort: S=small, M=
 - **Acceptance:** normalizes non-trivial *real expander output* (not toy cases) to a stable canonical form; two runs of the same input over the pinned Racket normalize identically.
 - **Risk:** See R7 — hash-iteration order and gensym-counter parity can defeat any normalizer; this milestone gates M10 and must be proven on real output before M10 is declared reachable.
 
-### M1 — Proper tail calls in the interpreter **[S] · ~3–4 wk**  ·  [#93](https://github.com/pmatos/nora/issues/93)
+### M1 — Proper tail calls in the interpreter **[S] · ~3–4 wk**  ·  [#93](https://github.com/pmatos/nora/issues/93) · **✅ DONE** (`1d7b11b`)
 - **Goal:** O(1)-space tail calls in the CEK machine.
-- **Deliverables:** static tail-position marking (a `bool Tail` on `ExprNode`/visit); `Seq`/body/`let`/`letrec`/`let-values` frames popped **before** their last sub-expression (mirroring the existing `IfBranch` at `:165`); `applyProcedure` **reuses** the enclosing `Call` frame in tail position (transfer callee ownership + replace marks) instead of `emplace_back` at `:510`.
-- **Depends-on:** M0.
-- **Acceptance:** `(let loop ([n 10000000]) (if (= n 0) 'ok (loop (- n 1))))` → `ok` with **bounded** peak `Kont` (asserted via a test hook exposing peak `Kont` size); asan/ubsan clean.
-- **Risk:** Fragile "peek the top frame" heuristics — use static tail annotation, the standard CEK approach. Independent of GC; runs alongside M2 prep.
+- **Deliverables (as built):** no static AST marking was needed — a dynamic approach fits this trampoline. `continueStep(Frame::Seq)` pops the sequence frame **before** its final expression (non-`begin0`), mirroring `IfBranch`; `applyProcedure` **reuses** the enclosing `Frame::Call` when it is on top of `Kont` (move in the new callee, `clear()` its marks) instead of `emplace_back`. Added `Interpreter::getPeakKont()` and a minimal `zero?` predicate (full numeric predicates are M4).
+- **Depends-on:** M0. (Implemented ahead of M0; tests are self-contained Catch2 + one lit test.)
+- **Acceptance (met):** built test-first — peak `Kont` is identical at depth 100 vs 100000 and `< 16` (O(1)); a tail loop returns the right value; non-tail recursion still grows the continuation; mutual `ev`/`od` recursion is bounded; `test/integration/tailcall.rkt` runs end to end. **25/25 tests pass under debug, asan, and ubsan.**
+- **Risk (retired):** the "top is `Call`" reuse condition is exact once Seq/if/let-body frames pop before their tail sub-expression; verified clean under asan/ubsan.
 
 ### M2 — Shared value model + GC + closure representation (the pivot) **[XL] · ~3–5 mo**  ·  [#94](https://github.com/pmatos/nora/issues/94)
 - **Goal:** Replace clone/value-copy with a shared, identity-preserving, GC-managed heap, and fix closure capture. **This is the single ABI decision point for both tracks — freeze it here.**
