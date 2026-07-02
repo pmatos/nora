@@ -142,6 +142,51 @@ TEST_CASE("eq? distinguishes box identity", "[interp][m2]") {
   REQUIRE_FALSE(D->value());
 }
 
+TEST_CASE("cons/car/cdr round-trip", "[interp][m2]") {
+  Run Ca = runLinklet("(linklet () () (car (cons 1 2)))");
+  REQUIRE(Ca.ok);
+  REQUIRE(Ca.result);
+  auto *A = llvm::dyn_cast<ast::Integer>(Ca.result.get());
+  REQUIRE(A);
+  REQUIRE(*A == 1);
+
+  Run Cd = runLinklet("(linklet () () (cdr (cons 1 2)))");
+  REQUIRE(Cd.ok);
+  REQUIRE(Cd.result);
+  auto *D = llvm::dyn_cast<ast::Integer>(Cd.result.get());
+  REQUIRE(D);
+  REQUIRE(*D == 2);
+}
+
+TEST_CASE("set-car!/set-cdr! mutate through a shared reference",
+          "[interp][m2]") {
+  Run R = runLinklet(
+      "(linklet () () (let-values ([(p) (cons 1 2)]) "
+      "(begin (set-car! p 10) (set-cdr! p 20) (+ (car p) (cdr p)))))");
+  REQUIRE(R.ok);
+  REQUIRE(R.result);
+  auto *Int = llvm::dyn_cast<ast::Integer>(R.result.get());
+  REQUIRE(Int);
+  REQUIRE(*Int == 30);
+}
+
+TEST_CASE("eq? distinguishes pair identity", "[interp][m2]") {
+  Run Same =
+      runLinklet("(linklet () () (let-values ([(p) (cons 1 2)]) (eq? p p)))");
+  REQUIRE(Same.ok);
+  REQUIRE(Same.result);
+  auto *S = llvm::dyn_cast<ast::BooleanLiteral>(Same.result.get());
+  REQUIRE(S);
+  REQUIRE(S->value());
+
+  Run Diff = runLinklet("(linklet () () (eq? (cons 1 2) (cons 1 2)))");
+  REQUIRE(Diff.ok);
+  REQUIRE(Diff.result);
+  auto *D = llvm::dyn_cast<ast::BooleanLiteral>(Diff.result.get());
+  REQUIRE(D);
+  REQUIRE_FALSE(D->value());
+}
+
 TEST_CASE("mutual tail recursion is bounded and correct", "[interp][tco]") {
   // ev/od tail-call each other: the reused activation frame belongs to a
   // *different* closure than the caller, so this exercises tail-call handling

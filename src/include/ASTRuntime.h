@@ -93,6 +93,40 @@ private:
   std::shared_ptr<Cell> C;
 };
 
+// A mutable pair (cons cell). Like Box, its car/cdr cell is heap-allocated and
+// shared across copies, so set-car!/set-cdr! and eq? observe one identity
+// through the interpreter's clone-on-lookup. (Interim shared_ptr cell; moves
+// onto the GC heap in a later M2 slice.)
+class Pair : public ClonableNode<Pair, ValueNode> {
+public:
+  Pair(std::unique_ptr<ValueNode> Car, std::unique_ptr<ValueNode> Cdr);
+  Pair(const Pair &Other); // shares the cell (shallow copy)
+  ~Pair() = default;
+
+  static bool classof(const ASTNode *N) {
+    return N->getKind() == ASTNodeKind::AST_Pair;
+  }
+
+  // car/cdr, each a fresh value (following the interpreter's value model).
+  std::unique_ptr<ValueNode> car() const;
+  std::unique_ptr<ValueNode> cdr() const;
+  // set-car!/set-cdr!: mutate the shared cell in place.
+  void setCar(std::unique_ptr<ValueNode> V) const;
+  void setCdr(std::unique_ptr<ValueNode> V) const;
+  // Cell identity for eq?: two Pair values are eq? iff they share a cell.
+  const void *identity() const { return C.get(); }
+
+  LLVM_DUMP_METHOD void dump() const override;
+  void write() const override;
+
+private:
+  struct Cell {
+    std::unique_ptr<ValueNode> Car;
+    std::unique_ptr<ValueNode> Cdr;
+  };
+  std::shared_ptr<Cell> C;
+};
+
 // A single continuation mark is a key/value pair. A MarkFrame collects the
 // marks belonging to one continuation frame; within a frame each key appears
 // at most once (setMark overwrites an existing entry for the same key).

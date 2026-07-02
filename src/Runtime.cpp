@@ -294,6 +294,9 @@ public:
     if (auto const *BA = llvm::dyn_cast<ast::Box>(A)) {
       auto const *BB = llvm::dyn_cast<ast::Box>(B);
       Eq = (BB != nullptr) && BA->identity() == BB->identity();
+    } else if (auto const *PA = llvm::dyn_cast<ast::Pair>(A)) {
+      auto const *PB = llvm::dyn_cast<ast::Pair>(B);
+      Eq = (PB != nullptr) && PA->identity() == PB->identity();
     } else {
       Eq = ast::valueEq(*A, *B);
     }
@@ -301,6 +304,115 @@ public:
   }
 
   ast::RuntimeFunction *clone() const override { return new EqFunction(*this); }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+// (cons a d) allocates a fresh mutable pair; (car p)/(cdr p) read its fields.
+// The pair's cell is shared across copies of the Pair value, so mutation and
+// identity survive the interpreter's clone-on-lookup.
+class ConsFunction : public ast::RuntimeFunction {
+public:
+  ConsFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 2) {
+      return nullptr;
+    }
+    return std::make_unique<ast::Pair>(
+        std::unique_ptr<ast::ValueNode>(Args[0]->clone()),
+        std::unique_ptr<ast::ValueNode>(Args[1]->clone()));
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new ConsFunction(*this);
+  }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+class CarFunction : public ast::RuntimeFunction {
+public:
+  CarFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 1) {
+      return nullptr;
+    }
+    if (auto const *P = llvm::dyn_cast<ast::Pair>(Args[0])) {
+      return P->car();
+    }
+    return nullptr;
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new CarFunction(*this);
+  }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+class CdrFunction : public ast::RuntimeFunction {
+public:
+  CdrFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 1) {
+      return nullptr;
+    }
+    if (auto const *P = llvm::dyn_cast<ast::Pair>(Args[0])) {
+      return P->cdr();
+    }
+    return nullptr;
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new CdrFunction(*this);
+  }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+class SetCarFunction : public ast::RuntimeFunction {
+public:
+  SetCarFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 2) {
+      return nullptr;
+    }
+    if (auto const *P = llvm::dyn_cast<ast::Pair>(Args[0])) {
+      P->setCar(std::unique_ptr<ast::ValueNode>(Args[1]->clone()));
+      return std::make_unique<ast::Void>();
+    }
+    return nullptr;
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new SetCarFunction(*this);
+  }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+class SetCdrFunction : public ast::RuntimeFunction {
+public:
+  SetCdrFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 2) {
+      return nullptr;
+    }
+    if (auto const *P = llvm::dyn_cast<ast::Pair>(Args[0])) {
+      P->setCdr(std::unique_ptr<ast::ValueNode>(Args[1]->clone()));
+      return std::make_unique<ast::Void>();
+    }
+    return nullptr;
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new SetCdrFunction(*this);
+  }
   void accept(ASTVisitor &V) const override { V.visit(*this); }
 };
 
@@ -320,6 +432,11 @@ Runtime::Runtime() {
   RUNTIME_FUNC("unbox", UnboxFunction);
   RUNTIME_FUNC("set-box!", SetBoxFunction);
   RUNTIME_FUNC("eq?", EqFunction);
+  RUNTIME_FUNC("cons", ConsFunction);
+  RUNTIME_FUNC("car", CarFunction);
+  RUNTIME_FUNC("cdr", CdrFunction);
+  RUNTIME_FUNC("set-car!", SetCarFunction);
+  RUNTIME_FUNC("set-cdr!", SetCdrFunction);
 }
 
 std::unique_ptr<ast::ValueNode>

@@ -759,6 +759,10 @@ void Interpreter::visit(ast::Box const &B) {
   deliver(std::unique_ptr<ast::ValueNode>(B.clone()));
 }
 
+void Interpreter::visit(ast::Pair const &P) {
+  deliver(std::unique_ptr<ast::ValueNode>(P.clone()));
+}
+
 void Interpreter::visit(ast::Char const &C) {
   deliver(std::unique_ptr<ast::ValueNode>(C.clone()));
 }

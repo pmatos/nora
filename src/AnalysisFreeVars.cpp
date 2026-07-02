@@ -147,6 +147,11 @@ void AnalysisFreeVars::visit(ast::Box const &B) {
   // Nothing to do.
 }
 
+void AnalysisFreeVars::visit(ast::Pair const &P) {
+  // A pair is a runtime value with no free variables.
+  // Nothing to do.
+}
+
 void AnalysisFreeVars::visit(ast::Char const &C) {
   // Characters have no free variables.
   // Nothing to do.

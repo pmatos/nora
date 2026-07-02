@@ -26,6 +26,7 @@ public:
   virtual void visit(ast::LetValues const &LV) = 0;
   virtual void visit(ast::Linklet const &Linklet) = 0;
   virtual void visit(ast::List const &L) = 0;
+  virtual void visit(ast::Pair const &P) = 0;
   virtual void visit(ast::QuotedExpr const &QE) = 0;
   virtual void visit(ast::RuntimeFunction const &RF) = 0;
   virtual void visit(ast::SetBang const &SB) = 0;

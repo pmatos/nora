@@ -53,6 +53,7 @@ public:
   virtual void visit(ast::LetValues const &LV) override;
   virtual void visit(ast::Linklet const &Linklet) override;
   virtual void visit(ast::List const &L) override;
+  virtual void visit(ast::Pair const &P) override;
   virtual void visit(ast::QuotedExpr const &L) override;
   virtual void visit(ast::RuntimeFunction const &LV) override;
   virtual void visit(ast::SetBang const &SB) override;
