@@ -193,6 +193,18 @@ void AnalysisFreeVars::visit(ast::Symbol const &Sym) {
   // Nothing to do.
 }
 
+void AnalysisFreeVars::visit(ast::WithContinuationMark const &WCM) {
+  // Check for free variables in the key, value and result expressions.
+  WCM.getKey().accept(*this);
+  WCM.getVal().accept(*this);
+  WCM.getResult().accept(*this);
+}
+
+void AnalysisFreeVars::visit(ast::ContinuationMarkSet const &CMS) {
+  // Continuation mark sets are runtime values with no free variables.
+  // Nothing to do.
+}
+
 void AnalysisFreeVars::visit(ast::Keyword const &K) {
   // Keywords have no free variables.
   // Nothing to do.

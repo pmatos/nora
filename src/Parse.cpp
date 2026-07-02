@@ -266,6 +266,11 @@ std::unique_ptr<ast::ExprNode> Parse::parseExpr(SourceStream &S) {
     return LV;
   }
 
+  std::unique_ptr<ast::WithContinuationMark> WCM = parseWithContinuationMark(S);
+  if (WCM) {
+    return WCM;
+  }
+
   // quote must be tried before application so that (quote datum) is not
   // greedily consumed as a plain application of `quote`.
   std::unique_ptr<ast::QuotedExpr> Q = parseQuote(S);
@@ -1134,6 +1139,56 @@ std::unique_ptr<ast::IfCond> Parse::parseIfCond(SourceStream &S) {
 
   If->setRange(rangeFrom(S, NodeStart));
   return If;
+}
+
+// Parse a with-continuation-mark form:
+// (with-continuation-mark key-expr val-expr result-expr)
+std::unique_ptr<ast::WithContinuationMark>
+Parse::parseWithContinuationMark(SourceStream &S) {
+  size_t Start = S.getPosition();
+
+  Tok T = gettok(S);
+  if (!T.is(Tok::TokType::LPAREN)) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  T = gettok(S);
+  if (!T.is(Tok::TokType::WITH_CONTINUATION_MARK)) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  auto WCM = std::make_unique<ast::WithContinuationMark>();
+
+  std::unique_ptr<ast::ExprNode> Key = parseExpr(S);
+  if (!Key) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+  WCM->setKey(std::move(Key));
+
+  std::unique_ptr<ast::ExprNode> Val = parseExpr(S);
+  if (!Val) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+  WCM->setVal(std::move(Val));
+
+  std::unique_ptr<ast::ExprNode> Result = parseExpr(S);
+  if (!Result) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+  WCM->setResult(std::move(Result));
+
+  T = gettok(S);
+  if (!T.is(Tok::TokType::RPAREN)) {
+    S.rewindTo(Start);
+    return nullptr;
+  }
+
+  return WCM;
 }
 
 // Parse boolean literal

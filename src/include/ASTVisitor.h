@@ -15,6 +15,7 @@ public:
   virtual void visit(ast::CaseLambdaClosure const &CL) = 0;
   virtual void visit(ast::Char const &C) = 0;
   virtual void visit(ast::Closure const &L) = 0;
+  virtual void visit(ast::ContinuationMarkSet const &CMS) = 0;
   virtual void visit(ast::DefineValues const &DV) = 0;
   virtual void visit(ast::Identifier const &Id) = 0;
   virtual void visit(ast::IfCond const &If) = 0;
@@ -33,4 +34,5 @@ public:
   virtual void visit(ast::VariableReference const &VR) = 0;
   virtual void visit(ast::Vector const &Vec) = 0;
   virtual void visit(ast::Void const &Vd) = 0;
+  virtual void visit(ast::WithContinuationMark const &WCM) = 0;
 };

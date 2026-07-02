@@ -359,6 +359,21 @@ TEST_CASE("Parsing begin", "[parser]") {
   REQUIRE(B->bodyCount() == 3);
 }
 
+TEST_CASE("Parsing with-continuation-mark", "[parser]") {
+  SourceStream W1("(with-continuation-mark 1 2 3)");
+  std::unique_ptr<ast::WithContinuationMark> W = parseWithContinuationMark(W1);
+
+  REQUIRE(W);
+  REQUIRE(llvm::cast<ast::Integer>(W->getKey()) == 1);
+  REQUIRE(llvm::cast<ast::Integer>(W->getVal()) == 2);
+  REQUIRE(llvm::cast<ast::Integer>(W->getResult()) == 3);
+
+  // A with-continuation-mark form needs exactly three subexpressions; one that
+  // is missing the result expression must not parse.
+  SourceStream W2("(with-continuation-mark 1 2)");
+  REQUIRE(!parseWithContinuationMark(W2));
+}
+
 TEST_CASE("DiagnosticEngine counts diagnostics", "[diagnostics]") {
   nora::DiagnosticEngine Diag;
   REQUIRE_FALSE(Diag.hadError());

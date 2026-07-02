@@ -9,6 +9,7 @@ class CaseLambda;
 class CaseLambdaClosure;
 class Char;
 class Closure;
+class ContinuationMarkSet;
 class DefineValues;
 class Identifier;
 class IfCond;
@@ -27,4 +28,5 @@ class Values;
 class VariableReference;
 class Vector;
 class Void;
+class WithContinuationMark;
 }; // namespace ast

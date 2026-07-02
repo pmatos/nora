@@ -23,6 +23,7 @@ public:
   virtual void visit(ast::CaseLambdaClosure const &CL) override;
   virtual void visit(ast::Char const &C) override;
   virtual void visit(ast::Closure const &L) override;
+  virtual void visit(ast::ContinuationMarkSet const &CMS) override;
   virtual void visit(ast::DefineValues const &DV) override;
   virtual void visit(ast::Identifier const &Id) override;
   virtual void visit(ast::IfCond const &If) override;
@@ -41,6 +42,7 @@ public:
   virtual void visit(ast::VariableReference const &VR) override;
   virtual void visit(ast::Vector const &Vec) override;
   virtual void visit(ast::Void const &Vd) override;
+  virtual void visit(ast::WithContinuationMark const &WCM) override;
 
   // Get the current saved result.
   std::set<ast::Identifier> getResult() const { return Result; };
