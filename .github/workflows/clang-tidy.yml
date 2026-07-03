@@ -64,6 +64,12 @@ jobs:
       # the PR in pre-existing findings from unchanged code. clang-tidy-diff.py
       # ships with the clang-tidy package; -warnings-as-errors makes any finding
       # on a changed line fail the job via the script's exit code.
+      #
+      # -only-check-in-db limits the lint to files present in the compile
+      # database. The debug preset omits src/mlir (opt-in behind NORA_ENABLE_MLIR,
+      # and its MLIR/TableGen deps are not installed here), so without this flag a
+      # PR touching src/mlir/*.cpp would be linted with no compile command and
+      # fail on missing mlir/IR/... and generated .inc headers.
       - name: Run clang-tidy on changed lines
         run: |
           BASE_REF="${GITHUB_BASE_REF:-main}"
@@ -77,4 +83,5 @@ jobs:
             | python3 "$DIFF_SCRIPT" \
                 -clang-tidy-binary "clang-tidy-${LLVM_VERSION}" \
                 -path build/debug -p1 -j "$(nproc)" \
+                -only-check-in-db \
                 -warnings-as-errors='*'
