@@ -25,6 +25,7 @@
 #include "Diagnostics.h"
 #include "Environment.h"
 #include "Runtime.h"
+#include "nora_rt.h"
 
 class Interpreter : public ASTVisitor {
 public:
@@ -79,6 +80,10 @@ public:
   // Peak continuation depth reached across every top-level form run so far.
   // Exposed for the tail-call tests: proper tail calls keep this bounded.
   size_t getPeakKont() const { return PeakKont; }
+  // Boehm GC live-heap / cumulative-bytes, for the M2 GC forcing seam (a
+  // depth-independent live-heap plateau against unbounded churn).
+  size_t getGCHeapSize() const { return nrt_gc_heap_size(); }
+  size_t getGCTotalBytes() const { return nrt_gc_total_bytes(); }
   std::unique_ptr<ast::ValueNode>
   callFunction(const std::string &Name,
                const llvm::SmallVector<const ast::ValueNode *> &Args) {

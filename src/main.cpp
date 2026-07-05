@@ -5,6 +5,8 @@
 #include <iterator>
 #include <variant>
 
+#include <gc.h>
+
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/InitLLVM.h>
@@ -37,6 +39,10 @@ static cl::opt<enum Action>
 } // namespace
 
 int main(int argc, char *argv[]) {
+  // Bring up the Boehm collector before anything allocates so it records the
+  // main-thread stack bottom (M2 value model). Non-incremental (the default),
+  // and before llvm::InitLLVM installs its signal handlers.
+  GC_INIT();
   llvm::InitLLVM X(argc, argv);
 
   cl::ParseCommandLineOptions(argc, argv, "norac\n");
