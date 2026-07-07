@@ -25,6 +25,7 @@
 #include "Diagnostics.h"
 #include "Environment.h"
 #include "Runtime.h"
+#include "gc_alloc.h"
 #include "nora_rt.h"
 
 class Interpreter : public ASTVisitor {
@@ -187,10 +188,14 @@ private:
 
   // Machine state.
   Mode M = Mode::Eval;
-  const ast::ASTNode *Control = nullptr;  // expression under evaluation
-  EnvPtr Env;                             // current environment
-  std::vector<Frame> Kont;                // continuation (top == back())
-  std::unique_ptr<ast::ValueNode> Val;    // value register (Continue mode)
+  const ast::ASTNode *Control = nullptr; // expression under evaluation
+  EnvPtr Env;                            // current environment
+  // The continuation. Its backing store is GC-allocated (and scanned) so that,
+  // as values migrate onto the GC heap, in-flight values held in frames stay
+  // reachable — the Kont header lives in this stack-resident Interpreter, so
+  // Boehm's stack scan roots the buffer. (M2/GC S1.)
+  std::vector<Frame, GcAllocator<Frame>> Kont; // continuation (top == back())
+  std::unique_ptr<ast::ValueNode> Val;         // value register (Continue mode)
   EnvPtr GlobalEnv;                       // top-level scope, persists per form
   std::unique_ptr<ast::ValueNode> Result; // result of the whole linklet
   size_t PeakKont = 0;                    // peak |Kont| seen (tail-call tests)
