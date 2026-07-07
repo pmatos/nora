@@ -9,6 +9,8 @@
 
 #include <llvm/Support/Casting.h>
 
+#include <gc.h>
+
 #include <memory>
 #include <string>
 
@@ -98,6 +100,17 @@ TEST_CASE("non-tail recursion still grows the continuation", "[interp][tco]") {
   // Peak depth grows with the recursion count and dwarfs the tail loop's.
   REQUIRE(nonTailLoopPeak(2000) > nonTailLoopPeak(1000));
   REQUIRE(nonTailLoopPeak(1000) > 10 * tailLoopPeak(1000));
+}
+
+TEST_CASE("the continuation lives in the GC heap", "[m2][gc]") {
+  // A deep non-tail recursion grows the Kont vector to thousands of frames.
+  // Nothing else is GC-allocated during evaluation yet, so the cumulative GC
+  // bytes churned by the run measure Kont's backing store: ~0 while Kont is
+  // malloc'd, large once it is GC-allocated. (GC-heap seam, per the plan.)
+  const size_t Before = GC_get_total_bytes();
+  (void)nonTailLoopPeak(4000);
+  const size_t Churned = GC_get_total_bytes() - Before;
+  REQUIRE(Churned > 100000);
 }
 
 TEST_CASE("a box round-trips its contents", "[interp][m2]") {
