@@ -54,6 +54,14 @@ jobs:
             "llvm-${LLVM_VERSION}-tools"
           echo "/usr/lib/llvm-${LLVM_VERSION}/bin" >> "$GITHUB_PATH"
 
+      # Validate the ruleset itself. .clang-tidy is in the paths filter, but the
+      # diff-scoped lint below sees an empty patch on a config-only PR, so without
+      # this a malformed .clang-tidy could merge green and break the next source
+      # PR. --verify-config reads ./.clang-tidy, needs no compile database, and is
+      # instant.
+      - name: Verify clang-tidy config
+        run: clang-tidy-${LLVM_VERSION} --verify-config
+
       # Only configure: CMAKE_EXPORT_COMPILE_COMMANDS (set by the preset) writes
       # build/debug/compile_commands.json and configure_file generates config.h,
       # which is all clang-tidy needs. Building is unnecessary for a lint pass.
