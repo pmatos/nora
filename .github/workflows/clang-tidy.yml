@@ -65,11 +65,14 @@ jobs:
       # ships with the clang-tidy package; -warnings-as-errors makes any finding
       # on a changed line fail the job via the script's exit code.
       #
-      # -only-check-in-db limits the lint to files present in the compile
-      # database. The debug preset omits src/mlir (opt-in behind NORA_ENABLE_MLIR,
-      # and its MLIR/TableGen deps are not installed here), so without this flag a
-      # PR touching src/mlir/*.cpp would be linted with no compile command and
-      # fail on missing mlir/IR/... and generated .inc headers.
+      # src/mlir is excluded via the git pathspec: it is opt-in behind
+      # NORA_ENABLE_MLIR (absent from the debug compile DB, and its MLIR/TableGen
+      # deps are not installed here), so linting it would fail on missing
+      # mlir/IR/... and generated .inc headers. Everything else is checked,
+      # including changed headers — clang-tidy lints those by borrowing a real
+      # translation unit's compile command (inferMissingCompileCommands). A
+      # blunter -only-check-in-db would also skip headers, silently leaving
+      # header-only PRs unlinted.
       - name: Run clang-tidy on changed lines
         run: |
           BASE_REF="${GITHUB_BASE_REF:-main}"
@@ -79,9 +82,9 @@ jobs:
             exit 1
           fi
           echo "Linting changes relative to origin/${BASE_REF} with ${DIFF_SCRIPT}"
-          git diff -U0 "origin/${BASE_REF}...HEAD" -- '*.cpp' '*.cc' '*.h' '*.hpp' '*.inc' \
+          git diff -U0 "origin/${BASE_REF}...HEAD" \
+              -- '*.cpp' '*.cc' '*.h' '*.hpp' '*.inc' ':(exclude)src/mlir/*' \
             | python3 "$DIFF_SCRIPT" \
                 -clang-tidy-binary "clang-tidy-${LLVM_VERSION}" \
                 -path build/debug -p1 -j "$(nproc)" \
-                -only-check-in-db \
                 -warnings-as-errors='*'
