@@ -25,6 +25,7 @@
 #include "Diagnostics.h"
 #include "Environment.h"
 #include "Runtime.h"
+#include "Value.h"
 #include "gc_alloc.h"
 #include "nora_rt.h"
 
@@ -76,7 +77,7 @@ public:
     if (!Result) {
       return nullptr;
     }
-    return std::unique_ptr<ast::ValueNode>(Result->clone());
+    return std::unique_ptr<ast::ValueNode>(Result.get()->clone());
   };
   // Peak continuation depth reached across every top-level form run so far.
   // Exposed for the tail-call tests: proper tail calls keep this bounded.
@@ -195,10 +196,10 @@ private:
   // reachable — the Kont header lives in this stack-resident Interpreter, so
   // Boehm's stack scan roots the buffer. (M2/GC S1.)
   std::vector<Frame, GcAllocator<Frame>> Kont; // continuation (top == back())
-  std::unique_ptr<ast::ValueNode> Val;         // value register (Continue mode)
-  EnvPtr GlobalEnv;                       // top-level scope, persists per form
-  std::unique_ptr<ast::ValueNode> Result; // result of the whole linklet
-  size_t PeakKont = 0;                    // peak |Kont| seen (tail-call tests)
+  Value Val;                                   // value register (Continue mode)
+  EnvPtr GlobalEnv;    // top-level scope, persists per form
+  Value Result;        // result of the whole linklet
+  size_t PeakKont = 0; // peak |Kont| seen (tail-call tests)
 
   // Every scope created during evaluation, so their bindings can be cleared in
   // the destructor. Live-environment closures capture the scope that binds them

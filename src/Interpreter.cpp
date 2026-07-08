@@ -112,7 +112,7 @@ void Interpreter::visit(ast::Linklet const &Linklet) {
     Val = nullptr;
     M = Mode::Eval;
     run();
-    Last = std::move(Val);
+    Last = Val.takeLegacy();
     if (Diag.hadError()) {
       break;
     }
@@ -149,7 +149,7 @@ void Interpreter::continueStep() {
 
   case Frame::Seq: {
     if (Top.Begin0 && Top.Idx == 1) {
-      Top.Saved = std::move(Val);
+      Top.Saved = Val.takeLegacy();
     }
     if (Top.Idx < Top.Exprs.size()) {
       const bool IsLast = Top.Idx + 1 == Top.Exprs.size();
@@ -174,7 +174,7 @@ void Interpreter::continueStep() {
       // saved first value; a plain sequence's final expression is handled
       // above.
       std::unique_ptr<ast::ValueNode> R =
-          Top.Begin0 ? std::move(Top.Saved) : std::move(Val);
+          Top.Begin0 ? std::move(Top.Saved) : Val.takeLegacy();
       Kont.pop_back();
       deliver(std::move(R));
     }
@@ -185,7 +185,7 @@ void Interpreter::continueStep() {
     const ast::ExprNode *ThenE = Top.ThenE;
     const ast::ExprNode *ElseE = Top.ElseE;
     EnvPtr E = Top.Env;
-    std::unique_ptr<ast::ValueNode> Cond = std::move(Val);
+    std::unique_ptr<ast::ValueNode> Cond = Val.takeLegacy();
     Kont.pop_back();
     auto *B = llvm::dyn_cast_or_null<ast::BooleanLiteral>(Cond.get());
     Control = (B && !B->value()) ? ElseE : ThenE;
@@ -195,7 +195,7 @@ void Interpreter::continueStep() {
   }
 
   case Frame::App: {
-    Top.Done.push_back(std::move(Val));
+    Top.Done.push_back(Val.takeLegacy());
     if (Top.Done.size() < Top.Exprs.size()) {
       Control = Top.Exprs[Top.Done.size()];
       Env = Top.Env;
@@ -211,7 +211,7 @@ void Interpreter::continueStep() {
   }
 
   case Frame::MkValues: {
-    Top.Done.push_back(std::move(Val));
+    Top.Done.push_back(Val.takeLegacy());
     if (Top.Done.size() < Top.Exprs.size()) {
       Control = Top.Exprs[Top.Done.size()];
       Env = Top.Env;
@@ -234,7 +234,7 @@ void Interpreter::continueStep() {
   }
 
   case Frame::LetBind: {
-    Top.Done.push_back(std::move(Val));
+    Top.Done.push_back(Val.takeLegacy());
     const ast::LetValues *Let = Top.Let;
     if (Top.Done.size() < Let->exprsCount()) {
       Control = &Let->getBindingExpr(Top.Done.size());
@@ -273,7 +273,7 @@ void Interpreter::continueStep() {
     const ast::LetValues *Let = Top.Let;
     EnvPtr RecScope = Top.RecScope;
     if (!bindValues(Diag, Let->getLoc(), RecScope->Vars,
-                    Let->getBindingIds(Top.Idx), std::move(Val))) {
+                    Let->getBindingIds(Top.Idx), Val.takeLegacy())) {
       abortEval();
       return;
     }
@@ -297,7 +297,7 @@ void Interpreter::continueStep() {
   case Frame::Define: {
     const ast::DefineValues *DV = Top.Def;
     EnvPtr DefEnv = Top.DefEnv;
-    std::unique_ptr<ast::ValueNode> V = std::move(Val);
+    std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
     Kont.pop_back();
 
     if (DV->countIds() == 1) {
@@ -334,7 +334,7 @@ void Interpreter::continueStep() {
   case Frame::Set: {
     const ast::Identifier *Id = Top.SetId;
     EnvPtr E = Top.Env;
-    std::unique_ptr<ast::ValueNode> V = std::move(Val);
+    std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
     Kont.pop_back();
     if (!envSet(E, *Id, std::move(V))) {
       Diag.error(Id->getLoc(), llvm::Twine("cannot set unbound identifier: ") +
@@ -350,7 +350,7 @@ void Interpreter::continueStep() {
     const ast::ExprNode *ValE = Top.WcmValE;
     const ast::ExprNode *ResultE = Top.WcmResultE;
     EnvPtr E = Top.Env;
-    std::unique_ptr<ast::ValueNode> KeyV = std::move(Val);
+    std::unique_ptr<ast::ValueNode> KeyV = Val.takeLegacy();
     Kont.pop_back();
     Kont.emplace_back(Frame::WcmVal);
     Frame &WV = Kont.back();
@@ -367,7 +367,7 @@ void Interpreter::continueStep() {
     const ast::ExprNode *ResultE = Top.WcmResultE;
     EnvPtr E = Top.Env;
     std::unique_ptr<ast::ValueNode> KeyV = std::move(Top.WcmKeyV);
-    std::unique_ptr<ast::ValueNode> ValV = std::move(Val);
+    std::unique_ptr<ast::ValueNode> ValV = Val.takeLegacy();
     Kont.pop_back();
     // Push a dedicated mark-bearing frame holding this key/value, and evaluate
     // the result expression under it. The frame is popped when the result
@@ -385,7 +385,7 @@ void Interpreter::continueStep() {
   case Frame::WcmMark: {
     // The result expression has produced a value; discard the mark frame and
     // pass the value through to the enclosing continuation.
-    std::unique_ptr<ast::ValueNode> V = std::move(Val);
+    std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
     Kont.pop_back();
     deliver(std::move(V));
     break;
@@ -394,7 +394,7 @@ void Interpreter::continueStep() {
   case Frame::Call: {
     // The activation's body has produced a value; its frame (and marks) is
     // discarded and the value flows to the caller's continuation.
-    std::unique_ptr<ast::ValueNode> V = std::move(Val);
+    std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
     Kont.pop_back();
     deliver(std::move(V));
     break;
