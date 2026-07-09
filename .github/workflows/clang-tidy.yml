@@ -1,0 +1,98 @@
+name: ClangTidy
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '**.cpp'
+      - '**.cc'
+      - '**.h'
+      - '**.hpp'
+      - '**.inc'
+      - '.clang-tidy'
+      - '.github/workflows/clang-tidy.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clang-tidy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  LLVM_VERSION: "22"
+  CMAKE_PREFIX_PATH: /usr/lib/llvm-22
+  # clang-tidy is a Clang tool, so the compile database must carry
+  # Clang-compatible flags; configuring with GCC leaks GCC-only warning
+  # options that clang-tidy then rejects as unknown-warning-option errors.
+  CC: clang-22
+  CXX: clang++-22
+
+jobs:
+  clang-tidy:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install LLVM ${{ env.LLVM_VERSION }}
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh "$LLVM_VERSION"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgmp-dev \
+            "clang-${LLVM_VERSION}" "clang-tidy-${LLVM_VERSION}" \
+            "clang-tools-${LLVM_VERSION}" "llvm-${LLVM_VERSION}-dev" \
+            "llvm-${LLVM_VERSION}-tools"
+          echo "/usr/lib/llvm-${LLVM_VERSION}/bin" >> "$GITHUB_PATH"
+
+      # Validate the ruleset itself. .clang-tidy is in the paths filter, but the
+      # diff-scoped lint below sees an empty patch on a config-only PR, so without
+      # this a malformed .clang-tidy could merge green and break the next source
+      # PR. --verify-config reads ./.clang-tidy, needs no compile database, and is
+      # instant.
+      - name: Verify clang-tidy config
+        run: clang-tidy-${LLVM_VERSION} --verify-config
+
+      # Only configure: CMAKE_EXPORT_COMPILE_COMMANDS (set by the preset) writes
+      # build/debug/compile_commands.json and configure_file generates config.h,
+      # which is all clang-tidy needs. Building is unnecessary for a lint pass.
+      - name: Configure (generate compile_commands.json)
+        run: cmake --preset debug
+
+      # Diff-scoped so the ruleset applies to new/changed lines without drowning
+      # the PR in pre-existing findings from unchanged code. clang-tidy-diff.py
+      # ships with the clang-tidy package; -warnings-as-errors makes any finding
+      # on a changed line fail the job via the script's exit code.
+      #
+      # src/mlir is excluded via the git pathspec: it is opt-in behind
+      # NORA_ENABLE_MLIR (absent from the debug compile DB, and its MLIR/TableGen
+      # deps are not installed here), so linting it would fail on missing
+      # mlir/IR/... and generated .inc headers. Everything else is checked,
+      # including changed headers — clang-tidy lints those by borrowing a real
+      # translation unit's compile command (inferMissingCompileCommands). A
+      # blunter -only-check-in-db would also skip headers, silently leaving
+      # header-only PRs unlinted.
+      - name: Run clang-tidy on changed lines
+        run: |
+          BASE_REF="${GITHUB_BASE_REF:-main}"
+          DIFF_SCRIPT="$(find "/usr/lib/llvm-${LLVM_VERSION}" -name clang-tidy-diff.py | head -n1)"
+          if [ -z "$DIFF_SCRIPT" ]; then
+            echo "::error::clang-tidy-diff.py not found in the LLVM ${LLVM_VERSION} installation"
+            exit 1
+          fi
+          echo "Linting changes relative to origin/${BASE_REF} with ${DIFF_SCRIPT}"
+          git diff -U0 "origin/${BASE_REF}...HEAD" \
+              -- '*.cpp' '*.cc' '*.h' '*.hpp' '*.inc' ':(exclude)src/mlir/*' \
+            | python3 "$DIFF_SCRIPT" \
+                -clang-tidy-binary "clang-tidy-${LLVM_VERSION}" \
+                -path build/debug -p1 -j "$(nproc)" \
+                -warnings-as-errors='*'

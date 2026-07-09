@@ -2,10 +2,10 @@
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 #
 # The only tracked ecosystem is GitHub Actions: the workflow actions are pinned
-# to commit SHAs, and Dependabot keeps those pins (and the version comments)
-# current. The C++/CMake dependencies (LLVM, MLIR, GMP) are provided by the
-# system toolchain and Catch2 is fetched by CMake FetchContent, so there is no
-# package manifest for Dependabot to track.
+# to release tags, and Dependabot bumps them when new releases are published.
+# The C++/CMake dependencies (LLVM, MLIR, GMP) are provided by the system
+# toolchain and Catch2 is fetched by CMake FetchContent, so there is no package
+# manifest for Dependabot to track.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
