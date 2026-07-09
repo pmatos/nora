@@ -46,6 +46,7 @@ public:
     AST_WithContinuationMark,
     First_ValueNode, // all ValueNodes must be after this
     AST_BooleanLiteral,
+    AST_Box, // result of (box v)
     AST_CaseLambda,
     AST_CaseLambdaClosure, // result of evaluating a CaseLambda expression
     AST_Char,
@@ -55,6 +56,7 @@ public:
     AST_Keyword,
     AST_Lambda,
     AST_List,
+    AST_Pair, // result of (cons a d)
     AST_String,
     AST_Symbol,
     AST_Values,
@@ -203,17 +205,24 @@ public:
   explicit Symbol(llvm::StringRef Name)
       : ClonableNode(ASTNodeKind::AST_Symbol), Name(Name) {}
   Symbol(const Symbol &S)
-      : ClonableNode(ASTNodeKind::AST_Symbol), Name(S.Name) {}
+      : ClonableNode(ASTNodeKind::AST_Symbol), Name(S.Name),
+        Uninterned(S.Uninterned) {}
   Symbol(Symbol &&) = default;
   Symbol &operator=(const Symbol &S) = delete;
   Symbol &operator=(Symbol &&S) = delete;
   virtual ~Symbol() = default;
 
-  // FIXME: symbols are not interned yet, so eq?/eqv? identity is approximated
-  // by comparing names. Interning is future work.
+  // Structural (name) comparison, used by valueEq for quoted-datum equality.
   bool operator==(const Symbol &S) const { return getName() == S.getName(); }
 
   [[nodiscard]] llvm::StringRef getName() const { return Name; }
+  // Object identity for eq?: interned symbols are canonical by name; an
+  // uninterned symbol (gensym / string->uninterned-symbol) carries a unique
+  // token shared across its clones.
+  [[nodiscard]] const void *identity() const;
+  [[nodiscard]] bool isInterned() const { return Uninterned == nullptr; }
+  // A fresh uninterned symbol with the given (cosmetic) name.
+  static std::unique_ptr<Symbol> makeUninterned(llvm::StringRef Name);
   LLVM_DUMP_METHOD void dump() const override;
   void write() const override;
 
@@ -223,6 +232,7 @@ public:
 
 private:
   llvm::SmallString<32> Name;
+  std::shared_ptr<void> Uninterned; // null => interned
 };
 
 // A keyword datum, e.g. #:foo. Name holds the bare keyword (without the leading

@@ -25,6 +25,9 @@
 #include "Diagnostics.h"
 #include "Environment.h"
 #include "Runtime.h"
+#include "Value.h"
+#include "gc_alloc.h"
+#include "nora_rt.h"
 
 class Interpreter : public ASTVisitor {
 public:
@@ -38,6 +41,7 @@ public:
   virtual void visit(ast::Application const &A) override;
   virtual void visit(ast::Begin const &B) override;
   virtual void visit(ast::BooleanLiteral const &Bool) override;
+  virtual void visit(ast::Box const &B) override;
   virtual void visit(ast::CaseLambda const &CL) override;
   virtual void visit(ast::CaseLambdaClosure const &CL) override;
   virtual void visit(ast::Char const &C) override;
@@ -52,6 +56,7 @@ public:
   virtual void visit(ast::LetValues const &LV) override;
   virtual void visit(ast::Linklet const &Linklet) override;
   virtual void visit(ast::List const &L) override;
+  virtual void visit(ast::Pair const &P) override;
   virtual void visit(ast::QuotedExpr const &L) override;
   virtual void visit(ast::RuntimeFunction const &LV) override;
   virtual void visit(ast::SetBang const &SB) override;
@@ -72,8 +77,15 @@ public:
     if (!Result) {
       return nullptr;
     }
-    return std::unique_ptr<ast::ValueNode>(Result->clone());
+    return std::unique_ptr<ast::ValueNode>(Result.get()->clone());
   };
+  // Peak continuation depth reached across every top-level form run so far.
+  // Exposed for the tail-call tests: proper tail calls keep this bounded.
+  size_t getPeakKont() const { return PeakKont; }
+  // Boehm GC live-heap / cumulative-bytes, for the M2 GC forcing seam (a
+  // depth-independent live-heap plateau against unbounded churn).
+  size_t getGCHeapSize() const { return nrt_gc_heap_size(); }
+  size_t getGCTotalBytes() const { return nrt_gc_total_bytes(); }
   std::unique_ptr<ast::ValueNode>
   callFunction(const std::string &Name,
                const llvm::SmallVector<const ast::ValueNode *> &Args) {
@@ -177,12 +189,17 @@ private:
 
   // Machine state.
   Mode M = Mode::Eval;
-  const ast::ASTNode *Control = nullptr;  // expression under evaluation
-  EnvPtr Env;                             // current environment
-  std::vector<Frame> Kont;                // continuation (top == back())
-  std::unique_ptr<ast::ValueNode> Val;    // value register (Continue mode)
-  EnvPtr GlobalEnv;                       // top-level scope, persists per form
-  std::unique_ptr<ast::ValueNode> Result; // result of the whole linklet
+  const ast::ASTNode *Control = nullptr; // expression under evaluation
+  EnvPtr Env;                            // current environment
+  // The continuation. Its backing store is GC-allocated (and scanned) so that,
+  // as values migrate onto the GC heap, in-flight values held in frames stay
+  // reachable — the Kont header lives in this stack-resident Interpreter, so
+  // Boehm's stack scan roots the buffer. (M2/GC S1.)
+  std::vector<Frame, GcAllocator<Frame>> Kont; // continuation (top == back())
+  Value Val;                                   // value register (Continue mode)
+  EnvPtr GlobalEnv;    // top-level scope, persists per form
+  Value Result;        // result of the whole linklet
+  size_t PeakKont = 0; // peak |Kont| seen (tail-call tests)
 
   // Every scope created during evaluation, so their bindings can be cleared in
   // the destructor. Live-environment closures capture the scope that binds them

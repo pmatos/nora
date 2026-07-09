@@ -1,5 +1,8 @@
 #include "AST.h"
 
+#include <string>
+#include <unordered_set>
+
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
@@ -83,6 +86,22 @@ void Symbol::dump() const { llvm::dbgs() << "#<symbol:" << Name << ">"; }
 // the enclosing QuotedExpr. Use std::cout so output interleaves correctly with
 // the other value writers (List, Integer via gmp_printf).
 void Symbol::write() const { std::cout << getName().str(); }
+
+const void *Symbol::identity() const {
+  if (Uninterned) {
+    return Uninterned.get();
+  }
+  // Interned symbols are canonical by name: a global table hands out one stable
+  // pointer per name (unordered_set never invalidates element pointers).
+  static std::unordered_set<std::string> InternTable;
+  return &*InternTable.insert(getName().str()).first;
+}
+
+std::unique_ptr<Symbol> Symbol::makeUninterned(llvm::StringRef Name) {
+  auto S = std::make_unique<Symbol>(Name);
+  S->Uninterned = std::make_shared<char>(); // fresh unique identity token
+  return S;
+}
 
 //
 // Implementation of Keyword node.

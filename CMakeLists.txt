@@ -94,6 +94,12 @@ endif()
 
 message(STATUS "Found GMP library")
 
+# Configure the Boehm-Demers-Weiser GC (M2 value model). Shipped as pkg-config
+# `bdw-gc`; exposes the imported target PkgConfig::BDWGC.
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(BDWGC REQUIRED IMPORTED_TARGET bdw-gc)
+message(STATUS "Found Boehm GC ${BDWGC_VERSION}")
+
 # Configure LLVM
 find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")

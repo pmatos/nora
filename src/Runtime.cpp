@@ -184,6 +184,293 @@ public:
   void accept(ASTVisitor &V) const override { V.visit(*this); }
 };
 
+// (zero? n) is a minimal integer predicate. It exists so a terminating
+// tail-recursive loop can be written to exercise proper tail calls (M1); the
+// full numeric tower and its predicates arrive in M4.
+class ZeroPredicateFunction : public ast::RuntimeFunction {
+public:
+  ZeroPredicateFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 1) {
+      return nullptr;
+    }
+    if (auto const *I = llvm::dyn_cast<ast::Integer>(Args[0])) {
+      return std::make_unique<ast::BooleanLiteral>(*I == 0);
+    }
+    return nullptr;
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new ZeroPredicateFunction(*this);
+  }
+
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+// (box v) allocates a fresh mutable cell holding v. (unbox b) reads it. The
+// box's cell is shared across copies of the Box value, so mutation and identity
+// survive the interpreter's clone-on-lookup - the start of M2's shared value
+// model.
+class BoxFunction : public ast::RuntimeFunction {
+public:
+  BoxFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 1) {
+      return nullptr;
+    }
+    return std::make_unique<ast::Box>(
+        std::unique_ptr<ast::ValueNode>(Args[0]->clone()));
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new BoxFunction(*this);
+  }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+class UnboxFunction : public ast::RuntimeFunction {
+public:
+  UnboxFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 1) {
+      return nullptr;
+    }
+    if (auto const *B = llvm::dyn_cast<ast::Box>(Args[0])) {
+      return B->get();
+    }
+    return nullptr;
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new UnboxFunction(*this);
+  }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+class SetBoxFunction : public ast::RuntimeFunction {
+public:
+  SetBoxFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 2) {
+      return nullptr;
+    }
+    if (auto const *B = llvm::dyn_cast<ast::Box>(Args[0])) {
+      B->set(std::unique_ptr<ast::ValueNode>(Args[1]->clone()));
+      return std::make_unique<ast::Void>();
+    }
+    return nullptr;
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new SetBoxFunction(*this);
+  }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+// (eq? a b): object identity. Heap objects with a cell (boxes) compare by cell
+// pointer; other values fall back to the structural valueEq approximation
+// (interned symbols, fixnums, chars, booleans). This is the identity operation
+// the clone-everything model could not provide.
+class EqFunction : public ast::RuntimeFunction {
+public:
+  EqFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 2) {
+      return nullptr;
+    }
+    const ast::ValueNode *A = Args[0];
+    const ast::ValueNode *B = Args[1];
+    bool Eq;
+    if (auto const *BA = llvm::dyn_cast<ast::Box>(A)) {
+      auto const *BB = llvm::dyn_cast<ast::Box>(B);
+      Eq = (BB != nullptr) && BA->identity() == BB->identity();
+    } else if (auto const *PA = llvm::dyn_cast<ast::Pair>(A)) {
+      auto const *PB = llvm::dyn_cast<ast::Pair>(B);
+      Eq = (PB != nullptr) && PA->identity() == PB->identity();
+    } else if (auto const *SA = llvm::dyn_cast<ast::Symbol>(A)) {
+      auto const *SB = llvm::dyn_cast<ast::Symbol>(B);
+      Eq = (SB != nullptr) && SA->identity() == SB->identity();
+    } else {
+      Eq = ast::valueEq(*A, *B);
+    }
+    return std::make_unique<ast::BooleanLiteral>(Eq);
+  }
+
+  ast::RuntimeFunction *clone() const override { return new EqFunction(*this); }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+// (cons a d) allocates a fresh mutable pair; (car p)/(cdr p) read its fields.
+// The pair's cell is shared across copies of the Pair value, so mutation and
+// identity survive the interpreter's clone-on-lookup.
+class ConsFunction : public ast::RuntimeFunction {
+public:
+  ConsFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 2) {
+      return nullptr;
+    }
+    return std::make_unique<ast::Pair>(
+        std::unique_ptr<ast::ValueNode>(Args[0]->clone()),
+        std::unique_ptr<ast::ValueNode>(Args[1]->clone()));
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new ConsFunction(*this);
+  }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+class CarFunction : public ast::RuntimeFunction {
+public:
+  CarFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 1) {
+      return nullptr;
+    }
+    if (auto const *P = llvm::dyn_cast<ast::Pair>(Args[0])) {
+      return P->car();
+    }
+    return nullptr;
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new CarFunction(*this);
+  }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+class CdrFunction : public ast::RuntimeFunction {
+public:
+  CdrFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 1) {
+      return nullptr;
+    }
+    if (auto const *P = llvm::dyn_cast<ast::Pair>(Args[0])) {
+      return P->cdr();
+    }
+    return nullptr;
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new CdrFunction(*this);
+  }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+class SetCarFunction : public ast::RuntimeFunction {
+public:
+  SetCarFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 2) {
+      return nullptr;
+    }
+    if (auto const *P = llvm::dyn_cast<ast::Pair>(Args[0])) {
+      P->setCar(std::unique_ptr<ast::ValueNode>(Args[1]->clone()));
+      return std::make_unique<ast::Void>();
+    }
+    return nullptr;
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new SetCarFunction(*this);
+  }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+class SetCdrFunction : public ast::RuntimeFunction {
+public:
+  SetCdrFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 2) {
+      return nullptr;
+    }
+    if (auto const *P = llvm::dyn_cast<ast::Pair>(Args[0])) {
+      P->setCdr(std::unique_ptr<ast::ValueNode>(Args[1]->clone()));
+      return std::make_unique<ast::Void>();
+    }
+    return nullptr;
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new SetCdrFunction(*this);
+  }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+// (string->uninterned-symbol s) makes a fresh uninterned symbol: distinct from
+// every other symbol (interned or not), even one with the same name. Interned
+// symbols, by contrast, are canonical by name, so eq? on symbols is identity.
+class StringToUninternedSymbolFunction : public ast::RuntimeFunction {
+public:
+  StringToUninternedSymbolFunction(const std::string &Name)
+      : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() != 1) {
+      return nullptr;
+    }
+    if (auto const *S = llvm::dyn_cast<ast::String>(Args[0])) {
+      return ast::Symbol::makeUninterned(S->getValue());
+    }
+    return nullptr;
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new StringToUninternedSymbolFunction(*this);
+  }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
+// (gensym [base]) returns a fresh uninterned symbol, never eq? to any other.
+// A monotonic counter gives it a readable, unique name; distinctness comes from
+// its uninterned identity, not the name.
+class GensymFunction : public ast::RuntimeFunction {
+public:
+  GensymFunction(const std::string &Name) : RuntimeFunction(Name) {}
+
+  std::unique_ptr<ast::ValueNode> operator()(
+      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    static unsigned Counter = 0;
+    std::string Base = "g";
+    if (Args.size() == 1) {
+      if (auto const *S = llvm::dyn_cast<ast::Symbol>(Args[0])) {
+        Base = S->getName().str();
+      } else if (auto const *Str = llvm::dyn_cast<ast::String>(Args[0])) {
+        Base = Str->getValue().str();
+      }
+    }
+    return ast::Symbol::makeUninterned(Base + std::to_string(++Counter));
+  }
+
+  ast::RuntimeFunction *clone() const override {
+    return new GensymFunction(*this);
+  }
+  void accept(ASTVisitor &V) const override { V.visit(*this); }
+};
+
 #define RUNTIME_FUNC(Identifier, Name)                                         \
   RuntimeFunctions[Identifier] = std::make_shared<Name>(Identifier);
 Runtime::Runtime() {
@@ -195,6 +482,18 @@ Runtime::Runtime() {
   RUNTIME_FUNC("continuation-mark-set-first", ContinuationMarkSetFirstFunction);
   RUNTIME_FUNC("continuation-mark-set->list",
                ContinuationMarkSetToListFunction);
+  RUNTIME_FUNC("zero?", ZeroPredicateFunction);
+  RUNTIME_FUNC("box", BoxFunction);
+  RUNTIME_FUNC("unbox", UnboxFunction);
+  RUNTIME_FUNC("set-box!", SetBoxFunction);
+  RUNTIME_FUNC("eq?", EqFunction);
+  RUNTIME_FUNC("cons", ConsFunction);
+  RUNTIME_FUNC("car", CarFunction);
+  RUNTIME_FUNC("cdr", CdrFunction);
+  RUNTIME_FUNC("set-car!", SetCarFunction);
+  RUNTIME_FUNC("set-cdr!", SetCdrFunction);
+  RUNTIME_FUNC("string->uninterned-symbol", StringToUninternedSymbolFunction);
+  RUNTIME_FUNC("gensym", GensymFunction);
 }
 
 std::unique_ptr<ast::ValueNode>

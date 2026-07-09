@@ -19,6 +19,7 @@ llvm_map_components_to_libnames(LLVM_LIBS support)
 
 add_executable(test_parse
   test_parse.cpp
+  test_main.cpp
   ${PROJECT_SOURCE_DIR}/src/AnalysisFreeVars.cpp
   ${PROJECT_SOURCE_DIR}/src/AST.cpp
   ${PROJECT_SOURCE_DIR}/src/ASTRuntime.cpp
@@ -30,7 +31,30 @@ add_executable(test_parse
   ${PROJECT_SOURCE_DIR}/src/Runtime.cpp
   ${PROJECT_SOURCE_DIR}/src/SourceStream.cpp
   ${PROJECT_SOURCE_DIR}/src/UTF8.cpp
+  ${PROJECT_SOURCE_DIR}/src/nora_rt.cpp
 )
-target_link_libraries(test_parse PRIVATE Catch2::Catch2 gmp gmpxx ${LLVM_LIBS})
+target_link_libraries(test_parse PRIVATE Catch2::Catch2 gmp gmpxx PkgConfig::BDWGC ${LLVM_LIBS})
 
 catch_discover_tests(test_parse)
+
+add_executable(test_interpreter
+  test_interpreter.cpp
+  test_main.cpp
+  test_gc.cpp
+  ${PROJECT_SOURCE_DIR}/src/AnalysisFreeVars.cpp
+  ${PROJECT_SOURCE_DIR}/src/AST.cpp
+  ${PROJECT_SOURCE_DIR}/src/ASTRuntime.cpp
+  ${PROJECT_SOURCE_DIR}/src/Diagnostics.cpp
+  ${PROJECT_SOURCE_DIR}/src/Environment.cpp
+  ${PROJECT_SOURCE_DIR}/src/IdPool.cpp
+  ${PROJECT_SOURCE_DIR}/src/Interpreter.cpp
+  ${PROJECT_SOURCE_DIR}/src/Lex.cpp
+  ${PROJECT_SOURCE_DIR}/src/Parse.cpp
+  ${PROJECT_SOURCE_DIR}/src/Runtime.cpp
+  ${PROJECT_SOURCE_DIR}/src/SourceStream.cpp
+  ${PROJECT_SOURCE_DIR}/src/UTF8.cpp
+  ${PROJECT_SOURCE_DIR}/src/nora_rt.cpp
+)
+target_link_libraries(test_interpreter PRIVATE Catch2::Catch2 gmp gmpxx PkgConfig::BDWGC ${LLVM_LIBS})
+
+catch_discover_tests(test_interpreter)
