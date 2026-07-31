@@ -7,6 +7,9 @@
 # The extracted Racket expander is a generated artifact and is excluded.
 exclude: '^expander/expander\.rktl$'
 
+# So a plain `pre-commit install` wires up both stages.
+default_install_hook_types: [pre-commit, commit-msg]
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -26,3 +29,9 @@ repos:
     hooks:
       - id: clang-format
         types_or: [c++, c]
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
