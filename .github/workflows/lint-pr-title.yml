@@ -2,7 +2,9 @@
 # https://www.conventionalcommits.org/  |  https://github.com/amannn/action-semantic-pull-request
 name: Lint PR title
 
-on:
+# pull_request_target is required so the check also runs on fork PRs. It is safe
+# here: no PR code is checked out and the token is read-only on pull-requests.
+on: # zizmor: ignore[dangerous-triggers]
   pull_request_target:
     types:
       - opened
