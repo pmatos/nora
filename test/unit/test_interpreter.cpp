@@ -280,3 +280,56 @@ TEST_CASE("mutual tail recursion is bounded and correct", "[interp][tco]") {
   REQUIRE(Int);
   REQUIRE(*Int == 1); // ev(100000): 100000 is even
 }
+
+namespace {
+// Peak continuation depth of a self-tail-recursive countdown of `depth` steps
+// whose body is wrapped in a with-continuation-mark around the tail call.
+size_t wcmTailLoopPeak(int Depth) {
+  nora::DiagnosticEngine Diag;
+  std::string Src = "(linklet () () (letrec-values ([(loop) "
+                    "(lambda (n) (with-continuation-mark 'k n "
+                    "  (if (zero? n) 0 (loop (- n 1)))))]) (loop " +
+                    std::to_string(Depth) + ")))";
+  SourceStream S(Src.c_str(), &Diag);
+  std::unique_ptr<ast::Linklet> AST = Parse::parseLinklet(S);
+  REQUIRE(AST);
+  Interpreter I(Diag);
+  AST->accept(I);
+  REQUIRE_FALSE(Diag.hadError());
+  return I.getPeakKont();
+}
+} // namespace
+
+TEST_CASE("a tail call through with-continuation-mark runs in bounded space",
+          "[interp][tco][m2]") {
+  // A with-continuation-mark wrapping a self-tail-recursive loop's body must
+  // not defeat frame reuse: the WcmMark frame it installs is still on top of
+  // Kont when the tail call happens, so this must reach the same *small*,
+  // depth-independent peak as an unwrapped tail loop.
+  const size_t Shallow = wcmTailLoopPeak(100);
+  const size_t Deep = wcmTailLoopPeak(100000);
+  REQUIRE(Deep == Shallow);
+  REQUIRE(Deep < 16);
+}
+
+TEST_CASE("a tail-position with-continuation-mark replaces, not "
+          "accumulates, a same-key mark across loop iterations",
+          "[interp][m2]") {
+  // Each iteration's with-continuation-mark is in tail position, so
+  // successive iterations share one continuation frame; installing the same
+  // key there again must replace the previous value (as real Scheme/Racket
+  // does), not stack a second entry alongside it.
+  Run R = runLinklet("(linklet () () (letrec-values ([(loop) "
+                     "(lambda (n) (with-continuation-mark 'k n "
+                     "  (if (zero? n) (continuation-mark-set->list "
+                     "                  (current-continuation-marks) 'k) "
+                     "      (loop (- n 1)))))]) (loop 5)))");
+  REQUIRE(R.ok);
+  REQUIRE(R.result);
+  auto *L = llvm::dyn_cast<ast::List>(R.result.get());
+  REQUIRE(L);
+  REQUIRE(L->length() == 1);
+  auto *Elem = llvm::dyn_cast<ast::Integer>(&(*L)[0]);
+  REQUIRE(Elem);
+  REQUIRE(*Elem == 0);
+}

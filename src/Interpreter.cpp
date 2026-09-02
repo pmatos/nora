@@ -369,13 +369,28 @@ void Interpreter::continueStep() {
     std::unique_ptr<ast::ValueNode> KeyV = std::move(Top.WcmKeyV);
     std::unique_ptr<ast::ValueNode> ValV = Val.takeLegacy();
     Kont.pop_back();
-    // Push a dedicated mark-bearing frame holding this key/value, and evaluate
-    // the result expression under it. The frame is popped when the result
-    // produces a value (see the WcmMark case), so the mark's dynamic extent is
-    // exactly the result expression - a with-continuation-mark in non-tail
-    // position no longer leaks its mark into later expressions.
-    Kont.emplace_back(Frame::WcmMark);
-    ast::setMark(Kont.back().Marks, std::move(KeyV), std::move(ValV));
+    // The result expression is in tail position with respect to whatever
+    // frame is now on top. Call/WcmMark/Halt frames are exactly the frames
+    // that a tail call is later allowed to reuse (see applyProcedure), so
+    // installing the mark directly onto that same frame - instead of pushing
+    // a new one - shares one continuation frame across a chain of
+    // tail-nested with-continuation-marks, the same way tail calls already
+    // share one frame across a self-recursive loop: a later mark for the
+    // same key in that frame correctly replaces this one (setMark) rather
+    // than stacking a second entry, and a tail call out of this expression
+    // reuses the frame with the mark already on it (O(1) space). A
+    // genuinely non-tail with-continuation-mark (Kont.back() is anything
+    // else - Seq, App, LetBind, ...) still gets its own frame, popped when
+    // the result produces a value, so the mark's dynamic extent is exactly
+    // the result expression and doesn't leak into later expressions.
+    if (!Kont.empty() &&
+        (Kont.back().K == Frame::Call || Kont.back().K == Frame::WcmMark ||
+         Kont.back().K == Frame::Halt)) {
+      ast::setMark(Kont.back().Marks, std::move(KeyV), std::move(ValV));
+    } else {
+      Kont.emplace_back(Frame::WcmMark);
+      ast::setMark(Kont.back().Marks, std::move(KeyV), std::move(ValV));
+    }
     Control = ResultE;
     Env = E;
     M = Mode::Eval;
@@ -526,14 +541,25 @@ void Interpreter::applyProcedure(
   }
   }
 
-  // Tail call: if the enclosing continuation frame is the caller's own
-  // activation (Frame::Call), reuse it instead of stacking a new one. Together
-  // with popping Seq/if/let-body frames before their tail sub-expression, this
-  // makes self- and mutual tail recursion run in O(1) continuation space.
-  if (!Kont.empty() && Kont.back().K == Frame::Call) {
+  // Tail call: if the enclosing continuation frame is one this call can
+  // reuse instead of stacking a new one, do so. Frame::Call is the caller's
+  // own activation; Frame::WcmMark and Frame::Halt are also reusable because
+  // WcmVal now installs a tail-position mark directly onto whichever of
+  // these three kinds is on top (see the WcmVal case) rather than always
+  // pushing a fresh frame, so any of them may already be carrying marks
+  // whose dynamic extent covers this call. Together with popping
+  // Seq/if/let-body frames before their tail sub-expression, this makes
+  // self- and mutual tail recursion - including through
+  // with-continuation-mark - run in O(1) continuation space. Marks are
+  // intentionally not cleared on reuse: they persist on the shared frame
+  // until a later with-continuation-mark for the same key overwrites them
+  // (setMark), exactly as if every tail-recursive step of the loop were
+  // still the same continuation frame - which, after reuse, it is.
+  if (!Kont.empty() &&
+      (Kont.back().K == Frame::Call || Kont.back().K == Frame::WcmMark ||
+       Kont.back().K == Frame::Halt)) {
     Frame &Enc = Kont.back();
     Enc.Callee = std::move(Op); // frees the previous activation's closure
-    Enc.Marks.clear();          // the reused frame begins a fresh activation
     Control = &Clause->getBody();
     Env = CalleeScope;
     M = Mode::Eval;
