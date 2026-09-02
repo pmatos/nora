@@ -218,6 +218,40 @@ TEST_CASE("symbol eq? is identity, not name", "[interp][m2]") {
   REQUIRE(I->value());
 }
 
+TEST_CASE("eq? unwraps a quoted symbol before comparing identity",
+          "[interp][m2]") {
+  // A quoted symbol literal like 'probe evaluates to a QuotedExpr wrapping
+  // the interned symbol, not a bare Symbol; eq? must unwrap it before its
+  // identity dispatch rather than falling through to valueEq's structural
+  // (name-only) comparison, which would wrongly equate it with an
+  // uninterned symbol of the same name. Built directly against the Runtime
+  // seam (rather than parsed source) so the comparison has same-named
+  // operands deterministically, independent of gensym's shared counter.
+  auto Quoted = std::make_unique<ast::QuotedExpr>();
+  Quoted->setQuotedExpr(std::make_unique<ast::Symbol>("probe"));
+  std::unique_ptr<ast::Symbol> Uninterned =
+      ast::Symbol::makeUninterned("probe");
+
+  llvm::SmallVector<const ast::ValueNode *> Args = {Quoted.get(),
+                                                    Uninterned.get()};
+  std::unique_ptr<ast::ValueNode> Result =
+      Runtime::getInstance().callFunction("eq?", Args);
+  REQUIRE(Result);
+  auto *B = llvm::dyn_cast<ast::BooleanLiteral>(Result.get());
+  REQUIRE(B);
+  REQUIRE_FALSE(B->value());
+
+  // Same check with operands swapped.
+  llvm::SmallVector<const ast::ValueNode *> ArgsRev = {Uninterned.get(),
+                                                       Quoted.get()};
+  std::unique_ptr<ast::ValueNode> ResultRev =
+      Runtime::getInstance().callFunction("eq?", ArgsRev);
+  REQUIRE(ResultRev);
+  auto *BR = llvm::dyn_cast<ast::BooleanLiteral>(ResultRev.get());
+  REQUIRE(BR);
+  REQUIRE_FALSE(BR->value());
+}
+
 TEST_CASE("gensym produces fresh distinct symbols", "[interp][m2]") {
   Run R = runLinklet("(linklet () () (eq? (gensym) (gensym)))");
   REQUIRE(R.ok);

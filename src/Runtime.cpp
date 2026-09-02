@@ -288,8 +288,19 @@ public:
     if (Args.size() != 2) {
       return nullptr;
     }
+    // A quoted datum such as 'k evaluates to a QuotedExpr wrapping the
+    // symbol/box/pair rather than the bare value, which would otherwise skip
+    // the identity branches below and fall through to valueEq's structural
+    // (name-only) symbol comparison - losing the distinction between an
+    // interned and an uninterned symbol of the same name.
     const ast::ValueNode *A = Args[0];
     const ast::ValueNode *B = Args[1];
+    while (auto const *QA = llvm::dyn_cast<ast::QuotedExpr>(A)) {
+      A = &QA->getQuotedExpr();
+    }
+    while (auto const *QB = llvm::dyn_cast<ast::QuotedExpr>(B)) {
+      B = &QB->getQuotedExpr();
+    }
     bool Eq;
     if (auto const *BA = llvm::dyn_cast<ast::Box>(A)) {
       auto const *BB = llvm::dyn_cast<ast::Box>(B);
