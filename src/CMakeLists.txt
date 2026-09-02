@@ -3,7 +3,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/include/)
 
 add_subdirectory(include)
 
-set(LIBS gmp)
+set(LIBS gmp PkgConfig::BDWGC)
 
 if(NORA_ENABLE_MLIR)
         add_subdirectory(mlir)
@@ -25,6 +25,7 @@ set(LLVM_LINK_COMPONENTS Support)
 add_llvm_executable(norac
         AnalysisFreeVars.cpp
         AST.cpp
+        nora_rt.cpp
         ASTRuntime.cpp
         Diagnostics.cpp
         Environment.cpp

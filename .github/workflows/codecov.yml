@@ -36,7 +36,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build libgmp-dev lcov gcc-14 g++-14 \
+          sudo apt-get install -y ninja-build libgmp-dev libgc-dev lcov gcc-14 g++-14 \
             "llvm-${LLVM_VERSION}-dev" "llvm-${LLVM_VERSION}-tools" python3-pip
           echo "/usr/lib/llvm-${LLVM_VERSION}/bin" >> "$GITHUB_PATH"
 

@@ -2,6 +2,9 @@ import os
 import lit.formats
 
 config.name = "NORA lit tests"
+# execute_external=True is deprecated as of lit 23 (removed in 24); every RUN
+# line here is a single `tool %s | FileCheck %s` pipe, which lit's internal
+# shell (the default, execute_external=False) already handles.
 config.test_format = lit.formats.ShTest(execute_external=False)
 
 config.suffixes = ['.rkt']

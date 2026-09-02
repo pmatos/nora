@@ -1,7 +1,9 @@
 ;; RUN: norac %s | FileCheck %s
-;; Marks for the same key set in different continuation frames (a caller and a
-;; callee) accumulate; continuation-mark-set->list returns them innermost first.
-;; CHECK: (2 1)
+;; (f 0) is a tail call of the enclosing with-continuation-mark, which is
+;; itself in tail position of the linklet body, so f's activation reuses the
+;; same continuation frame as the outer mark: installing 'k again replaces
+;; the outer value (1) rather than stacking alongside it.
+;; CHECK: (2)
 (linklet () ()
   (define-values (f)
     (lambda (x)

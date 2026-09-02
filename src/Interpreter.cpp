@@ -112,7 +112,7 @@ void Interpreter::visit(ast::Linklet const &Linklet) {
     Val = nullptr;
     M = Mode::Eval;
     run();
-    Last = std::move(Val);
+    Last = Val.takeLegacy();
     if (Diag.hadError()) {
       break;
     }
@@ -122,6 +122,9 @@ void Interpreter::visit(ast::Linklet const &Linklet) {
 
 void Interpreter::run() {
   while (true) {
+    if (Kont.size() > PeakKont) {
+      PeakKont = Kont.size();
+    }
     if (M == Mode::Eval) {
       Control->accept(*this);
     } else {
@@ -146,16 +149,32 @@ void Interpreter::continueStep() {
 
   case Frame::Seq: {
     if (Top.Begin0 && Top.Idx == 1) {
-      Top.Saved = std::move(Val);
+      Top.Saved = Val.takeLegacy();
     }
     if (Top.Idx < Top.Exprs.size()) {
-      Control = Top.Exprs[Top.Idx];
-      Env = Top.Env;
-      Top.Idx++;
-      M = Mode::Eval;
+      const bool IsLast = Top.Idx + 1 == Top.Exprs.size();
+      if (IsLast && !Top.Begin0) {
+        // Tail position: drop the sequence frame before its final expression
+        // (mirrors IfBranch) so a tail call there reuses the enclosing
+        // activation frame rather than stacking a new one.
+        const ast::ExprNode *E = Top.Exprs[Top.Idx];
+        EnvPtr SeqEnv = Top.Env;
+        Kont.pop_back();
+        Control = E;
+        Env = SeqEnv;
+        M = Mode::Eval;
+      } else {
+        Control = Top.Exprs[Top.Idx];
+        Env = Top.Env;
+        Top.Idx++;
+        M = Mode::Eval;
+      }
     } else {
+      // Only begin0 reaches here: its frame persists to the end to return the
+      // saved first value; a plain sequence's final expression is handled
+      // above.
       std::unique_ptr<ast::ValueNode> R =
-          Top.Begin0 ? std::move(Top.Saved) : std::move(Val);
+          Top.Begin0 ? std::move(Top.Saved) : Val.takeLegacy();
       Kont.pop_back();
       deliver(std::move(R));
     }
@@ -166,7 +185,7 @@ void Interpreter::continueStep() {
     const ast::ExprNode *ThenE = Top.ThenE;
     const ast::ExprNode *ElseE = Top.ElseE;
     EnvPtr E = Top.Env;
-    std::unique_ptr<ast::ValueNode> Cond = std::move(Val);
+    std::unique_ptr<ast::ValueNode> Cond = Val.takeLegacy();
     Kont.pop_back();
     auto *B = llvm::dyn_cast_or_null<ast::BooleanLiteral>(Cond.get());
     Control = (B && !B->value()) ? ElseE : ThenE;
@@ -176,7 +195,7 @@ void Interpreter::continueStep() {
   }
 
   case Frame::App: {
-    Top.Done.push_back(std::move(Val));
+    Top.Done.push_back(Val.takeLegacy());
     if (Top.Done.size() < Top.Exprs.size()) {
       Control = Top.Exprs[Top.Done.size()];
       Env = Top.Env;
@@ -192,7 +211,7 @@ void Interpreter::continueStep() {
   }
 
   case Frame::MkValues: {
-    Top.Done.push_back(std::move(Val));
+    Top.Done.push_back(Val.takeLegacy());
     if (Top.Done.size() < Top.Exprs.size()) {
       Control = Top.Exprs[Top.Done.size()];
       Env = Top.Env;
@@ -215,7 +234,7 @@ void Interpreter::continueStep() {
   }
 
   case Frame::LetBind: {
-    Top.Done.push_back(std::move(Val));
+    Top.Done.push_back(Val.takeLegacy());
     const ast::LetValues *Let = Top.Let;
     if (Top.Done.size() < Let->exprsCount()) {
       Control = &Let->getBindingExpr(Top.Done.size());
@@ -254,7 +273,7 @@ void Interpreter::continueStep() {
     const ast::LetValues *Let = Top.Let;
     EnvPtr RecScope = Top.RecScope;
     if (!bindValues(Diag, Let->getLoc(), RecScope->Vars,
-                    Let->getBindingIds(Top.Idx), std::move(Val))) {
+                    Let->getBindingIds(Top.Idx), Val.takeLegacy())) {
       abortEval();
       return;
     }
@@ -278,7 +297,7 @@ void Interpreter::continueStep() {
   case Frame::Define: {
     const ast::DefineValues *DV = Top.Def;
     EnvPtr DefEnv = Top.DefEnv;
-    std::unique_ptr<ast::ValueNode> V = std::move(Val);
+    std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
     Kont.pop_back();
 
     if (DV->countIds() == 1) {
@@ -315,7 +334,7 @@ void Interpreter::continueStep() {
   case Frame::Set: {
     const ast::Identifier *Id = Top.SetId;
     EnvPtr E = Top.Env;
-    std::unique_ptr<ast::ValueNode> V = std::move(Val);
+    std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
     Kont.pop_back();
     if (!envSet(E, *Id, std::move(V))) {
       Diag.error(Id->getLoc(), llvm::Twine("cannot set unbound identifier: ") +
@@ -331,7 +350,7 @@ void Interpreter::continueStep() {
     const ast::ExprNode *ValE = Top.WcmValE;
     const ast::ExprNode *ResultE = Top.WcmResultE;
     EnvPtr E = Top.Env;
-    std::unique_ptr<ast::ValueNode> KeyV = std::move(Val);
+    std::unique_ptr<ast::ValueNode> KeyV = Val.takeLegacy();
     Kont.pop_back();
     Kont.emplace_back(Frame::WcmVal);
     Frame &WV = Kont.back();
@@ -348,15 +367,30 @@ void Interpreter::continueStep() {
     const ast::ExprNode *ResultE = Top.WcmResultE;
     EnvPtr E = Top.Env;
     std::unique_ptr<ast::ValueNode> KeyV = std::move(Top.WcmKeyV);
-    std::unique_ptr<ast::ValueNode> ValV = std::move(Val);
+    std::unique_ptr<ast::ValueNode> ValV = Val.takeLegacy();
     Kont.pop_back();
-    // Push a dedicated mark-bearing frame holding this key/value, and evaluate
-    // the result expression under it. The frame is popped when the result
-    // produces a value (see the WcmMark case), so the mark's dynamic extent is
-    // exactly the result expression - a with-continuation-mark in non-tail
-    // position no longer leaks its mark into later expressions.
-    Kont.emplace_back(Frame::WcmMark);
-    ast::setMark(Kont.back().Marks, std::move(KeyV), std::move(ValV));
+    // The result expression is in tail position with respect to whatever
+    // frame is now on top. Call/WcmMark/Halt frames are exactly the frames
+    // that a tail call is later allowed to reuse (see applyProcedure), so
+    // installing the mark directly onto that same frame - instead of pushing
+    // a new one - shares one continuation frame across a chain of
+    // tail-nested with-continuation-marks, the same way tail calls already
+    // share one frame across a self-recursive loop: a later mark for the
+    // same key in that frame correctly replaces this one (setMark) rather
+    // than stacking a second entry, and a tail call out of this expression
+    // reuses the frame with the mark already on it (O(1) space). A
+    // genuinely non-tail with-continuation-mark (Kont.back() is anything
+    // else - Seq, App, LetBind, ...) still gets its own frame, popped when
+    // the result produces a value, so the mark's dynamic extent is exactly
+    // the result expression and doesn't leak into later expressions.
+    if (!Kont.empty() &&
+        (Kont.back().K == Frame::Call || Kont.back().K == Frame::WcmMark ||
+         Kont.back().K == Frame::Halt)) {
+      ast::setMark(Kont.back().Marks, std::move(KeyV), std::move(ValV));
+    } else {
+      Kont.emplace_back(Frame::WcmMark);
+      ast::setMark(Kont.back().Marks, std::move(KeyV), std::move(ValV));
+    }
     Control = ResultE;
     Env = E;
     M = Mode::Eval;
@@ -366,7 +400,7 @@ void Interpreter::continueStep() {
   case Frame::WcmMark: {
     // The result expression has produced a value; discard the mark frame and
     // pass the value through to the enclosing continuation.
-    std::unique_ptr<ast::ValueNode> V = std::move(Val);
+    std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
     Kont.pop_back();
     deliver(std::move(V));
     break;
@@ -375,7 +409,7 @@ void Interpreter::continueStep() {
   case Frame::Call: {
     // The activation's body has produced a value; its frame (and marks) is
     // discarded and the value flows to the caller's continuation.
-    std::unique_ptr<ast::ValueNode> V = std::move(Val);
+    std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
     Kont.pop_back();
     deliver(std::move(V));
     break;
@@ -505,6 +539,31 @@ void Interpreter::applyProcedure(
     CalleeScope->Vars.add(IF.getIdentifier(), std::move(Lst));
     break;
   }
+  }
+
+  // Tail call: if the enclosing continuation frame is one this call can
+  // reuse instead of stacking a new one, do so. Frame::Call is the caller's
+  // own activation; Frame::WcmMark and Frame::Halt are also reusable because
+  // WcmVal now installs a tail-position mark directly onto whichever of
+  // these three kinds is on top (see the WcmVal case) rather than always
+  // pushing a fresh frame, so any of them may already be carrying marks
+  // whose dynamic extent covers this call. Together with popping
+  // Seq/if/let-body frames before their tail sub-expression, this makes
+  // self- and mutual tail recursion - including through
+  // with-continuation-mark - run in O(1) continuation space. Marks are
+  // intentionally not cleared on reuse: they persist on the shared frame
+  // until a later with-continuation-mark for the same key overwrites them
+  // (setMark), exactly as if every tail-recursive step of the loop were
+  // still the same continuation frame - which, after reuse, it is.
+  if (!Kont.empty() &&
+      (Kont.back().K == Frame::Call || Kont.back().K == Frame::WcmMark ||
+       Kont.back().K == Frame::Halt)) {
+    Frame &Enc = Kont.back();
+    Enc.Callee = std::move(Op); // frees the previous activation's closure
+    Control = &Clause->getBody();
+    Env = CalleeScope;
+    M = Mode::Eval;
+    return;
   }
 
   Kont.emplace_back(Frame::Call);
@@ -720,6 +779,14 @@ void Interpreter::visit(ast::Integer const &Int) {
 
 void Interpreter::visit(ast::BooleanLiteral const &Bool) {
   deliver(std::unique_ptr<ast::ValueNode>(Bool.clone()));
+}
+
+void Interpreter::visit(ast::Box const &B) {
+  deliver(std::unique_ptr<ast::ValueNode>(B.clone()));
+}
+
+void Interpreter::visit(ast::Pair const &P) {
+  deliver(std::unique_ptr<ast::ValueNode>(P.clone()));
 }
 
 void Interpreter::visit(ast::Char const &C) {
