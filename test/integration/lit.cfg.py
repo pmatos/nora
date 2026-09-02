@@ -2,7 +2,7 @@ import os
 import lit.formats
 
 config.name = "NORA lit tests"
-config.test_format = lit.formats.ShTest(True)
+config.test_format = lit.formats.ShTest(execute_external=False)
 
 config.suffixes = ['.rkt']
 
