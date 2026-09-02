@@ -45,7 +45,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build libgmp-dev "clang-${LLVM_VERSION}" \
+          sudo apt-get install -y ninja-build libgmp-dev libgc-dev "clang-${LLVM_VERSION}" \
             "llvm-${LLVM_VERSION}-dev" "llvm-${LLVM_VERSION}-tools"
 
       - name: Initialize CodeQL
