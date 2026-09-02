@@ -227,6 +227,11 @@ TEST_CASE("gensym produces fresh distinct symbols", "[interp][m2]") {
   REQUIRE_FALSE(B->value());
 }
 
+TEST_CASE("gensym rejects more than one argument", "[interp][m2]") {
+  Run R = runLinklet("(linklet () () (gensym 'a 'b))");
+  REQUIRE_FALSE(R.ok);
+}
+
 TEST_CASE("mutual tail recursion is bounded and correct", "[interp][tco]") {
   // ev/od tail-call each other: the reused activation frame belongs to a
   // *different* closure than the caller, so this exercises tail-call handling

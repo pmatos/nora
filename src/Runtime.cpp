@@ -453,6 +453,9 @@ public:
 
   std::unique_ptr<ast::ValueNode> operator()(
       const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
+    if (Args.size() > 1) {
+      return nullptr;
+    }
     static unsigned Counter = 0;
     std::string Base = "g";
     if (Args.size() == 1) {
