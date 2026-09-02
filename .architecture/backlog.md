@@ -4,13 +4,13 @@ Persistent memory for the `pm-deepen` routine. One `## <slug>` entry per candida
 
 ## value-printing-raw-ostream-seam
 
-- **Status**: proposed
+- **Status**: in-flight
 - **Score**: 22/25 (leverage 5, locality 4, blast radius 2, heat 4)
-- **Files**: ~5-6 estimated
+- **Files**: ~5-6 estimated (actual: 6 — the five modules plus `test/unit/test_parse.cpp`)
 - **Modules**: `src/include/AST.h`, `src/AST.cpp`, `src/include/ASTRuntime.h`, `src/ASTRuntime.cpp`, `src/main.cpp`
-- **Summary**: Route every `ValueNode::write` through one injected `llvm::raw_ostream` seam and a single `isSelfQuoting` predicate, retiring the three unsynchronised output channels (`std::cout`, `llvm::outs`, `gmp_printf`).
+- **Summary**: Route every `ValueNode::write` through one injected `llvm::raw_ostream` seam and a single self-quoting `isa<>` set, retiring the three unsynchronised output channels (`std::cout`, `llvm::outs`, `gmp_printf`).
 - **First seen**: 2026-09-02
-- **Picked**: this run (2026-09-02); flipped to `in-flight` with the PR number at step 6.
+- **PR**: #141 (branch `sym/nora/routine/refactor-audit/01M1GPA0JP`, adopted)
 
 ## frame-per-kind-continuation
 

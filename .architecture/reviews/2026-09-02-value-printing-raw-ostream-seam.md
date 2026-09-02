@@ -2,7 +2,7 @@
 
 **Branch**: `sym/nora/routine/refactor-audit/01M1GPA0JP` — **adopted** (all four conditions held at preflight: non-default, 0 commits ahead of `origin/main`, no upstream, unpublished on origin); not renamed, so the PR head is this name rather than `pm-deepen/<slug>`.
 **Scope**: The interpreter core under `src/` (the pipeline SourceStream → Lex → Parse → AST → Interpreter → Runtime), weighted toward the git hot spots `src/Parse.cpp`, `src/include/AST.h`, `src/Interpreter.cpp`, `src/AST.cpp`, `src/Lex.cpp` (each ~13–17 commits, last touched 2026-07-02). The MLIR scaffold under `src/mlir/` and `src/include/nir/` is out of scope: it is opt-in, unused by the interpreter, and the project guide forbids adding it to the default build path.
-**Picked**: `value-printing-raw-ostream-seam` — see the PR and `.architecture/backlog.md`.
+**Picked**: `value-printing-raw-ostream-seam` — see [PR #141](https://github.com/pmatos/nora/pull/141) and `.architecture/backlog.md`.
 **Degradations**: none. `codebase-design` loaded; a read-only `Explore` sub-agent performed the reconnaissance; `gh` is authenticated; the quality gate (`ctest --preset release`, 21 tests wrapping 88 `.rkt` integration tests) is green at baseline.
 
 **Diagram convention**: solid edges are the module's **interface** (what a caller must cross); dashed edges are **implementation** internal to the module.
