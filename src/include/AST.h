@@ -115,7 +115,7 @@ public:
 
   virtual ValueNode *clone() const override = 0;
   virtual void dump() const override = 0;
-  virtual void write() const = 0;
+  virtual void write(llvm::raw_ostream &OS) const = 0;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() > ASTNodeKind::First_ValueNode;
@@ -188,7 +188,7 @@ public:
 
   [[nodiscard]] llvm::StringRef getValue() const { return Value; }
   LLVM_DUMP_METHOD void dump() const override;
-  void write() const override;
+  void write(llvm::raw_ostream &OS) const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_String;
@@ -215,7 +215,7 @@ public:
 
   [[nodiscard]] llvm::StringRef getName() const { return Name; }
   LLVM_DUMP_METHOD void dump() const override;
-  void write() const override;
+  void write(llvm::raw_ostream &OS) const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_Symbol;
@@ -243,7 +243,7 @@ public:
 
   [[nodiscard]] llvm::StringRef getName() const { return Name; }
   LLVM_DUMP_METHOD void dump() const override;
-  void write() const override;
+  void write(llvm::raw_ostream &OS) const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_Keyword;
@@ -390,10 +390,9 @@ public:
     else
       llvm::dbgs() << "#f";
   }
-  // Use std::cout, like the other value writers, so booleans interleave in
-  // order with the surrounding quote/list/vector output (llvm::outs() buffers
-  // independently and would reorder e.g. '(#t 1 #f 2)).
-  void write() const override { std::cout << (Value ? "#t" : "#f"); }
+  void write(llvm::raw_ostream &OS) const override {
+    OS << (Value ? "#t" : "#f");
+  }
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_BooleanLiteral;
@@ -415,7 +414,7 @@ public:
 
   [[nodiscard]] llvm::StringRef getValue() const { return Value; }
   LLVM_DUMP_METHOD void dump() const override;
-  void write() const override;
+  void write(llvm::raw_ostream &OS) const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_Char;
@@ -608,7 +607,7 @@ public:
   bool operator==(const Integer &Int) const;
 
   LLVM_DUMP_METHOD void dump() const override;
-  void write() const override;
+  void write(llvm::raw_ostream &OS) const override;
   std::string asString() const;
 
   static bool classof(const ASTNode *N) {
@@ -635,7 +634,7 @@ public:
   [[nodiscard]] const ExprNode &getBody() const;
 
   LLVM_DUMP_METHOD void dump() const override;
-  void write() const override;
+  void write(llvm::raw_ostream &OS) const override;
 
   llvm::SmallVector<Identifier> findFreeVariables() const;
 
@@ -665,7 +664,7 @@ public:
   }
 
   LLVM_DUMP_METHOD void dump() const override;
-  void write() const override;
+  void write(llvm::raw_ostream &OS) const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_CaseLambda;
@@ -755,7 +754,7 @@ public:
   [[nodiscard]] const ValueNode *getTail() const { return Tail.get(); }
 
   LLVM_DUMP_METHOD void dump() const override;
-  void write() const override;
+  void write(llvm::raw_ostream &OS) const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_List;
@@ -854,7 +853,7 @@ public:
   [[nodiscard]] size_t countExprs() const { return Exprs.size(); }
 
   LLVM_DUMP_METHOD void dump() const override;
-  void write() const override;
+  void write(llvm::raw_ostream &OS) const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_Values;
@@ -882,7 +881,7 @@ public:
   [[nodiscard]] const Identifier &getId() const { return *Id; }
 
   LLVM_DUMP_METHOD void dump() const override;
-  void write() const override;
+  void write(llvm::raw_ostream &OS) const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_VariableReference;
@@ -907,7 +906,7 @@ public:
   [[nodiscard]] ValueNode const &operator[](size_t I) const;
 
   LLVM_DUMP_METHOD void dump() const override;
-  void write() const override;
+  void write(llvm::raw_ostream &OS) const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_Vector;
@@ -931,7 +930,7 @@ public:
   ~Void() = default;
 
   LLVM_DUMP_METHOD void dump() const override;
-  void write() const override;
+  void write(llvm::raw_ostream &OS) const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_Void;
@@ -955,7 +954,7 @@ public:
   [[nodiscard]] const ValueNode &getQuotedExpr() const { return *Node; }
 
   LLVM_DUMP_METHOD void dump() const override;
-  void write() const override;
+  void write(llvm::raw_ostream &OS) const override;
 
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_QuotedExpr;
@@ -977,8 +976,8 @@ public:
   LLVM_DUMP_METHOD void dump() const override {
     llvm::dbgs() << "#<runtime:" << getName() << ">";
   }
-  void write() const override {
-    llvm::outs() << "#<runtime:" << getName() << ">";
+  void write(llvm::raw_ostream &OS) const override {
+    OS << "#<runtime:" << getName() << ">";
   }
 
   static bool classof(const ASTNode *N) {

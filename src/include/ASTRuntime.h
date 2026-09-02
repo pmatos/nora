@@ -3,6 +3,8 @@
 #include "AST.h"
 #include "Environment.h"
 
+#include <llvm/Support/raw_ostream.h>
+
 #include <memory>
 #include <utility>
 #include <vector>
@@ -27,7 +29,7 @@ public:
   }
 
   LLVM_DUMP_METHOD void dump() const override;
-  void write() const override;
+  void write(llvm::raw_ostream &OS) const override;
 
   const Lambda &getLambda() const { return *L; }
   const EnvPtr &getEnv() const { return Env; }
@@ -49,7 +51,7 @@ public:
   }
 
   LLVM_DUMP_METHOD void dump() const override;
-  void write() const override;
+  void write(llvm::raw_ostream &OS) const override;
 
   const CaseLambda &getCaseLambda() const { return *CL; }
   const EnvPtr &getEnv() const { return Env; }
@@ -98,7 +100,7 @@ public:
   }
 
   LLVM_DUMP_METHOD void dump() const override;
-  void write() const override;
+  void write(llvm::raw_ostream &OS) const override;
 
 private:
   std::vector<MarkFrame> Frames; // innermost (topmost) frame first

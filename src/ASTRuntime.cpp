@@ -26,7 +26,7 @@ void Closure::dump() const {
   // TODO: Implement.
   llvm::dbgs() << "<closure: not implemented>\n";
 }
-void Closure::write() const {}
+void Closure::write(llvm::raw_ostream &) const {}
 
 CaseLambdaClosure::CaseLambdaClosure(const CaseLambda &CLbd, EnvPtr Env)
     : ClonableNode(ASTNodeKind::AST_CaseLambdaClosure),
@@ -42,7 +42,7 @@ CaseLambdaClosure::CaseLambdaClosure(const CaseLambdaClosure &Other)
 void CaseLambdaClosure::dump() const {
   llvm::dbgs() << "<case-lambda closure: not implemented>\n";
 }
-void CaseLambdaClosure::write() const {}
+void CaseLambdaClosure::write(llvm::raw_ostream &) const {}
 
 //
 // Continuation marks
@@ -109,6 +109,6 @@ ContinuationMarkSet::ContinuationMarkSet(const ContinuationMarkSet &Other)
 void ContinuationMarkSet::dump() const {
   llvm::dbgs() << "#<continuation-mark-set>";
 }
-void ContinuationMarkSet::write() const {
-  std::cout << "#<continuation-mark-set>";
+void ContinuationMarkSet::write(llvm::raw_ostream &OS) const {
+  OS << "#<continuation-mark-set>";
 }
