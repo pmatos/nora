@@ -211,4 +211,38 @@ Value-printing was chosen on its own merits, not to avoid the others: it is the 
 
 ## Design
 
-_Written in step 4 (design-it-twice + adjudication); appended below after the report and backlog were committed._
+Produced by four parallel design sub-agents (radically different framings), then chosen by a fifth **adjudicator** that authored none of them, against the fixed criteria in strict priority order: **depth → locality → seam placement → test surface → blast radius**.
+
+### The four proposals
+
+- **A — Minimal surface.** `virtual void write(llvm::raw_ostream &OS) const = 0` on `ValueNode`, `OS` threaded through every override and every recursive child; a free `bool ast::isSelfQuoting(const ValueNode&)` defined once in `AST.cpp`; `Integer` uses `asString()`, `RuntimeFunction` drops `llvm::outs()`. No new files. ~6 files, ~40 mostly one-line sites. Correctly notes no `flush` is needed (verbose `std::cout` lines end in `std::endl` and precede the result).
+- **B — Maximum flexibility (`Printer` context object).** New `src/include/Printer.h` with `struct Printer { llvm::raw_ostream &OS; }`; `virtual void print(Printer&)`; a **virtual** `isSelfQuoting()` hook overridden in the four self-quoting leaves; a documented growth path to add a `PrintStyle` enum later for `display`/`print`. ~7 files, ~50 sites.
+- **C — Optimise for the common caller.** A's primitive **plus** a non-virtual, logic-free `std::string ValueNode::str()` convenience so tests/`main` can get a string without building a stream. ~6 files, ~40 sites.
+- **D — Ports-and-adapters (rejects its own framing).** Argues that pulling printing out of the hierarchy into a free function/visitor is over-engineered — the printer-*policy* seam has only **one** adapter (the sole Racket print form), so it is hypothetical; a non-member dispatcher would hand-roll the vtable and lose locality, and the existing `ASTVisitor` spans 27 node kinds (~9 non-values = dead surface). Converges on A's member design, but pins the predicate **file-local** (`static` in `AST.cpp`) and deletes the two comments that become false once there is a single sink.
+
+### Adjudication — winner: **D** (runner-up design: **A**)
+
+D and A are the *same* `write(llvm::raw_ostream&)` member interface; the adjudicator separated them on the top-priority criterion. **Depth**: D keeps `isSelfQuoting` `static`/file-local, so the module's public surface is exactly one method — strictly less interface for the same behaviour than A's namespace-scope free function. **Locality**: A ≈ C ≈ D best (predicate in one place); B worst (the virtual hook disperses a closed, language-fixed set `{Integer, BooleanLiteral, Char, String}` across five classes for no gain). **Seam placement**: A ≈ C ≈ D place exactly the seam that varies — the *sink*, which has two real adapters today (`llvm::outs()` in `main`, `raw_string_ostream` in tests); B additionally scaffolds a one-adapter (hypothetical) mode seam. **Test surface**: all four unlock in-process assertions equally (`test_parse` links `AST.cpp` + `ASTRuntime.cpp`, not `Interpreter.cpp`, which is sufficient for value nodes). **Blast radius**: A smallest, D ≈ A, B largest.
+
+**Runner-up design (A) lost** because its free-function predicate, as specified, risks publishing a `QuotedExpr`-internal policy at namespace scope (a depth criterion-1 loss), and it defers the mandatory stale-comment deletion, leaving the change internally inconsistent. Its one genuine edge — recognising no `flush` is needed — is a criterion-5 point, outranked by D's criterion-1 edge.
+
+### The two recurring sub-decisions
+
+- **`isSelfQuoting`: free function, file-local (`static` in `AST.cpp`).** The set is a closed, rarely-changing group of literals; one function gives single-site locality and adds nothing to the public interface. The virtual form (B) scatters it across five classes for extensibility nobody needs.
+- **Neither `str()` nor `Printer` earns its keep today.** `Printer` services a mode seam with one adapter → hypothetical, and it is expensive/hard to reverse. `str()` is cheaper and reversible but is a *convenience, not a seam*; its sole present consumer (tests) is served by a two-line `raw_string_ostream`, and adding it creates a second way to do one thing (a criterion-1 cost) for marginal criterion-4 ergonomics. Add neither until a second consumer appears.
+
+### Interface to implement (the adjudicated winner, with A's flush correction)
+
+```cpp
+// src/include/AST.h — ValueNode
+virtual void write(llvm::raw_ostream &OS) const = 0;   // was: virtual void write() const = 0;
+```
+
+- Thread `OS` through all ~16 overrides (`AST.h` inline: `BooleanLiteral`, `RuntimeFunction`; `AST.cpp`: 13 bodies; `ASTRuntime.{h,cpp}`: `Closure`/`CaseLambdaClosure` stay empty, `ContinuationMarkSet`). Empty/no-op writers take an **unnamed** `llvm::raw_ostream &` to stay `-Wunused-parameter`-clean under `-Werror`.
+- `Integer::write` → `OS << asString()` (drops `gmp_printf`); `RuntimeFunction::write` → `OS << "#<runtime:" << getName() << ">"` (drops `llvm::outs()`); `BooleanLiteral::write` → `OS << (Value ? "#t" : "#f")`.
+- Compound nodes (`List`, `Vector`, `Values`, `QuotedExpr`) forward the same `OS` to children; `std::endl` → `'\n'`.
+- `static bool isSelfQuoting(const ast::ValueNode&)` in `AST.cpp` (`isa<Integer, BooleanLiteral, Char, String>`), consumed only by `QuotedExpr::write`.
+- `src/main.cpp:80-81` → `I.getResult()->write(llvm::outs()); llvm::outs() << '\n';`. No `flush` (the redundant `std::cout.flush()` from D is omitted per A's correct analysis).
+- Delete the two comments made false by a single sink: `AST.h:393-395` (`BooleanLiteral`'s `std::cout`-vs-`outs()` justification) and the `Symbol`/`Integer` interleaving note in `AST.cpp` — verified during implementation.
+
+**Test-first seam under test**: `ValueNode::write(raw_ostream&)`, asserted in `test/unit/test_parse.cpp` via `llvm::raw_string_ostream` on nodes built directly (e.g. `Integer`, `List`, `QuotedExpr`), pinning printed form and the self-quoting rule (`'7` → `7`, `'(1)` → `'(1)`).
