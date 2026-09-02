@@ -57,7 +57,10 @@ ctest --preset debug         # unit (Catch2) + integration (lit/FileCheck) tests
 
 ### `dump()` vs `write()` — not interchangeable
 
-- `dump()` is a **debug** dump to `llvm::dbgs()`, only visible under `-debug`.
+- `dump()` is a **debug** dump to `llvm::dbgs()` (stderr), called
+  unconditionally wherever it's invoked (e.g. `main` calls `AST->dump()`
+  under `-emit=ast`) — the `-debug` flag only sets `llvm::DebugFlag`, which
+  gates the `LLVM_DEBUG()` macro, and nothing in `src/` uses that macro today.
 - `write()` is the **user-facing** result printer (`std::cout`/`llvm::outs()`);
   `main` prints the final value via `Result->write()`, and its output must
   match Racket's printed representation — this is what integration-test
@@ -94,9 +97,8 @@ Create `test/integration/<name>.rkt`:
 
 ## Known limitations
 
-- **`quote` printing is incomplete.** `write()` does not yet fully emit
-  Racket's `'x` / `'(...)` quote syntax for every case — in particular,
-  improper (dotted) lists and vectors nested inside `quote` are not fully
-  handled. See `test/integration/quote11.rkt` (dotted list) and `quote12.rkt`
-  (vector) for the relevant cases; don't assume every `quote*.rkt` integration
-  test passes.
+- **`QuotedExpr::operator==` is not implemented.** It unconditionally
+  returns `false` (see the `// FIXME` in `AST.cpp`) instead of structurally
+  comparing the quoted AST nodes. `write()` itself correctly handles quoted
+  dotted lists and vectors (`test/integration/quote11.rkt`, `quote12.rkt`
+  both pass).
