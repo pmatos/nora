@@ -38,6 +38,31 @@ ctest --preset debug         # unit (Catch2) + integration (lit/FileCheck) tests
 - `test/integration/` — `.rkt` files run through `lit` + `FileCheck`.
 - `expander/expander.rktl` — a large generated Racket artifact; do not edit.
 
+## Architecture
+
+- **AST hierarchy** (`src/include/AST.h`) — `ASTNode` → `TLNode` → `ExprNode`
+  → `ValueNode`. Nodes use LLVM-style RTTI: each carries an `ASTNodeKind` tag
+  and a `classof`, checked via `isa`/`cast`/`dyn_cast` (`Casting.h`).
+  **The `ASTNodeKind` enum order encodes the hierarchy** — `classof` for each
+  level is a range check bounded by the `First_TLNode`/`First_ExprNode`/
+  `First_ValueNode` markers — so new node kinds must land in the correct
+  region and the enum must stay sorted.
+- **`ClonableNode<Derived, Base>`** (CRTP, `AST.h`) implements `clone()`/
+  `accept()` for concrete leaf node types; new node classes should derive
+  through it rather than hand-rolling those.
+- **Visitors** — `ASTVisitor.h` and `Interpreter.h` (and any future visitor)
+  each declare one `visit(NodeType const&)` per node kind, and both keep that
+  list **alphabetically sorted**. Adding a node kind means adding its `visit`
+  overload to every visitor and keeping the ordering.
+
+### `dump()` vs `write()` — not interchangeable
+
+- `dump()` is a **debug** dump to `llvm::dbgs()`, only visible under `-debug`.
+- `write()` is the **user-facing** result printer (`std::cout`/`llvm::outs()`);
+  `main` prints the final value via `Result->write()`, and its output must
+  match Racket's printed representation — this is what integration-test
+  `CHECK:` lines assert against.
+
 ## Conventions
 
 - Formatting: `clang-format` (LLVM base style; `.clang-format`). CI fails on any
@@ -66,3 +91,12 @@ Create `test/integration/<name>.rkt`:
   GMP with its C++ bindings (`gmpxx`).
 - CI (`.github/workflows/`) installs LLVM 22 from apt.llvm.org, builds via the
   presets on Ubuntu 24.04, and pins actions to commit SHAs.
+
+## Known limitations
+
+- **`quote` printing is incomplete.** `write()` does not yet fully emit
+  Racket's `'x` / `'(...)` quote syntax for every case — in particular,
+  improper (dotted) lists and vectors nested inside `quote` are not fully
+  handled. See `test/integration/quote11.rkt` (dotted list) and `quote12.rkt`
+  (vector) for the relevant cases; don't assume every `quote*.rkt` integration
+  test passes.
