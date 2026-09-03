@@ -83,9 +83,8 @@ void Identifier::dump() const { llvm::dbgs() << Id; }
 void Symbol::dump() const { llvm::dbgs() << "#<symbol:" << Name << ">"; }
 
 // Symbols print as their bare name; the leading quote (if any) is emitted by
-// the enclosing QuotedExpr. Use std::cout so output interleaves correctly with
-// the other value writers (List, Integer via gmp_printf).
-void Symbol::write() const { std::cout << getName().str(); }
+// the enclosing QuotedExpr.
+void Symbol::write(llvm::raw_ostream &OS) const { OS << getName().str(); }
 
 const void *Symbol::identity() const {
   if (Uninterned) {
@@ -111,7 +110,9 @@ void Keyword::dump() const { llvm::dbgs() << "#<keyword:" << Name << ">"; }
 // Keywords print in Racket read syntax (#:foo); Name holds the bare keyword, so
 // the #: prefix is restored here. The leading quote (if any) is emitted by the
 // enclosing QuotedExpr, since keywords are not self-quoting.
-void Keyword::write() const { std::cout << "#:" << getName().str(); }
+void Keyword::write(llvm::raw_ostream &OS) const {
+  OS << "#:" << getName().str();
+}
 
 //
 // Implementation of Char node.
@@ -120,7 +121,9 @@ void Char::dump() const { llvm::dbgs() << "#\\" << Value; }
 
 // Characters print in Racket read syntax (#\a). The leading quote (if any) is
 // emitted by the enclosing QuotedExpr; characters are self-quoting so none is.
-void Char::write() const { std::cout << "#\\" << getValue().str(); }
+void Char::write(llvm::raw_ostream &OS) const {
+  OS << "#\\" << getValue().str();
+}
 
 //
 // Implementation of String node.
@@ -129,7 +132,7 @@ void String::dump() const { llvm::dbgs() << Value; }
 
 // Strings print in Racket read syntax ("z"); Value already carries the
 // delimiting quotes. Self-quoting, so the enclosing QuotedExpr adds no quote.
-void String::write() const { std::cout << getValue().str(); }
+void String::write(llvm::raw_ostream &OS) const { OS << getValue().str(); }
 
 //
 // Implementation of IfCond node.
@@ -208,7 +211,7 @@ void Integer::dump() const {
   std::cerr << asString();
 }
 
-void Integer::write() const { gmp_printf("%Zd", Value); }
+void Integer::write(llvm::raw_ostream &OS) const { OS << asString(); }
 
 std::string Integer::asString() const {
   char *Str = mpz_get_str(nullptr, 10, Value);
@@ -266,7 +269,7 @@ void Lambda::dump() const {
   llvm::dbgs() << ")";
 }
 
-void Lambda::write() const { std::cout << "#<procedure>"; }
+void Lambda::write(llvm::raw_ostream &OS) const { OS << "#<procedure>"; }
 
 //
 // Implementation of CaseLambda node.
@@ -290,7 +293,7 @@ void CaseLambda::dump() const {
   llvm::dbgs() << ")";
 }
 
-void CaseLambda::write() const { std::cout << "#<procedure>"; }
+void CaseLambda::write(llvm::raw_ostream &OS) const { OS << "#<procedure>"; }
 
 //
 // Implementation of DefineValues node.
@@ -469,12 +472,12 @@ void Values::dump() const {
   llvm::dbgs() << ")";
 }
 
-void Values::write() const {
+void Values::write(llvm::raw_ostream &OS) const {
   for (const auto &Expr : Exprs) {
     ExprNode *E = Expr.get();
     if (ValueNode *V = llvm::dyn_cast<ValueNode>(E)) {
-      V->write();
-      std::cout << std::endl;
+      V->write(OS);
+      OS << '\n';
     } else {
       // A fully evaluated Values node only ever holds value nodes; anything
       // else is an internal invariant violation.
@@ -497,7 +500,9 @@ void VariableReference::dump() const {
 
 // A variable reference is opaque: it always prints as #<variable-reference>,
 // independent of the referenced binding.
-void VariableReference::write() const { std::cout << "#<variable-reference>"; }
+void VariableReference::write(llvm::raw_ostream &OS) const {
+  OS << "#<variable-reference>";
+}
 
 //
 // Implementation of LetValues node.
@@ -560,7 +565,7 @@ void LetValues::dump() const {
 //
 void Void::dump() const { llvm::dbgs() << "(void)"; }
 
-void Void::write() const {
+void Void::write(llvm::raw_ostream &) const {
   // Do nothing
 }
 
@@ -597,19 +602,19 @@ void List::dump() const {
   llvm::dbgs() << ")";
 }
 
-void List::write() const {
+void List::write(llvm::raw_ostream &OS) const {
   const List &L = *this;
-  std::cout << "(";
+  OS << "(";
   for (size_t I = 0; I < L.length(); ++I) {
-    L[I].write();
+    L[I].write(OS);
     if (I != L.length() - 1)
-      std::cout << " ";
+      OS << " ";
   }
   if (L.hasTail()) {
-    std::cout << " . ";
-    L.getTail()->write();
+    OS << " . ";
+    L.getTail()->write(OS);
   }
-  std::cout << ")";
+  OS << ")";
 }
 
 //
@@ -638,15 +643,15 @@ void Vector::dump() const {
   llvm::dbgs() << ")";
 }
 
-void Vector::write() const {
+void Vector::write(llvm::raw_ostream &OS) const {
   const Vector &V = *this;
-  std::cout << "#(";
+  OS << "#(";
   for (size_t I = 0; I < V.length(); ++I) {
-    V[I].write();
+    V[I].write(OS);
     if (I != V.length() - 1)
-      std::cout << " ";
+      OS << " ";
   }
-  std::cout << ")";
+  OS << ")";
 }
 
 //
@@ -672,20 +677,20 @@ LLVM_DUMP_METHOD void QuotedExpr::dump() const {
 }
 
 // Print a quoted datum in Racket's `print` form. Self-quoting data (numbers,
-// booleans) print as-is; everything else (symbols, lists, nested quotes) is
-// prefixed with a single quote. A nested QuotedExpr therefore prints as ''x.
-void QuotedExpr::write() const {
+// booleans, chars, strings) print as-is; everything else (symbols, lists,
+// nested quotes) is prefixed with a single quote, so a nested QuotedExpr prints
+// as ''x. The isa<> set below is the single home of the self-quoting rule.
+void QuotedExpr::write(llvm::raw_ostream &OS) const {
   if (!Node)
     return;
 
-  if (llvm::isa<Integer>(*Node) || llvm::isa<BooleanLiteral>(*Node) ||
-      llvm::isa<Char>(*Node) || llvm::isa<String>(*Node)) {
-    Node->write();
+  if (llvm::isa<Integer, BooleanLiteral, Char, String>(*Node)) {
+    Node->write(OS);
     return;
   }
 
-  std::cout << "'";
-  Node->write();
+  OS << "'";
+  Node->write(OS);
 }
 
 void QuotedExpr::setQuotedExpr(std::unique_ptr<ValueNode> &&E) {

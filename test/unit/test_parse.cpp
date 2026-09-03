@@ -1,6 +1,7 @@
 
 #include <catch2/catch.hpp>
 
+#include "AST.h"
 #include "Diagnostics.h"
 #include "Lex.h"
 #include "Parse.h"
@@ -10,8 +11,11 @@
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/raw_ostream.h>
 
+#include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 
 using namespace Lex;
 using namespace Parse;
@@ -433,4 +437,37 @@ TEST_CASE("Parsing variable references", "[parser]") {
   SourceStream V4("(f x)");
   V = parseVariableReference(V4);
   REQUIRE_FALSE(V);
+}
+
+// Pins the deepened value-printing interface: ValueNode::write accepts the
+// output sink as an llvm::raw_ostream, so printed form is assertable in-process
+// (no subprocess/FileCheck) and every value routes through one stream.
+TEST_CASE("ValueNode::write renders to a caller-supplied raw_ostream",
+          "[value][write]") {
+  auto ToStr = [](const ast::ValueNode &V) {
+    std::string S;
+    llvm::raw_string_ostream OS(S);
+    V.write(OS);
+    return OS.str();
+  };
+
+  ast::Integer FortyTwo(static_cast<int64_t>(42));
+  REQUIRE(ToStr(FortyTwo) == "42");
+
+  ast::List L;
+  L.appendExpr(std::make_unique<ast::Integer>(static_cast<int64_t>(1)));
+  L.appendExpr(std::make_unique<ast::Integer>(static_cast<int64_t>(2)));
+  REQUIRE(ToStr(L) == "(1 2)");
+
+  // A self-quoting datum inside a quote prints with no leading quote.
+  ast::QuotedExpr QInt;
+  QInt.setQuotedExpr(std::make_unique<ast::Integer>(static_cast<int64_t>(7)));
+  REQUIRE(ToStr(QInt) == "7");
+
+  // A non-self-quoting datum inside a quote prints with a single leading quote.
+  ast::QuotedExpr QList;
+  auto Inner = std::make_unique<ast::List>();
+  Inner->appendExpr(std::make_unique<ast::Integer>(static_cast<int64_t>(1)));
+  QList.setQuotedExpr(std::move(Inner));
+  REQUIRE(ToStr(QList) == "'(1)");
 }

@@ -10,6 +10,7 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/InitLLVM.h>
+#include <llvm/Support/raw_ostream.h>
 
 #include "Diagnostics.h"
 #include "Interpreter.h"
@@ -83,8 +84,8 @@ int main(int argc, char *argv[]) {
   if (Verbose)
     std::cout << "Interpretation successful!" << std::endl;
 
-  I.getResult()->write();
-  std::cout << std::endl;
+  I.getResult()->write(llvm::outs());
+  llvm::outs() << '\n';
 
   return 0;
 }

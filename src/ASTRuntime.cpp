@@ -26,7 +26,7 @@ void Closure::dump() const {
   // TODO: Implement.
   llvm::dbgs() << "<closure: not implemented>\n";
 }
-void Closure::write() const {}
+void Closure::write(llvm::raw_ostream &) const {}
 
 CaseLambdaClosure::CaseLambdaClosure(const CaseLambda &CLbd, EnvPtr Env)
     : ClonableNode(ASTNodeKind::AST_CaseLambdaClosure),
@@ -42,7 +42,7 @@ CaseLambdaClosure::CaseLambdaClosure(const CaseLambdaClosure &Other)
 void CaseLambdaClosure::dump() const {
   llvm::dbgs() << "<case-lambda closure: not implemented>\n";
 }
-void CaseLambdaClosure::write() const {}
+void CaseLambdaClosure::write(llvm::raw_ostream &) const {}
 
 Box::Box(std::unique_ptr<ValueNode> V)
     : ClonableNode(ASTNodeKind::AST_Box), C(std::make_shared<Cell>()) {
@@ -59,9 +59,9 @@ void Box::set(std::unique_ptr<ValueNode> V) const { C->Value = std::move(V); }
 
 void Box::dump() const { llvm::dbgs() << "#&<box>\n"; }
 
-void Box::write() const {
-  std::cout << "#&";
-  C->Value->write();
+void Box::write(llvm::raw_ostream &OS) const {
+  OS << "#&";
+  C->Value->write(OS);
 }
 
 Pair::Pair(std::unique_ptr<ValueNode> Car, std::unique_ptr<ValueNode> Cdr)
@@ -86,12 +86,12 @@ void Pair::setCdr(std::unique_ptr<ValueNode> V) const { C->Cdr = std::move(V); }
 
 void Pair::dump() const { llvm::dbgs() << "#<pair>\n"; }
 
-void Pair::write() const {
-  std::cout << "(";
-  C->Car->write();
-  std::cout << " . ";
-  C->Cdr->write();
-  std::cout << ")";
+void Pair::write(llvm::raw_ostream &OS) const {
+  OS << "(";
+  C->Car->write(OS);
+  OS << " . ";
+  C->Cdr->write(OS);
+  OS << ")";
 }
 
 //
@@ -159,6 +159,6 @@ ContinuationMarkSet::ContinuationMarkSet(const ContinuationMarkSet &Other)
 void ContinuationMarkSet::dump() const {
   llvm::dbgs() << "#<continuation-mark-set>";
 }
-void ContinuationMarkSet::write() const {
-  std::cout << "#<continuation-mark-set>";
+void ContinuationMarkSet::write(llvm::raw_ostream &OS) const {
+  OS << "#<continuation-mark-set>";
 }
