@@ -15,9 +15,13 @@
 
 #include <cassert>
 #include <memory>
+#include <type_traits>
+#include <utility>
+#include <variant>
 #include <vector>
 
 #include <llvm/ADT/SmallVector.h>
+#include <llvm/Support/SMLoc.h>
 
 #include "AST.h"
 #include "ASTRuntime.h"
@@ -93,69 +97,131 @@ public:
   }
 
 private:
-  // A continuation frame. Fields are kind-specific; a frame only uses the
-  // subset relevant to its kind. Every frame carries a mark map (Marks) and,
-  // for frames that later resume evaluating a subexpression, the environment
-  // to resume in (Env).
+  // A continuation frame. Its per-kind transition state is a variant `P` whose
+  // active alternative names the kind; each alternative owns only the fields
+  // that kind uses, so the compiler enforces "a frame uses only its kind's
+  // fields" instead of a comment. Two things are universal, so they live in the
+  // header rather than a payload: the mark map (Marks), read by snapshotMarks
+  // on every frame and written by setMark on the top activation; and Callee,
+  // the applied closure owned by a tail-reusable activation (Call/WcmMark/Halt)
+  // so Control, which points into its (cloned) lambda body, outlives the call.
   struct Frame {
-    enum Kind {
-      Halt,     // bottom of a top-level form's continuation
-      Seq,      // begin / begin0 / a multi-expression body
-      IfBranch, // choose the then/else branch
-      App,      // application: accumulate operator + args, then apply
-      MkValues, // (values ...): accumulate then build a Values
-      LetBind,  // let-values: accumulate binding values, then bind + body
-      LetRec,   // letrec-values: bind each value into the recursive scope
-      Define,   // top-level define-values: bind then produce void
-      Set,      // set!: mutate then produce void
-      WcmKey,   // with-continuation-mark: after key, evaluate val
-      WcmVal,   // with-continuation-mark: after val, install mark + eval result
-      WcmMark,  // holds a with-continuation-mark mark for its result expression
-      Call      // a procedure activation (holds the callee's marks)
+    // Halt / WcmMark / Call carry no per-kind state (their content is the
+    // header): Halt is a form's bottom, WcmMark holds a with-continuation-mark
+    // for its result expression (in Marks), Call is a procedure activation.
+    struct Halt {};    // bottom of a top-level form's continuation
+    struct WcmMark {}; // holds a with-continuation-mark mark for its result
+    struct Call {};    // a procedure activation (holds the callee's marks)
+
+    struct Seq { // begin / begin0 / a multi-expression body
+      EnvPtr Env;
+      llvm::SmallVector<const ast::ExprNode *> Exprs;
+      size_t Idx = 0; // index of the next expression to evaluate
+      std::unique_ptr<ast::ValueNode> Saved; // begin0: saved first value
+      bool Begin0 = false;
+    };
+    struct IfBranch { // choose the then/else branch
+      EnvPtr Env;
+      const ast::ExprNode *ThenE = nullptr;
+      const ast::ExprNode *ElseE = nullptr;
+    };
+    struct App { // application: accumulate operator + args, then apply
+      EnvPtr Env;
+      llvm::SmallVector<const ast::ExprNode *> Exprs;
+      std::vector<std::unique_ptr<ast::ValueNode>> Done; // cursor = Done.size()
+      llvm::SMLoc AppLoc; // source location, for arity/procedure errors
+    };
+    struct MkValues { // (values ...): accumulate then build a Values
+      EnvPtr Env;
+      llvm::SmallVector<const ast::ExprNode *> Exprs;
+      std::vector<std::unique_ptr<ast::ValueNode>> Done;
+    };
+    struct LetBind { // let-values: accumulate binding values, then bind + body
+      EnvPtr Env;
+      const ast::LetValues *Let = nullptr;
+      std::vector<std::unique_ptr<ast::ValueNode>> Done;
+    };
+    struct LetRec { // letrec-values: bind each value into the recursive scope
+      const ast::LetValues *Let = nullptr;
+      EnvPtr RecScope; // the recursive scope being filled in
+      size_t Idx = 0;
+    };
+    struct Define { // top-level define-values: bind then produce void
+      const ast::DefineValues *Def = nullptr;
+      EnvPtr DefEnv; // the scope to define into
+    };
+    struct Set { // set!: mutate then produce void
+      EnvPtr Env;
+      const ast::Identifier *SetId = nullptr;
+    };
+    struct WcmKey { // with-continuation-mark: after key, evaluate val
+      EnvPtr Env;
+      const ast::ExprNode *WcmValE = nullptr;
+      const ast::ExprNode *WcmResultE = nullptr;
+    };
+    struct WcmVal { // with-continuation-mark: after val, install mark + result
+      EnvPtr Env;
+      const ast::ExprNode *WcmResultE = nullptr;
+      std::unique_ptr<ast::ValueNode> WcmKeyV;
     };
 
-    explicit Frame(Kind K) : K(K) {}
+    // The three tail-reusable activation kinds (Call/WcmMark/Halt) are the last
+    // three alternatives so isReusable()/isHalt() are unsigned index compares;
+    // the static_asserts below pin that ordering, so a new kind inserted before
+    // them leaves both predicates correct with no constant to edit.
+    using Payload =
+        std::variant<Seq, IfBranch, App, MkValues, LetBind, LetRec, Define, Set,
+                     WcmKey, WcmVal, Halt, WcmMark, Call>;
 
-    Kind K;
-    ast::MarkFrame Marks; // continuation marks belonging to this frame
-    EnvPtr Env;           // environment to resume subexpressions in
+    ast::MarkFrame Marks;                   // marks belonging to this frame
+    std::unique_ptr<ast::ValueNode> Callee; // activation's owned closure
+    Payload P;
 
-    // Seq / App / MkValues: the subexpressions to evaluate.
-    llvm::SmallVector<const ast::ExprNode *> Exprs;
-    size_t Idx = 0; // Seq: index of the next expression to evaluate
+    // Construct from any payload alternative; excludes Frame itself so the
+    // implicit move constructor (used by vector growth) is not hijacked.
+    template <typename Alt, typename = std::enable_if_t<
+                                !std::is_same_v<std::decay_t<Alt>, Frame>>>
+    explicit Frame(Alt &&A) : P(std::forward<Alt>(A)) {}
 
-    // App / MkValues / LetBind: already-evaluated results (cursor = Done.size).
-    std::vector<std::unique_ptr<ast::ValueNode>> Done;
-
-    // Seq (begin0): the saved value of the first expression.
-    std::unique_ptr<ast::ValueNode> Saved;
-    bool Begin0 = false;
-
-    // IfBranch.
-    const ast::ExprNode *ThenE = nullptr;
-    const ast::ExprNode *ElseE = nullptr;
-
-    // LetBind / LetRec / Define reference their source node for ids and body.
-    const ast::LetValues *Let = nullptr;
-    const ast::DefineValues *Def = nullptr;
-    EnvPtr DefEnv;   // Define: the scope to define into.
-    EnvPtr RecScope; // LetRec: the recursive scope being filled in.
-
-    // App: source location of the application, for arity/procedure errors.
-    llvm::SMLoc AppLoc;
-
-    // Set.
-    const ast::Identifier *SetId = nullptr;
-
-    // Wcm.
-    const ast::ExprNode *WcmValE = nullptr;
-    const ast::ExprNode *WcmResultE = nullptr;
-    std::unique_ptr<ast::ValueNode> WcmKeyV;
-
-    // Call: owns the applied closure so that Control, which points into the
-    // closure's (cloned) lambda body, stays valid for the whole activation.
-    std::unique_ptr<ast::ValueNode> Callee;
+    static constexpr size_t HaltIdx = std::variant_size_v<Payload> - 3;
+    bool isHalt() const { return P.index() == HaltIdx; }
+    bool isReusable() const { return P.index() >= HaltIdx; }
   };
+  static_assert(std::variant_size_v<Frame::Payload> == 13);
+  static_assert(
+      std::is_same_v<std::variant_alternative_t<Frame::HaltIdx, Frame::Payload>,
+                     Frame::Halt>);
+  static_assert(std::is_same_v<
+                std::variant_alternative_t<Frame::HaltIdx + 1, Frame::Payload>,
+                Frame::WcmMark>);
+  static_assert(std::is_same_v<
+                std::variant_alternative_t<Frame::HaltIdx + 2, Frame::Payload>,
+                Frame::Call>);
+
+  // Push a fresh continuation frame carrying payload Init, and return a
+  // reference to the just-constructed payload so the caller can fill its
+  // fields.
+  template <typename K> K &pushK(K Init) {
+    Kont.emplace_back(Frame(std::move(Init)));
+    return std::get<K>(Kont.back().P);
+  }
+
+  // Continue-mode transitions: deliver the value register to the top frame.
+  // One overload per kind (the former continueStep switch arms); dispatched by
+  // std::visit. step(Halt) is unreachable - run() intercepts Halt.
+  void step(Frame::Seq &K);
+  void step(Frame::IfBranch &K);
+  void step(Frame::App &K);
+  void step(Frame::MkValues &K);
+  void step(Frame::LetBind &K);
+  void step(Frame::LetRec &K);
+  void step(Frame::Define &K);
+  void step(Frame::Set &K);
+  void step(Frame::WcmKey &K);
+  void step(Frame::WcmVal &K);
+  void step(Frame::WcmMark &K);
+  void step(Frame::Call &K);
+  void step(Frame::Halt &K);
 
   enum class Mode { Eval, Continue };
 

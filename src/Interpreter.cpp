@@ -1,16 +1,22 @@
 #include "Interpreter.h"
 
+#include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/Twine.h>
+#include <llvm/Support/Casting.h>
 #include <llvm/Support/raw_ostream.h>
 
 #include <iostream>
 #include <memory>
 #include <ranges>
 #include <string>
+#include <utility>
+#include <variant>
 #include <vector>
 
+#include "AST.h"
 #include "ASTRuntime.h"
 #include "Casting.h"
+#include "Environment.h"
 
 #undef DEBUG_TYPE
 #define DEBUG_TYPE "Interpreter"
@@ -106,7 +112,7 @@ void Interpreter::visit(ast::Linklet const &Linklet) {
   std::unique_ptr<ast::ValueNode> Last;
   for (const auto &BodyForm : Linklet.getBody()) {
     Kont.clear();
-    Kont.emplace_back(Frame::Halt);
+    Kont.emplace_back(Frame(Frame::Halt{}));
     Control = BodyForm.get();
     Env = GlobalEnv;
     Val = nullptr;
@@ -128,7 +134,7 @@ void Interpreter::run() {
     if (M == Mode::Eval) {
       Control->accept(*this);
     } else {
-      if (Kont.back().K == Frame::Halt) {
+      if (Kont.back().isHalt()) {
         return; // Val holds the result (or null on error).
       }
       continueStep();
@@ -141,280 +147,263 @@ void Interpreter::run() {
 //
 
 void Interpreter::continueStep() {
-  Frame &Top = Kont.back();
-  switch (Top.K) {
-  case Frame::Halt:
-    // Handled by run(); should not reach here.
-    return;
+  // Deliver the value register to the top frame: dispatch on its active kind.
+  std::visit([this](auto &K) { step(K); }, Kont.back().P);
+}
 
-  case Frame::Seq: {
-    if (Top.Begin0 && Top.Idx == 1) {
-      Top.Saved = Val.takeLegacy();
-    }
-    if (Top.Idx < Top.Exprs.size()) {
-      const bool IsLast = Top.Idx + 1 == Top.Exprs.size();
-      if (IsLast && !Top.Begin0) {
-        // Tail position: drop the sequence frame before its final expression
-        // (mirrors IfBranch) so a tail call there reuses the enclosing
-        // activation frame rather than stacking a new one.
-        const ast::ExprNode *E = Top.Exprs[Top.Idx];
-        EnvPtr SeqEnv = Top.Env;
-        Kont.pop_back();
-        Control = E;
-        Env = SeqEnv;
-        M = Mode::Eval;
-      } else {
-        Control = Top.Exprs[Top.Idx];
-        Env = Top.Env;
-        Top.Idx++;
-        M = Mode::Eval;
-      }
-    } else {
-      // Only begin0 reaches here: its frame persists to the end to return the
-      // saved first value; a plain sequence's final expression is handled
-      // above.
-      std::unique_ptr<ast::ValueNode> R =
-          Top.Begin0 ? std::move(Top.Saved) : Val.takeLegacy();
-      Kont.pop_back();
-      deliver(std::move(R));
-    }
-    break;
+void Interpreter::step(Frame::Seq &K) {
+  if (K.Begin0 && K.Idx == 1) {
+    K.Saved = Val.takeLegacy();
   }
-
-  case Frame::IfBranch: {
-    const ast::ExprNode *ThenE = Top.ThenE;
-    const ast::ExprNode *ElseE = Top.ElseE;
-    EnvPtr E = Top.Env;
-    std::unique_ptr<ast::ValueNode> Cond = Val.takeLegacy();
+  if (K.Idx < K.Exprs.size()) {
+    const bool IsLast = K.Idx + 1 == K.Exprs.size();
+    if (IsLast && !K.Begin0) {
+      // Tail position: drop the sequence frame before its final expression
+      // (mirrors IfBranch) so a tail call there reuses the enclosing
+      // activation frame rather than stacking a new one.
+      const ast::ExprNode *E = K.Exprs[K.Idx];
+      EnvPtr SeqEnv = K.Env;
+      Kont.pop_back();
+      Control = E;
+      Env = SeqEnv;
+      M = Mode::Eval;
+    } else {
+      Control = K.Exprs[K.Idx];
+      Env = K.Env;
+      K.Idx++;
+      M = Mode::Eval;
+    }
+  } else {
+    // Only begin0 reaches here: its frame persists to the end to return the
+    // saved first value; a plain sequence's final expression is handled above.
+    std::unique_ptr<ast::ValueNode> R =
+        K.Begin0 ? std::move(K.Saved) : Val.takeLegacy();
     Kont.pop_back();
-    auto *B = llvm::dyn_cast_or_null<ast::BooleanLiteral>(Cond.get());
-    Control = (B && !B->value()) ? ElseE : ThenE;
-    Env = E;
+    deliver(std::move(R));
+  }
+}
+
+void Interpreter::step(Frame::IfBranch &K) {
+  const ast::ExprNode *ThenE = K.ThenE;
+  const ast::ExprNode *ElseE = K.ElseE;
+  EnvPtr E = K.Env;
+  std::unique_ptr<ast::ValueNode> Cond = Val.takeLegacy();
+  Kont.pop_back();
+  auto *B = llvm::dyn_cast_or_null<ast::BooleanLiteral>(Cond.get());
+  Control = (B && !B->value()) ? ElseE : ThenE;
+  Env = E;
+  M = Mode::Eval;
+}
+
+void Interpreter::step(Frame::App &K) {
+  K.Done.push_back(Val.takeLegacy());
+  if (K.Done.size() < K.Exprs.size()) {
+    Control = K.Exprs[K.Done.size()];
+    Env = K.Env;
     M = Mode::Eval;
-    break;
-  }
-
-  case Frame::App: {
-    Top.Done.push_back(Val.takeLegacy());
-    if (Top.Done.size() < Top.Exprs.size()) {
-      Control = Top.Exprs[Top.Done.size()];
-      Env = Top.Env;
-      M = Mode::Eval;
-    } else {
-      std::vector<std::unique_ptr<ast::ValueNode>> Vals = std::move(Top.Done);
-      llvm::SMLoc AppLoc = Top.AppLoc;
-      llvm::SMLoc OpLoc = Top.Exprs[0]->getLoc();
-      Kont.pop_back();
-      applyProcedure(std::move(Vals), AppLoc, OpLoc);
-    }
-    break;
-  }
-
-  case Frame::MkValues: {
-    Top.Done.push_back(Val.takeLegacy());
-    if (Top.Done.size() < Top.Exprs.size()) {
-      Control = Top.Exprs[Top.Done.size()];
-      Env = Top.Env;
-      M = Mode::Eval;
-    } else {
-      std::vector<std::unique_ptr<ast::ValueNode>> Vals = std::move(Top.Done);
-      Kont.pop_back();
-      if (Vals.size() == 1) {
-        deliver(std::move(Vals[0]));
-      } else {
-        llvm::SmallVector<std::unique_ptr<ast::ExprNode>> Exprs;
-        Exprs.reserve(Vals.size());
-        for (auto &Vv : Vals) {
-          Exprs.emplace_back(std::move(Vv));
-        }
-        deliver(std::make_unique<ast::Values>(std::move(Exprs)));
-      }
-    }
-    break;
-  }
-
-  case Frame::LetBind: {
-    Top.Done.push_back(Val.takeLegacy());
-    const ast::LetValues *Let = Top.Let;
-    if (Top.Done.size() < Let->exprsCount()) {
-      Control = &Let->getBindingExpr(Top.Done.size());
-      Env = Top.Env;
-      M = Mode::Eval;
-      break;
-    }
-
-    std::vector<std::unique_ptr<ast::ValueNode>> Vals = std::move(Top.Done);
-    EnvPtr OuterEnv = Top.Env;
+  } else {
+    std::vector<std::unique_ptr<ast::ValueNode>> Vals = std::move(K.Done);
+    llvm::SMLoc AppLoc = K.AppLoc;
+    llvm::SMLoc OpLoc = K.Exprs[0]->getLoc();
     Kont.pop_back();
+    applyProcedure(std::move(Vals), AppLoc, OpLoc);
+  }
+}
 
-    // let-values: all binding expressions were evaluated in the enclosing
-    // environment; only now are the identifiers bound, in a fresh scope.
-    EnvPtr ScopePtr = newScope(OuterEnv);
-    for (size_t I = 0; I < Vals.size(); ++I) {
-      if (!bindValues(Diag, Let->getLoc(), ScopePtr->Vars,
-                      Let->getBindingIds(I), std::move(Vals[I]))) {
-        abortEval();
-        return;
+void Interpreter::step(Frame::MkValues &K) {
+  K.Done.push_back(Val.takeLegacy());
+  if (K.Done.size() < K.Exprs.size()) {
+    Control = K.Exprs[K.Done.size()];
+    Env = K.Env;
+    M = Mode::Eval;
+  } else {
+    std::vector<std::unique_ptr<ast::ValueNode>> Vals = std::move(K.Done);
+    Kont.pop_back();
+    if (Vals.size() == 1) {
+      deliver(std::move(Vals[0]));
+    } else {
+      llvm::SmallVector<std::unique_ptr<ast::ExprNode>> Exprs;
+      Exprs.reserve(Vals.size());
+      for (auto &Vv : Vals) {
+        Exprs.emplace_back(std::move(Vv));
       }
+      deliver(std::make_unique<ast::Values>(std::move(Exprs)));
     }
+  }
+}
 
-    llvm::SmallVector<const ast::ExprNode *> Body;
-    for (size_t I = 0; I < Let->bodyCount(); ++I) {
-      Body.push_back(&Let->getBodyExpr(I));
-    }
-    evalBody(std::move(Body), ScopePtr);
-    break;
+void Interpreter::step(Frame::LetBind &K) {
+  K.Done.push_back(Val.takeLegacy());
+  const ast::LetValues *Let = K.Let;
+  if (K.Done.size() < Let->exprsCount()) {
+    Control = &Let->getBindingExpr(K.Done.size());
+    Env = K.Env;
+    M = Mode::Eval;
+    return;
   }
 
-  case Frame::LetRec: {
-    // letrec-values: the recursive scope is already in scope; bind the value
-    // just produced, then evaluate the next binding expression (or the body)
-    // in that same scope so forward/mutual references resolve.
-    const ast::LetValues *Let = Top.Let;
-    EnvPtr RecScope = Top.RecScope;
-    if (!bindValues(Diag, Let->getLoc(), RecScope->Vars,
-                    Let->getBindingIds(Top.Idx), Val.takeLegacy())) {
+  std::vector<std::unique_ptr<ast::ValueNode>> Vals = std::move(K.Done);
+  EnvPtr OuterEnv = K.Env;
+  Kont.pop_back();
+
+  // let-values: all binding expressions were evaluated in the enclosing
+  // environment; only now are the identifiers bound, in a fresh scope.
+  EnvPtr ScopePtr = newScope(OuterEnv);
+  for (size_t I = 0; I < Vals.size(); ++I) {
+    if (!bindValues(Diag, Let->getLoc(), ScopePtr->Vars, Let->getBindingIds(I),
+                    std::move(Vals[I]))) {
       abortEval();
       return;
     }
-    Top.Idx++;
-    if (Top.Idx < Let->exprsCount()) {
-      Control = &Let->getBindingExpr(Top.Idx);
-      Env = RecScope;
-      M = Mode::Eval;
-      break;
-    }
-
-    Kont.pop_back();
-    llvm::SmallVector<const ast::ExprNode *> Body;
-    for (size_t I = 0; I < Let->bodyCount(); ++I) {
-      Body.push_back(&Let->getBodyExpr(I));
-    }
-    evalBody(std::move(Body), RecScope);
-    break;
   }
 
-  case Frame::Define: {
-    const ast::DefineValues *DV = Top.Def;
-    EnvPtr DefEnv = Top.DefEnv;
-    std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
-    Kont.pop_back();
-
-    if (DV->countIds() == 1) {
-      DefEnv->Vars.add(DV->getIds()[0], std::move(V));
-      deliver(std::make_unique<ast::Void>());
-      break;
-    }
-    auto *Vs = llvm::dyn_cast_or_null<ast::Values>(V.get());
-    if (!Vs) {
-      Diag.error(DV->getLoc(),
-                 "define-values expected multiple values from its body");
-      abortEval();
-      break;
-    }
-    if (Vs->countExprs() != DV->countIds()) {
-      Diag.error(DV->getLoc(), llvm::Twine("define-values expected ") +
-                                   llvm::Twine(DV->countIds()) +
-                                   " values, got " +
-                                   llvm::Twine(Vs->countExprs()));
-      abortEval();
-      break;
-    }
-    size_t J = 0;
-    for (auto const &Id : DV->getIds()) {
-      const ast::ExprNode &E = Vs->getExprs()[J++];
-      std::unique_ptr<ast::ExprNode> EP(E.clone());
-      std::unique_ptr<ast::ValueNode> Vv = dyn_castU<ast::ValueNode>(EP);
-      DefEnv->Vars.add(Id, std::move(Vv));
-    }
-    deliver(std::make_unique<ast::Void>());
-    break;
+  llvm::SmallVector<const ast::ExprNode *> Body;
+  for (size_t I = 0; I < Let->bodyCount(); ++I) {
+    Body.push_back(&Let->getBodyExpr(I));
   }
+  evalBody(std::move(Body), ScopePtr);
+}
 
-  case Frame::Set: {
-    const ast::Identifier *Id = Top.SetId;
-    EnvPtr E = Top.Env;
-    std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
-    Kont.pop_back();
-    if (!envSet(E, *Id, std::move(V))) {
-      Diag.error(Id->getLoc(), llvm::Twine("cannot set unbound identifier: ") +
-                                   Id->getName());
-      abortEval();
-      break;
-    }
-    deliver(std::make_unique<ast::Void>());
-    break;
+void Interpreter::step(Frame::LetRec &K) {
+  // letrec-values: the recursive scope is already in scope; bind the value
+  // just produced, then evaluate the next binding expression (or the body)
+  // in that same scope so forward/mutual references resolve.
+  const ast::LetValues *Let = K.Let;
+  EnvPtr RecScope = K.RecScope;
+  if (!bindValues(Diag, Let->getLoc(), RecScope->Vars,
+                  Let->getBindingIds(K.Idx), Val.takeLegacy())) {
+    abortEval();
+    return;
   }
-
-  case Frame::WcmKey: {
-    const ast::ExprNode *ValE = Top.WcmValE;
-    const ast::ExprNode *ResultE = Top.WcmResultE;
-    EnvPtr E = Top.Env;
-    std::unique_ptr<ast::ValueNode> KeyV = Val.takeLegacy();
-    Kont.pop_back();
-    Kont.emplace_back(Frame::WcmVal);
-    Frame &WV = Kont.back();
-    WV.WcmResultE = ResultE;
-    WV.WcmKeyV = std::move(KeyV);
-    WV.Env = E;
-    Control = ValE;
-    Env = E;
+  K.Idx++;
+  if (K.Idx < Let->exprsCount()) {
+    Control = &Let->getBindingExpr(K.Idx);
+    Env = RecScope;
     M = Mode::Eval;
-    break;
+    return;
   }
 
-  case Frame::WcmVal: {
-    const ast::ExprNode *ResultE = Top.WcmResultE;
-    EnvPtr E = Top.Env;
-    std::unique_ptr<ast::ValueNode> KeyV = std::move(Top.WcmKeyV);
-    std::unique_ptr<ast::ValueNode> ValV = Val.takeLegacy();
-    Kont.pop_back();
-    // The result expression is in tail position with respect to whatever
-    // frame is now on top. Call/WcmMark/Halt frames are exactly the frames
-    // that a tail call is later allowed to reuse (see applyProcedure), so
-    // installing the mark directly onto that same frame - instead of pushing
-    // a new one - shares one continuation frame across a chain of
-    // tail-nested with-continuation-marks, the same way tail calls already
-    // share one frame across a self-recursive loop: a later mark for the
-    // same key in that frame correctly replaces this one (setMark) rather
-    // than stacking a second entry, and a tail call out of this expression
-    // reuses the frame with the mark already on it (O(1) space). A
-    // genuinely non-tail with-continuation-mark (Kont.back() is anything
-    // else - Seq, App, LetBind, ...) still gets its own frame, popped when
-    // the result produces a value, so the mark's dynamic extent is exactly
-    // the result expression and doesn't leak into later expressions.
-    if (!Kont.empty() &&
-        (Kont.back().K == Frame::Call || Kont.back().K == Frame::WcmMark ||
-         Kont.back().K == Frame::Halt)) {
-      ast::setMark(Kont.back().Marks, std::move(KeyV), std::move(ValV));
-    } else {
-      Kont.emplace_back(Frame::WcmMark);
-      ast::setMark(Kont.back().Marks, std::move(KeyV), std::move(ValV));
-    }
-    Control = ResultE;
-    Env = E;
-    M = Mode::Eval;
-    break;
+  Kont.pop_back();
+  llvm::SmallVector<const ast::ExprNode *> Body;
+  for (size_t I = 0; I < Let->bodyCount(); ++I) {
+    Body.push_back(&Let->getBodyExpr(I));
   }
+  evalBody(std::move(Body), RecScope);
+}
 
-  case Frame::WcmMark: {
-    // The result expression has produced a value; discard the mark frame and
-    // pass the value through to the enclosing continuation.
-    std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
-    Kont.pop_back();
-    deliver(std::move(V));
-    break;
-  }
+void Interpreter::step(Frame::Define &K) {
+  const ast::DefineValues *DV = K.Def;
+  EnvPtr DefEnv = K.DefEnv;
+  std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
+  Kont.pop_back();
 
-  case Frame::Call: {
-    // The activation's body has produced a value; its frame (and marks) is
-    // discarded and the value flows to the caller's continuation.
-    std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
-    Kont.pop_back();
-    deliver(std::move(V));
-    break;
+  if (DV->countIds() == 1) {
+    DefEnv->Vars.add(DV->getIds()[0], std::move(V));
+    deliver(std::make_unique<ast::Void>());
+    return;
   }
+  auto *Vs = llvm::dyn_cast_or_null<ast::Values>(V.get());
+  if (!Vs) {
+    Diag.error(DV->getLoc(),
+               "define-values expected multiple values from its body");
+    abortEval();
+    return;
   }
+  if (Vs->countExprs() != DV->countIds()) {
+    Diag.error(DV->getLoc(), llvm::Twine("define-values expected ") +
+                                 llvm::Twine(DV->countIds()) + " values, got " +
+                                 llvm::Twine(Vs->countExprs()));
+    abortEval();
+    return;
+  }
+  size_t J = 0;
+  for (auto const &Id : DV->getIds()) {
+    const ast::ExprNode &E = Vs->getExprs()[J++];
+    std::unique_ptr<ast::ExprNode> EP(E.clone());
+    std::unique_ptr<ast::ValueNode> Vv = dyn_castU<ast::ValueNode>(EP);
+    DefEnv->Vars.add(Id, std::move(Vv));
+  }
+  deliver(std::make_unique<ast::Void>());
+}
+
+void Interpreter::step(Frame::Set &K) {
+  const ast::Identifier *Id = K.SetId;
+  EnvPtr E = K.Env;
+  std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
+  Kont.pop_back();
+  if (!envSet(E, *Id, std::move(V))) {
+    Diag.error(Id->getLoc(),
+               llvm::Twine("cannot set unbound identifier: ") + Id->getName());
+    abortEval();
+    return;
+  }
+  deliver(std::make_unique<ast::Void>());
+}
+
+void Interpreter::step(Frame::WcmKey &K) {
+  const ast::ExprNode *ValE = K.WcmValE;
+  const ast::ExprNode *ResultE = K.WcmResultE;
+  EnvPtr E = K.Env;
+  std::unique_ptr<ast::ValueNode> KeyV = Val.takeLegacy();
+  Kont.pop_back();
+  Frame::WcmVal &WV = pushK(Frame::WcmVal{});
+  WV.WcmResultE = ResultE;
+  WV.WcmKeyV = std::move(KeyV);
+  WV.Env = E;
+  Control = ValE;
+  Env = E;
+  M = Mode::Eval;
+}
+
+void Interpreter::step(Frame::WcmVal &K) {
+  const ast::ExprNode *ResultE = K.WcmResultE;
+  EnvPtr E = K.Env;
+  std::unique_ptr<ast::ValueNode> KeyV = std::move(K.WcmKeyV);
+  std::unique_ptr<ast::ValueNode> ValV = Val.takeLegacy();
+  Kont.pop_back();
+  // The result expression is in tail position with respect to whatever frame
+  // is now on top. Call/WcmMark/Halt frames are exactly the frames that a tail
+  // call is later allowed to reuse (see applyProcedure), so installing the mark
+  // directly onto that same frame - instead of pushing a new one - shares one
+  // continuation frame across a chain of tail-nested with-continuation-marks,
+  // the same way tail calls already share one frame across a self-recursive
+  // loop: a later mark for the same key in that frame correctly replaces this
+  // one (setMark) rather than stacking a second entry, and a tail call out of
+  // this expression reuses the frame with the mark already on it (O(1) space).
+  // A genuinely non-tail with-continuation-mark (Kont.back() is anything else -
+  // Seq, App, LetBind, ...) still gets its own frame, popped when the result
+  // produces a value, so the mark's dynamic extent is exactly the result
+  // expression and doesn't leak into later expressions.
+  if (!Kont.empty() && Kont.back().isReusable()) {
+    ast::setMark(Kont.back().Marks, std::move(KeyV), std::move(ValV));
+  } else {
+    Kont.emplace_back(Frame(Frame::WcmMark{}));
+    ast::setMark(Kont.back().Marks, std::move(KeyV), std::move(ValV));
+  }
+  Control = ResultE;
+  Env = E;
+  M = Mode::Eval;
+}
+
+void Interpreter::step(Frame::WcmMark & /*K*/) {
+  // The result expression has produced a value; discard the mark frame and
+  // pass the value through to the enclosing continuation.
+  std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
+  Kont.pop_back();
+  deliver(std::move(V));
+}
+
+void Interpreter::step(Frame::Call & /*K*/) {
+  // The activation's body has produced a value; its frame (and marks) is
+  // discarded and the value flows to the caller's continuation.
+  std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
+  Kont.pop_back();
+  deliver(std::move(V));
+}
+
+void Interpreter::step(Frame::Halt & /*K*/) {
+  llvm_unreachable(
+      "Halt is handled by run(); continueStep never dispatches it");
 }
 
 //
@@ -555,9 +544,7 @@ void Interpreter::applyProcedure(
   // until a later with-continuation-mark for the same key overwrites them
   // (setMark), exactly as if every tail-recursive step of the loop were
   // still the same continuation frame - which, after reuse, it is.
-  if (!Kont.empty() &&
-      (Kont.back().K == Frame::Call || Kont.back().K == Frame::WcmMark ||
-       Kont.back().K == Frame::Halt)) {
+  if (!Kont.empty() && Kont.back().isReusable()) {
     Frame &Enc = Kont.back();
     Enc.Callee = std::move(Op); // frees the previous activation's closure
     Control = &Clause->getBody();
@@ -566,7 +553,7 @@ void Interpreter::applyProcedure(
     return;
   }
 
-  Kont.emplace_back(Frame::Call);
+  Kont.emplace_back(Frame(Frame::Call{}));
   // The Call frame takes ownership of the closure so its (cloned) lambda body,
   // into which Control now points, outlives this function.
   Kont.back().Callee = std::move(Op);
@@ -584,8 +571,7 @@ void Interpreter::evalBody(llvm::SmallVector<const ast::ExprNode *> Body,
     M = Mode::Eval;
     return;
   }
-  Kont.emplace_back(Frame::Seq);
-  Frame &F = Kont.back();
+  Frame::Seq &F = pushK(Frame::Seq{});
   F.Env = E;
   F.Begin0 = false;
   F.Exprs = std::move(Body);
@@ -632,8 +618,7 @@ void Interpreter::visit(ast::Identifier const &Id) {
 }
 
 void Interpreter::visit(ast::Application const &A) {
-  Kont.emplace_back(Frame::App);
-  Frame &F = Kont.back();
+  Frame::App &F = pushK(Frame::App{});
   F.Env = Env;
   F.AppLoc = A.getLoc();
   F.Exprs.reserve(A.length());
@@ -651,8 +636,7 @@ void Interpreter::visit(ast::Begin const &B) {
     M = Mode::Eval;
     return;
   }
-  Kont.emplace_back(Frame::Seq);
-  Frame &F = Kont.back();
+  Frame::Seq &F = pushK(Frame::Seq{});
   F.Env = Env;
   F.Begin0 = B.isZero();
   F.Exprs.reserve(Body.size());
@@ -665,8 +649,7 @@ void Interpreter::visit(ast::Begin const &B) {
 }
 
 void Interpreter::visit(ast::IfCond const &I) {
-  Kont.emplace_back(Frame::IfBranch);
-  Frame &F = Kont.back();
+  Frame::IfBranch &F = pushK(Frame::IfBranch{});
   F.Env = Env;
   F.ThenE = &I.getThen();
   F.ElseE = &I.getElse();
@@ -681,8 +664,7 @@ void Interpreter::visit(ast::Values const &V) {
     deliver(std::make_unique<ast::Values>(std::move(Empty)));
     return;
   }
-  Kont.emplace_back(Frame::MkValues);
-  Frame &F = Kont.back();
+  Frame::MkValues &F = pushK(Frame::MkValues{});
   F.Env = Env;
   F.Exprs.reserve(N);
   for (size_t I = 0; I < N; ++I) {
@@ -708,8 +690,7 @@ void Interpreter::visit(ast::LetValues const &L) {
       evalBody(std::move(Body), RecScope);
       return;
     }
-    Kont.emplace_back(Frame::LetRec);
-    Frame &F = Kont.back();
+    Frame::LetRec &F = pushK(Frame::LetRec{});
     F.Let = &L;
     F.RecScope = RecScope;
     F.Idx = 0;
@@ -728,8 +709,7 @@ void Interpreter::visit(ast::LetValues const &L) {
     evalBody(std::move(Body), ScopePtr);
     return;
   }
-  Kont.emplace_back(Frame::LetBind);
-  Frame &F = Kont.back();
+  Frame::LetBind &F = pushK(Frame::LetBind{});
   F.Env = Env;
   F.Let = &L;
   Control = &L.getBindingExpr(0);
@@ -737,9 +717,7 @@ void Interpreter::visit(ast::LetValues const &L) {
 }
 
 void Interpreter::visit(ast::DefineValues const &DV) {
-  Kont.emplace_back(Frame::Define);
-  Frame &F = Kont.back();
-  F.Env = Env;
+  Frame::Define &F = pushK(Frame::Define{});
   F.Def = &DV;
   F.DefEnv = Env;
   Control = &DV.getBody();
@@ -747,8 +725,7 @@ void Interpreter::visit(ast::DefineValues const &DV) {
 }
 
 void Interpreter::visit(ast::SetBang const &SB) {
-  Kont.emplace_back(Frame::Set);
-  Frame &F = Kont.back();
+  Frame::Set &F = pushK(Frame::Set{});
   F.Env = Env;
   F.SetId = &SB.getIdentifier();
   Control = &SB.getExpr();
@@ -756,8 +733,7 @@ void Interpreter::visit(ast::SetBang const &SB) {
 }
 
 void Interpreter::visit(ast::WithContinuationMark const &WCM) {
-  Kont.emplace_back(Frame::WcmKey);
-  Frame &F = Kont.back();
+  Frame::WcmKey &F = pushK(Frame::WcmKey{});
   F.Env = Env;
   F.WcmValE = &WCM.getVal();
   F.WcmResultE = &WCM.getResult();
