@@ -2,7 +2,7 @@
 
 **Scope**: The interpreter (`src/`), weighted to the git hot-spots of recent history — `Interpreter.cpp`, `AST.h`/`AST.cpp`, `Interpreter.h`, `Parse.cpp` are the files that keep changing (proper tail calls, the M2/GC value-model migration, the value-printing seam). Cold code (`Environment.cpp`, the MLIR scaffold) is scored but docked by YAGNI. This is the third firing; it reconciles against a persisted backlog of six candidates and the one that already landed.
 
-**Picked**: `frame-per-kind-continuation` — see PR (opened at step 6) and `.architecture/backlog.md`.
+**Picked**: `frame-per-kind-continuation` — see PR #191 and `.architecture/backlog.md`.
 
 **Degradations**: none. `gh` authenticated; sub-agent exploration and design-it-twice both available; `codebase-design` vocabulary in use.
 
