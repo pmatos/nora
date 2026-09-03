@@ -1,0 +1,27 @@
+# Enforces that PR titles follow the Conventional Commits spec.
+# https://www.conventionalcommits.org/  |  https://github.com/amannn/action-semantic-pull-request
+name: Lint PR title
+
+# pull_request_target is required so the check also runs on fork PRs. It is safe
+# here: no PR code is checked out and the token is read-only on pull-requests.
+on: # zizmor: ignore[dangerous-triggers]
+  pull_request_target:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+
+permissions:
+  pull-requests: read
+
+jobs:
+  validate:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    steps:
+      # Tag-pinned, not hash-pinned: this repo's policy is tag pins kept current by
+      # Dependabot rather than SHA pins, so unpinned-uses is a known, accepted tradeoff.
+      - uses: amannn/action-semantic-pull-request@v6.1.1 # zizmor: ignore[unpinned-uses]
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

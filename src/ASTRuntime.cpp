@@ -44,6 +44,56 @@ void CaseLambdaClosure::dump() const {
 }
 void CaseLambdaClosure::write(llvm::raw_ostream &) const {}
 
+Box::Box(std::unique_ptr<ValueNode> V)
+    : ClonableNode(ASTNodeKind::AST_Box), C(std::make_shared<Cell>()) {
+  C->Value = std::move(V);
+}
+
+Box::Box(const Box &Other) : ClonableNode(ASTNodeKind::AST_Box), C(Other.C) {}
+
+std::unique_ptr<ValueNode> Box::get() const {
+  return std::unique_ptr<ValueNode>(C->Value->clone());
+}
+
+void Box::set(std::unique_ptr<ValueNode> V) const { C->Value = std::move(V); }
+
+void Box::dump() const { llvm::dbgs() << "#&<box>\n"; }
+
+void Box::write(llvm::raw_ostream &OS) const {
+  OS << "#&";
+  C->Value->write(OS);
+}
+
+Pair::Pair(std::unique_ptr<ValueNode> Car, std::unique_ptr<ValueNode> Cdr)
+    : ClonableNode(ASTNodeKind::AST_Pair), C(std::make_shared<Cell>()) {
+  C->Car = std::move(Car);
+  C->Cdr = std::move(Cdr);
+}
+
+Pair::Pair(const Pair &Other)
+    : ClonableNode(ASTNodeKind::AST_Pair), C(Other.C) {}
+
+std::unique_ptr<ValueNode> Pair::car() const {
+  return std::unique_ptr<ValueNode>(C->Car->clone());
+}
+
+std::unique_ptr<ValueNode> Pair::cdr() const {
+  return std::unique_ptr<ValueNode>(C->Cdr->clone());
+}
+
+void Pair::setCar(std::unique_ptr<ValueNode> V) const { C->Car = std::move(V); }
+void Pair::setCdr(std::unique_ptr<ValueNode> V) const { C->Cdr = std::move(V); }
+
+void Pair::dump() const { llvm::dbgs() << "#<pair>\n"; }
+
+void Pair::write(llvm::raw_ostream &OS) const {
+  OS << "(";
+  C->Car->write(OS);
+  OS << " . ";
+  C->Cdr->write(OS);
+  OS << ")";
+}
+
 //
 // Continuation marks
 //

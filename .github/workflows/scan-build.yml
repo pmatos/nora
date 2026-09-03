@@ -42,7 +42,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build libgmp-dev "clang-${LLVM_VERSION}" \
+          sudo apt-get install -y ninja-build libgmp-dev libgc-dev "clang-${LLVM_VERSION}" \
             "clang-tools-${LLVM_VERSION}" "llvm-${LLVM_VERSION}-dev" "llvm-${LLVM_VERSION}-tools"
           echo "/usr/lib/llvm-${LLVM_VERSION}/bin" >> "$GITHUB_PATH"
 
