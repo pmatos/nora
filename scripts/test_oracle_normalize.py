@@ -260,5 +260,59 @@ class ProvideRequireBoundary(unittest.TestCase):
             '(#%require racket/list (for-syntax racket/base))))')
 
 
+class QuotedGensymRenumbering(unittest.TestCase):
+    def normalized(self, text):
+        return oracle_datum.write(oracle_alpha.normalize(oracle_datum.parse(text)))
+
+    def assert_normalize_equal(self, text_a, text_b):
+        self.assertEqual(self.normalized(text_a), self.normalized(text_b))
+
+    def test_quoted_gensym_is_renumbered_by_first_occurrence(self):
+        self.assert_normalize_equal(
+            "(module m racket/base (#%module-begin (define-values (r) "
+            "(quote g574))))",
+            "(module m racket/base (#%module-begin (define-values (r) "
+            "(quote g12))))",
+        )
+
+    def test_quoted_lifted_name_uses_its_own_prefix_and_counter(self):
+        self.assert_normalize_equal(
+            "(module m racket/base (#%module-begin (define-values (r) "
+            "(quote lifted/15))))",
+            "(module m racket/base (#%module-begin (define-values (r) "
+            "(quote lifted/9))))",
+        )
+
+    def test_non_gensym_shaped_trailing_digits_are_left_untouched(self):
+        # 'utf-8 and 'sha256 print indistinguishably from a gensym'd
+        # symbol under plain `write`; anchoring on the real generator
+        # prefixes ("g", "lifted/") is what keeps these untouched.
+        out = self.normalized(
+            "(module m racket/base (#%module-begin (define-values (r) "
+            "(quote (utf-8 sha256)))))")
+        self.assertEqual(
+            out,
+            '(module m racket/base (#%module-begin (define-values (v0) '
+            '(quote (utf-8 sha256)))))')
+
+    def test_two_distinct_quoted_gensyms_get_distinct_numbers(self):
+        out = self.normalized(
+            "(module m racket/base (#%module-begin (define-values (r) "
+            "(#%app cons (quote g10) (quote g20)))))")
+        self.assertEqual(
+            out,
+            '(module m racket/base (#%module-begin (define-values (v0) '
+            '(#%app cons (quote g0) (quote g1)))))')
+
+    def test_repeated_quoted_gensym_reuses_the_same_number(self):
+        out = self.normalized(
+            "(module m racket/base (#%module-begin (define-values (r) "
+            "(#%app cons (quote g10) (quote g10)))))")
+        self.assertEqual(
+            out,
+            '(module m racket/base (#%module-begin (define-values (v0) '
+            '(#%app cons (quote g0) (quote g0)))))')
+
+
 if __name__ == '__main__':
     unittest.main()

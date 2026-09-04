@@ -8,17 +8,45 @@ across the whole traversal so structurally-identical programs (module-path
 encodings and gensym counter offsets aside) always print identically —
 "global-consistent", not local, alpha-renaming.
 """
-from oracle_datum import DottedList, Symbol
+import re
+
+from oracle_datum import DottedList, Symbol, Vector
+
+# Racket's default (gensym) base is "g"; the expander's lift names use
+# "lifted/". Anchoring on these two real generator prefixes (rather than
+# "any identifier ending in digits") avoids false-positiving on ordinary
+# data like 'utf-8 or 'sha256, which print indistinguishably from a
+# gensym'd symbol under plain `write` — a fundamental ambiguity in
+# text-only normalization that anchoring only shrinks, not eliminates (a
+# fixture that legitimately quotes the literal data 'g42 would still be
+# misnormalized; this is an accepted, documented gap, not a bug to fix by
+# further pattern tuning).
+_GENSYM_RE = re.compile(r'^(g|lifted/)[0-9]+$')
 
 
 class _Counter:
     def __init__(self):
         self.n = 0
+        self._gensym_mapping = {}
+        self._gensym_counters = {}
 
     def fresh(self):
         name = f'v{self.n}'
         self.n += 1
         return name
+
+    def renumber_gensym(self, name):
+        """Renumbers a gensym-shaped symbol by first occurrence, tracked
+        independently per prefix ("g" vs "lifted/") across the whole
+        traversal — quoted data's counterpart to fresh() above."""
+        if name in self._gensym_mapping:
+            return self._gensym_mapping[name]
+        prefix = _GENSYM_RE.match(name).group(1)
+        index = self._gensym_counters.get(prefix, 0)
+        new_name = f'{prefix}{index}'
+        self._gensym_counters[prefix] = index + 1
+        self._gensym_mapping[name] = new_name
+        return new_name
 
 
 def _head_name(datum):
@@ -171,11 +199,29 @@ def _walk_letrec_values(datum, env, ctr):
     return [head, new_clauses] + new_body
 
 
-def _walk_quote(datum, env, ctr):
-    # Quoted data is literal, not code: never walked/renamed here. A later
-    # pass (issue #92 slice 7) handles gensym renumbering within a
-    # quote/quote-syntax payload; nothing else may touch it.
+def _renumber_gensyms_in_quoted_data(datum, ctr):
+    if isinstance(datum, Symbol):
+        if _GENSYM_RE.match(datum.name):
+            return Symbol(ctr.renumber_gensym(datum.name))
+        return datum
+    if isinstance(datum, list):
+        return [_renumber_gensyms_in_quoted_data(e, ctr) for e in datum]
+    if isinstance(datum, DottedList):
+        return DottedList(
+            [_renumber_gensyms_in_quoted_data(e, ctr) for e in datum.items],
+            _renumber_gensyms_in_quoted_data(datum.tail, ctr))
+    if isinstance(datum, Vector):
+        return Vector([_renumber_gensyms_in_quoted_data(e, ctr) for e in datum.items])
     return datum
+
+
+def _walk_quote(datum, env, ctr):
+    # Quoted data is literal, not code: never alpha-renamed here (env is
+    # unused). The only thing allowed to touch a quote/quote-syntax payload
+    # is renumbering its gensym-shaped symbols, by first occurrence across
+    # the whole traversal, same as fresh() but restricted to this pattern.
+    head, payload = datum
+    return [head, _renumber_gensyms_in_quoted_data(payload, ctr)]
 
 
 # Forms needing behavior other than "leave the head alone, walk every other
