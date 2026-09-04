@@ -65,13 +65,6 @@ else
 fi
 REF="${1:-$DEFAULT_REF}"
 
-log "host racket:  $("$RACKET" --version)"
-log "source ref:   $REF"
-if [ "$REF" != "$HOST_TAG" ]; then
-  log "WARNING: source ref '$REF' differs from host racket ($HOST_TAG);"
-  log "         the flattened expander may not match your runtime."
-fi
-
 # A 40-hex-char ref is a commit SHA, not a tag/branch: `git clone --branch`
 # only resolves refs GitHub advertises (tags/branches), so a raw commit needs
 # an explicit fetch-by-SHA instead (GitHub allows fetching any reachable
@@ -79,6 +72,17 @@ fi
 looks_like_commit() {
   printf '%s' "$1" | grep -qE '^[0-9a-fA-F]{40}$'
 }
+
+log "host racket:  $("$RACKET" --version)"
+log "source ref:   $REF"
+# The "differs from host" warning only makes sense as a tag-vs-tag string
+# compare; a pinned commit SHA (the expected default once ORACLE_RACKET_COMMIT
+# exists) will essentially never equal a tag name, so comparing it against
+# HOST_TAG would warn on every normal run.
+if ! looks_like_commit "$REF" && [ "$REF" != "$HOST_TAG" ]; then
+  log "WARNING: source ref '$REF' differs from host racket ($HOST_TAG);"
+  log "         the flattened expander may not match your runtime."
+fi
 
 BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/nora-gen-expander.XXXXXX")"
 cleanup() { [ "${KEEP_BUILD:-0}" = 1 ] || rm -rf "$BUILD_DIR"; }
