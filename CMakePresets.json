@@ -50,6 +50,14 @@
       }
     },
     {
+      "name": "lsan",
+      "displayName": "Debug + LeakSanitizer",
+      "inherits": "debug",
+      "cacheVariables": {
+        "WITH_LSAN": "ON"
+      }
+    },
+    {
       "name": "coverage",
       "displayName": "Coverage",
       "description": "Debug build instrumented for gcov/lcov coverage",
@@ -73,6 +81,7 @@
     { "name": "release", "configurePreset": "release" },
     { "name": "asan", "configurePreset": "asan" },
     { "name": "ubsan", "configurePreset": "ubsan" },
+    { "name": "lsan", "configurePreset": "lsan" },
     { "name": "coverage", "configurePreset": "coverage" },
     { "name": "mlir", "configurePreset": "mlir" }
   ],
@@ -95,6 +104,11 @@
     {
       "name": "ubsan",
       "configurePreset": "ubsan",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "lsan",
+      "configurePreset": "lsan",
       "output": { "outputOnFailure": true }
     }
   ]

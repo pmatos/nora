@@ -16,6 +16,32 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # MLIR is opt-in. The default build depends only on LLVM + GMP.
 option(NORA_ENABLE_MLIR "Build the experimental NIR MLIR dialect (requires MLIR)" OFF)
 
+# The oracle differential harness (test/oracle) runs fixtures through both
+# norac and a pinned `racket`. It self-gates on racket's availability
+# (NORA_HAVE_RACKET below), so leaving it ON by default costs nothing on
+# machines without Racket installed.
+option(NORA_ENABLE_ORACLE "Enable the oracle differential test harness" ON)
+
+if(NORA_ENABLE_ORACLE)
+  find_program(NORA_RACKET_EXECUTABLE NAMES racket)
+endif()
+
+if(NORA_ENABLE_ORACLE AND NORA_RACKET_EXECUTABLE)
+  set(NORA_HAVE_RACKET ON)
+  message(STATUS "Found racket: ${NORA_RACKET_EXECUTABLE}")
+else()
+  set(NORA_HAVE_RACKET OFF)
+  set(NORA_RACKET_EXECUTABLE "")
+  message(STATUS "racket not found or oracle disabled; test/oracle will report its tests as unsupported")
+endif()
+
+# ORACLE_RACKET_COMMIT (repo root) is the single pinned upstream racket/racket
+# commit every version-sensitive artifact (oracle fixtures, expander.rktl,
+# the future racket/base .zo graph) must derive from. See ROADMAP.md's
+# "Toolchain version lock" section.
+file(READ "${CMAKE_SOURCE_DIR}/ORACLE_RACKET_COMMIT" ORACLE_RACKET_COMMIT)
+string(STRIP "${ORACLE_RACKET_COMMIT}" ORACLE_RACKET_COMMIT)
+
 # Treat compiler warnings as errors by default (CMake >= 3.24). The code is
 # warning-clean on GCC and Clang; disable with -DCMAKE_COMPILE_WARNING_AS_ERROR=OFF
 # for exploratory local builds.

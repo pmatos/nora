@@ -1,0 +1,15 @@
+# -*- Python -*-
+import os
+
+config.nora_src_root = "@CMAKE_SOURCE_DIR@"
+config.nora_build_root = "@CMAKE_BINARY_DIR@"
+config.nora_tools_root = os.path.join(config.nora_build_root, 'bin')
+config.nora_racket_executable = "@NORA_RACKET_EXECUTABLE@"
+config.nora_have_racket = "@NORA_HAVE_RACKET@" == "ON"
+# Not consumed by lit.cfg.py yet; plumbed through now so the provenance stamp
+# (M10+ differential tests, see ROADMAP.md) has it available without another
+# CMake round-trip later.
+config.oracle_racket_commit = "@ORACLE_RACKET_COMMIT@"
+
+lit_config.load_config(
+    config, os.path.join(config.nora_src_root, 'test', 'oracle', 'lit.cfg.py'))
