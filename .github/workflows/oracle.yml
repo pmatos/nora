@@ -1,7 +1,7 @@
 name: Oracle
 
-# Opt-in only: installing racket in the default push/pull_request matrix
-# (test.yml) would add a new hard apt dependency and slow every push. Trigger
+# Opt-in only: installing a pinned racket in the default push/pull_request
+# matrix (test.yml) would add a new dependency and slow every push. Trigger
 # manually after merging changes that touch test/oracle/, scripts/oracle-*,
 # or ORACLE_RACKET_COMMIT.
 on:
@@ -32,7 +32,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ninja-build libgmp-dev libgc-dev \
             "clang-${LLVM_VERSION}" "llvm-${LLVM_VERSION}-dev" \
-            "llvm-${LLVM_VERSION}-tools" python3-pip racket
+            "llvm-${LLVM_VERSION}-tools" python3-pip
           echo "CC=clang-${LLVM_VERSION}" >> "$GITHUB_ENV"
           echo "CXX=clang++-${LLVM_VERSION}" >> "$GITHUB_ENV"
           # Make FileCheck and friends discoverable for the lit test suite.
@@ -40,6 +40,15 @@ jobs:
 
       - name: Install lit
         run: pip3 install --break-system-packages lit
+
+      # Ubuntu 24.04's `racket` apt package is 8.10, not the version pinned
+      # in ORACLE_RACKET_COMMIT (v9.3) — installing it from apt would silently
+      # defeat the version lock this job exists to enforce. Tag-pinned, not
+      # hash-pinned: this repo's policy is tag pins kept current by Dependabot
+      # rather than SHA pins, so unpinned-uses is a known, accepted tradeoff.
+      - uses: Bogdanp/setup-racket@v1.15 # zizmor: ignore[unpinned-uses]
+        with:
+          version: "9.3"
 
       - name: Configure
         run: cmake --preset debug
