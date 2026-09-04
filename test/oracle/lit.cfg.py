@@ -18,6 +18,14 @@ for tool_file in os.listdir(bin_dir):
     tool_path = config.nora_build_root + '/bin/' + tool_file
     config.substitutions.append((tool_file, tool_path))
 
+# %racket-expand-* substitutions must be registered before %racket below:
+# lit applies substitutions in list order via unanchored regex substitution,
+# and "%racket" is a literal prefix of "%racket-expand", so registering
+# %racket first would mangle "%racket-expand" into "<racket path> -expand".
+oracle_expand = os.path.join(config.nora_src_root, 'scripts', 'oracle-expand.rkt')
+config.substitutions.append(
+    ('%racket-expand', config.nora_racket_executable + ' ' + oracle_expand))
+
 # %racket runs a fixture through the pinned racket via oracle-eval.rkt;
 # %normalize is the printed-output normalizer both engines' output is piped
 # through before diffing (scaffolded here, see scripts/oracle-normalize.py).
