@@ -30,7 +30,7 @@ workflow:
     implement:
       action:
         kind: agent
-        provider: codex
+        provider: claude
         prompt: prompts/impl.md
       transitions:
         # branch_ahead_of_base alone would be satisfied by the plan commit
@@ -108,7 +108,7 @@ workflow:
     resolve_conflicts:
       action:
         kind: agent
-        provider: codex
+        provider: claude
         prompt: prompts/resolve-conflicts.md
       transitions:
         - to: wait_for_pr
