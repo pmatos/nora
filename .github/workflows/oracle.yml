@@ -1,0 +1,51 @@
+name: Oracle
+
+# Opt-in only: installing racket in the default push/pull_request matrix
+# (test.yml) would add a new hard apt dependency and slow every push. Trigger
+# manually after merging changes that touch test/oracle/, scripts/oracle-*,
+# or ORACLE_RACKET_COMMIT.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  LLVM_VERSION: "22"
+  CMAKE_PREFIX_PATH: /usr/lib/llvm-22
+
+jobs:
+  oracle:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install LLVM ${{ env.LLVM_VERSION }}
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh "$LLVM_VERSION"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgmp-dev libgc-dev \
+            "clang-${LLVM_VERSION}" "llvm-${LLVM_VERSION}-dev" \
+            "llvm-${LLVM_VERSION}-tools" python3-pip racket
+          echo "CC=clang-${LLVM_VERSION}" >> "$GITHUB_ENV"
+          echo "CXX=clang++-${LLVM_VERSION}" >> "$GITHUB_ENV"
+          # Make FileCheck and friends discoverable for the lit test suite.
+          echo "/usr/lib/llvm-${LLVM_VERSION}/bin" >> "$GITHUB_PATH"
+
+      - name: Install lit
+        run: pip3 install --break-system-packages lit
+
+      - name: Configure
+        run: cmake --preset debug
+
+      - name: Build
+        run: cmake --build --preset debug
+
+      - name: Test oracle
+        run: ctest --preset debug -R '^oracle$'
