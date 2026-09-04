@@ -13,10 +13,13 @@
 # the flattening engine — no full Chez/Racket build required. The result is
 # copied over expander/expander.rktl.
 #
-# By default it pins the source to the tag matching the installed racket
-# (e.g. v9.2). Override with an explicit ref:
+# By default it pins the source to the commit recorded in
+# ORACLE_RACKET_COMMIT (repo root) — the single controlled fact the rest of
+# the toolchain version lock derives from (see ROADMAP.md). If that file is
+# missing, it falls back to the tag matching the installed racket (e.g.
+# v9.2) and warns. Override either default with an explicit ref:
 #
-#   scripts/gen-expander.sh            # match installed racket
+#   scripts/gen-expander.sh            # ORACLE_RACKET_COMMIT, or host racket
 #   scripts/gen-expander.sh v9.2       # force a specific tag/branch/commit
 #
 # Environment overrides:
@@ -47,18 +50,35 @@ command -v "$RACKET" >/dev/null 2>&1 || die "racket '$RACKET' not found (set \$R
 # Version string reported by the host, e.g. "Welcome to Racket v9.2 [cs]."
 HOST_VERSION="$("$RACKET" --version | grep -oE 'v[0-9]+(\.[0-9]+)+' | head -1)"
 [ -n "$HOST_VERSION" ] || die "could not parse version from: $("$RACKET" --version)"
+HOST_TAG="$(printf '%s' "$HOST_VERSION" | grep -oE 'v[0-9]+\.[0-9]+' | head -1)"
 
-# Default ref = tag matching the host's major.minor (release tags are two-part,
-# e.g. v9.2). An explicit argument overrides this entirely.
-DEFAULT_REF="$(printf '%s' "$HOST_VERSION" | grep -oE 'v[0-9]+\.[0-9]+' | head -1)"
+# Default ref = the commit pinned in ORACLE_RACKET_COMMIT, the single
+# controlled fact the toolchain version lock derives from. Falls back to the
+# tag matching the host's major.minor (release tags are two-part, e.g. v9.2)
+# if that file doesn't exist yet. An explicit argument overrides either.
+ORACLE_COMMIT_FILE="$REPO_ROOT/ORACLE_RACKET_COMMIT"
+if [ -f "$ORACLE_COMMIT_FILE" ]; then
+  DEFAULT_REF="$(tr -d '[:space:]' <"$ORACLE_COMMIT_FILE")"
+else
+  log "WARNING: $ORACLE_COMMIT_FILE not found; falling back to the host racket's version tag."
+  DEFAULT_REF="$HOST_TAG"
+fi
 REF="${1:-$DEFAULT_REF}"
 
 log "host racket:  $("$RACKET" --version)"
 log "source ref:   $REF"
-if [ "$REF" != "$DEFAULT_REF" ]; then
-  log "WARNING: source ref '$REF' differs from host racket ($DEFAULT_REF);"
+if [ "$REF" != "$HOST_TAG" ]; then
+  log "WARNING: source ref '$REF' differs from host racket ($HOST_TAG);"
   log "         the flattened expander may not match your runtime."
 fi
+
+# A 40-hex-char ref is a commit SHA, not a tag/branch: `git clone --branch`
+# only resolves refs GitHub advertises (tags/branches), so a raw commit needs
+# an explicit fetch-by-SHA instead (GitHub allows fetching any reachable
+# commit even though it isn't advertised).
+looks_like_commit() {
+  printf '%s' "$1" | grep -qE '^[0-9a-fA-F]{40}$'
+}
 
 BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/nora-gen-expander.XXXXXX")"
 cleanup() { [ "${KEEP_BUILD:-0}" = 1 ] || rm -rf "$BUILD_DIR"; }
@@ -66,10 +86,21 @@ trap cleanup EXIT
 [ "${KEEP_BUILD:-0}" = 1 ] && log "build tree kept at: $BUILD_DIR"
 
 SRC="$BUILD_DIR/racket"
-log "cloning racket/$REF (shallow) ..."
-git clone --quiet --depth 1 --branch "$REF" \
-  https://github.com/racket/racket "$SRC" \
-  || die "clone failed — is '$REF' a valid tag/branch? (try passing an explicit ref)"
+if looks_like_commit "$REF"; then
+  log "fetching racket @ $REF (shallow, by commit) ..."
+  mkdir -p "$SRC"
+  ( cd "$SRC" \
+      && git init --quiet \
+      && git remote add origin https://github.com/racket/racket \
+      && git fetch --quiet --depth 1 origin "$REF" \
+      && git checkout --quiet FETCH_HEAD ) \
+    || die "fetch failed — is '$REF' a valid, reachable commit? (try passing an explicit tag/branch)"
+else
+  log "cloning racket/$REF (shallow) ..."
+  git clone --quiet --depth 1 --branch "$REF" \
+    https://github.com/racket/racket "$SRC" \
+    || die "clone failed — is '$REF' a valid tag/branch? (try passing an explicit ref)"
+fi
 
 ZUO_SRC="$SRC/racket/src/zuo"
 EXPANDER_DIR="$SRC/racket/src/expander"
