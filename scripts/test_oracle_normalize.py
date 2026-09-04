@@ -167,5 +167,57 @@ class LetValuesRenaming(unittest.TestCase):
         )
 
 
+class RemainingGrammarRenaming(unittest.TestCase):
+    """Covers case-lambda (its own binder form) plus set!/begin/begin0/
+    with-continuation-mark/#%variable-reference, all of which have no
+    binding power and are already handled by _walk's generic fallback —
+    these are regression tests, not new production code.
+
+    #%top and #%expression are deliberately not exercised here: confirmed
+    empirically that `expand` always eliminates both by the time a program
+    reaches syntax->datum (`(#%top . x)` becomes the bare resolved `x`;
+    `(#%expression e)` becomes just `e`), so neither has a reachable
+    representation for this normalizer to ever see.
+    """
+
+    def normalized(self, text):
+        return oracle_datum.write(oracle_alpha.normalize(oracle_datum.parse(text)))
+
+    def assert_normalize_equal(self, text_a, text_b):
+        self.assertEqual(self.normalized(text_a), self.normalized(text_b))
+
+    def test_case_lambda_clauses_have_independent_scopes(self):
+        # Proper, dotted, and bare-symbol formals in the same case-lambda;
+        # differently-named in each variant but must normalize identically.
+        self.assert_normalize_equal(
+            '(module m racket/base (#%module-begin (define-values (f) '
+            '(case-lambda ((a) a) ((a b . rest) rest) (args args)))))',
+            '(module m racket/base (#%module-begin (define-values (f) '
+            '(case-lambda ((x) x) ((x y . z) z) (w w)))))',
+        )
+
+    def test_set_bang_renames_target_as_a_reference_not_a_binder(self):
+        self.assert_normalize_equal(
+            '(module m racket/base (#%module-begin (define-values (f) '
+            '(lambda (x) (set! x (#%app + x 1)) x))))',
+            '(module m racket/base (#%module-begin (define-values (f) '
+            '(lambda (y) (set! y (#%app + y 1)) y))))',
+        )
+
+    def test_begin_begin0_and_with_continuation_mark_recurse(self):
+        self.assert_normalize_equal(
+            '(module m racket/base (#%module-begin (define-values (f) '
+            '(lambda (x) (if x (begin (set! x 2) x) 3) '
+            '(begin0 x (set! x 3)) '
+            '(with-continuation-mark (quote k) (quote v) '
+            '(#%variable-reference x))))))',
+            '(module m racket/base (#%module-begin (define-values (f) '
+            '(lambda (y) (if y (begin (set! y 2) y) 3) '
+            '(begin0 y (set! y 3)) '
+            '(with-continuation-mark (quote k) (quote v) '
+            '(#%variable-reference y))))))',
+        )
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -8,7 +8,7 @@ across the whole traversal so structurally-identical programs (module-path
 encodings and gensym counter offsets aside) always print identically —
 "global-consistent", not local, alpha-renaming.
 """
-from oracle_datum import Symbol
+from oracle_datum import DottedList, Symbol
 
 
 class _Counter:
@@ -28,9 +28,10 @@ def _head_name(datum):
 
 
 def _bind_formals(formals, env, ctr):
-    """Assigns each symbol in a lambda formals shape a fresh vN. Only the
-    proper-list shape is needed so far; dotted/bare-symbol formals land
-    with case-lambda support."""
+    """Assigns each symbol in a lambda/case-lambda/let-values formals shape
+    (bare rest symbol, proper list, or dotted/improper list) a fresh vN,
+    left to right, including a dotted tail last. Returns the renamed
+    formals shape and the env extended with the new bindings."""
     new_env = dict(env)
 
     def bind_one(sym):
@@ -38,8 +39,14 @@ def _bind_formals(formals, env, ctr):
         new_env[sym.name] = name
         return Symbol(name)
 
+    if isinstance(formals, Symbol):
+        return bind_one(formals), new_env
     if isinstance(formals, list):
         return [bind_one(s) for s in formals], new_env
+    if isinstance(formals, DottedList):
+        new_items = [bind_one(s) for s in formals.items]
+        new_tail = bind_one(formals.tail)
+        return DottedList(new_items, new_tail), new_env
     raise ValueError(f'unrecognized formals shape: {formals!r}')
 
 
@@ -93,6 +100,19 @@ def _walk_lambda(datum, env, ctr):
     return [head, new_formals] + new_body
 
 
+def _walk_case_lambda(datum, env, ctr):
+    # (case-lambda (formals body...) ...) — each clause's parameter list is
+    # its own binder scope; clause N's formals are invisible to clause M.
+    head, *clauses = datum
+    new_clauses = []
+    for clause in clauses:
+        formals, *body = clause
+        new_formals, clause_env = _bind_formals(formals, env, ctr)
+        new_body = [_walk(form, clause_env, ctr) for form in body]
+        new_clauses.append([new_formals] + new_body)
+    return [head] + new_clauses
+
+
 def _walk_let_values(datum, env, ctr):
     # (let-values ((formals rhs) ...) body...) — every rhs is evaluated in
     # the *outer* env (no clause sees another clause's, or its own,
@@ -135,13 +155,16 @@ def _walk_quote(datum, env, ctr):
 
 # Forms needing behavior other than "leave the head alone, walk every other
 # subform in the current env" — the generic fallback in _walk below, which
-# already covers #%app and if (neither introduces a binder).
+# already covers #%app, if, set!, begin, begin0, with-continuation-mark,
+# #%top, #%variable-reference and #%expression (none of these introduce a
+# binder; set!'s target is an ordinary reference, not a new binding).
 _SPECIAL_FORMS = {
     'module': _walk_module,
     '#%module-begin': _walk_module_begin,
     'define-syntaxes': _walk_phase_shift,
     'begin-for-syntax': _walk_phase_shift,
     'lambda': _walk_lambda,
+    'case-lambda': _walk_case_lambda,
     'let-values': _walk_let_values,
     'letrec-values': _walk_letrec_values,
     'quote': _walk_quote,
