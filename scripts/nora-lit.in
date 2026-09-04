@@ -23,6 +23,9 @@ def path(p):
 map_config(path(r'@CMAKE_SOURCE_DIR@/test/integration/lit.cfg.py'),
            path(r'@CMAKE_BINARY_DIR@/test/integration/lit.site.cfg.py'))
 
+map_config(path(r'@CMAKE_SOURCE_DIR@/test/oracle/lit.cfg.py'),
+           path(r'@CMAKE_BINARY_DIR@/test/oracle/lit.site.cfg.py'))
+
 builtin_parameters['config_map'] = config_map
 
 if __name__ == '__main__':
