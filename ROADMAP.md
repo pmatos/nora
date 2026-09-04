@@ -37,7 +37,7 @@ Every milestone and spike below is a GitHub issue (label `roadmap`), cross-linke
 
 ## Toolchain version lock (governs everything below)
 
-All version-sensitive artifacts **must** derive from **one pinned Racket commit**, recorded as a single controlled fact (`ORACLE_RACKET_COMMIT`):
+All version-sensitive artifacts **must** derive from **one pinned Racket commit**, recorded as a single controlled fact in the repo-root [`ORACLE_RACKET_COMMIT`](ORACLE_RACKET_COMMIT) file (currently the commit backing the Racket v9.3 release tag; `scripts/gen-expander.sh` reads it by default):
 
 - `expander/expander.rktl` (regenerated via the `raco` demodularizer),
 - the differential oracle (M0),
