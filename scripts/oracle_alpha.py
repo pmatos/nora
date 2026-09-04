@@ -93,6 +93,39 @@ def _walk_lambda(datum, env, ctr):
     return [head, new_formals] + new_body
 
 
+def _walk_let_values(datum, env, ctr):
+    # (let-values ((formals rhs) ...) body...) — every rhs is evaluated in
+    # the *outer* env (no clause sees another clause's, or its own,
+    # bindings); only the body sees the accumulated bindings.
+    head, clauses, *body = datum
+    extended = dict(env)
+    new_clauses = []
+    for formals, rhs in clauses:
+        new_rhs = _walk(rhs, env, ctr)
+        new_formals, extended = _bind_formals(formals, extended, ctr)
+        new_clauses.append([new_formals, new_rhs])
+    new_body = [_walk(form, extended, ctr) for form in body]
+    return [head, new_clauses] + new_body
+
+
+def _walk_letrec_values(datum, env, ctr):
+    # (letrec-values ((formals rhs) ...) body...) — all clause LHS are
+    # bound before any rhs is walked, so clauses (and the body) can
+    # forward-reference each other, just like #%module-begin's defines.
+    head, clauses, *body = datum
+    extended = dict(env)
+    new_formals_list = []
+    for formals, _rhs in clauses:
+        new_formals, extended = _bind_formals(formals, extended, ctr)
+        new_formals_list.append(new_formals)
+    new_clauses = [
+        [new_formals, _walk(rhs, extended, ctr)]
+        for (_, rhs), new_formals in zip(clauses, new_formals_list)
+    ]
+    new_body = [_walk(form, extended, ctr) for form in body]
+    return [head, new_clauses] + new_body
+
+
 def _walk_quote(datum, env, ctr):
     # Quoted data is literal, not code: never walked/renamed here. A later
     # pass (issue #92 slice 7) handles gensym renumbering within a
@@ -109,6 +142,8 @@ _SPECIAL_FORMS = {
     'define-syntaxes': _walk_phase_shift,
     'begin-for-syntax': _walk_phase_shift,
     'lambda': _walk_lambda,
+    'let-values': _walk_let_values,
+    'letrec-values': _walk_letrec_values,
     'quote': _walk_quote,
     'quote-syntax': _walk_quote,
 }

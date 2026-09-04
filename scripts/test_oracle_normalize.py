@@ -120,5 +120,52 @@ class AlphaRenaming(unittest.TestCase):
             '(define-syntaxes (mymac) (lambda (v1) v1))))')
 
 
+class LetValuesRenaming(unittest.TestCase):
+    def normalized(self, text):
+        return oracle_datum.write(oracle_alpha.normalize(oracle_datum.parse(text)))
+
+    def assert_normalize_equal(self, text_a, text_b):
+        self.assertEqual(self.normalized(text_a), self.normalized(text_b))
+
+    def test_let_values_temp_name_is_renamed(self):
+        # The let*/lift-desugaring shape: box.rkt's temp is named `b` here,
+        # `tmp` in the other variant — both must normalize identically.
+        self.assert_normalize_equal(
+            '(module m racket/base (#%module-begin (define-values (r) '
+            '(let-values (((b) (box 1))) (begin (set-box! b 10) '
+            '(unbox b))))))',
+            '(module m racket/base (#%module-begin (define-values (r) '
+            '(let-values (((tmp) (box 1))) (begin (set-box! tmp 10) '
+            '(unbox tmp))))))',
+        )
+
+    def test_let_values_clause_does_not_see_its_own_binding(self):
+        # rhs of a let-values clause is evaluated in the *outer* env, so a
+        # same-named outer free variable in the rhs must stay unrenamed by
+        # the clause's own (unrelated) binder.
+        out = self.normalized(
+            '(module m racket/base (#%module-begin '
+            '(let-values (((x) x)) x)))')
+        self.assertEqual(
+            out,
+            '(module m racket/base (#%module-begin '
+            '(let-values (((v0) x)) v0)))')
+
+    def test_letrec_values_clauses_forward_reference(self):
+        # letrec-values clauses may reference each other regardless of
+        # order — both variants name the two locals differently but must
+        # normalize identically. Applications use #%app, matching real
+        # fully-expanded shape (a bare `(odd? n)` would look like an
+        # unknown special form to the generic fallback, not a call).
+        self.assert_normalize_equal(
+            '(module m racket/base (#%module-begin (define-values (r) '
+            '(letrec-values (((even?) (lambda (n) (if n (#%app odd? n) #t))) '
+            '((odd?) (lambda (n) (if n (#%app even? n) #f)))) even?))))',
+            '(module m racket/base (#%module-begin (define-values (r) '
+            '(letrec-values (((e) (lambda (n) (if n (#%app o n) #t))) '
+            '((o) (lambda (n) (if n (#%app e n) #f)))) e))))',
+        )
+
+
 if __name__ == '__main__':
     unittest.main()
