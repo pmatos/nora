@@ -36,5 +36,12 @@ config.substitutions.append(
 normalize = os.path.join(config.nora_src_root, 'scripts', 'oracle-normalize.py')
 config.substitutions.append(('%normalize', sys.executable + ' ' + normalize))
 
+# %observe is the observational-equivalence fallback (oracle-observe.rkt)
+# for fixtures where structural normalization cannot possibly reconcile
+# two hygienically-distinct, same-printed-name binders.
+oracle_observe = os.path.join(config.nora_src_root, 'scripts', 'oracle-observe.rkt')
+config.substitutions.append(
+    ('%observe', config.nora_racket_executable + ' ' + oracle_observe))
+
 if config.nora_have_racket:
     config.available_features.add('racket')
