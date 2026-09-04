@@ -26,13 +26,13 @@ if(NORA_ENABLE_ORACLE)
   find_program(NORA_RACKET_EXECUTABLE NAMES racket)
 endif()
 
-if(NORA_RACKET_EXECUTABLE)
+if(NORA_ENABLE_ORACLE AND NORA_RACKET_EXECUTABLE)
   set(NORA_HAVE_RACKET ON)
   message(STATUS "Found racket: ${NORA_RACKET_EXECUTABLE}")
 else()
   set(NORA_HAVE_RACKET OFF)
   set(NORA_RACKET_EXECUTABLE "")
-  message(STATUS "racket not found; test/oracle will report its tests as unsupported")
+  message(STATUS "racket not found or oracle disabled; test/oracle will report its tests as unsupported")
 endif()
 
 # ORACLE_RACKET_COMMIT (repo root) is the single pinned upstream racket/racket
