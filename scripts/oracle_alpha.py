@@ -60,16 +60,41 @@ def _walk_module(datum, env, ctr):
     return [head, name, lang] + new_body
 
 
+def _collect_provided_names(forms):
+    """The set of internal names a direct-child #%provide form exports —
+    both the plain shape ((#%provide name ...)) and the rename shape
+    ((#%provide (rename internal external) ...)), where `internal` is the
+    define-values LHS being exported and `external` is just a public label,
+    never a binder itself."""
+    names = set()
+    for form in forms:
+        if _head_name(form) != '#%provide':
+            continue
+        for clause in form[1:]:
+            if isinstance(clause, Symbol):
+                names.add(clause.name)
+            elif _head_name(clause) == 'rename' and len(clause) == 3:
+                names.add(clause[1].name)
+    return names
+
+
 def _walk_module_begin(datum, env, ctr):
     # (#%module-begin form...) — every direct-child define-values LHS is in
     # scope for the *entire* body, including forms that precede it, so all
     # LHS names are assigned a vN in body order before anything is walked.
+    # A name that's also exported via #%provide keeps its original text
+    # (mapped to itself) instead of getting a fresh vN, both at the
+    # define-values site and wherever #%provide references it — #%provide/
+    # #%require need no dedicated walker beyond this: their contents are
+    # otherwise never bound in env, so the generic fallback already leaves
+    # them untouched.
     head, *forms = datum
+    provided = _collect_provided_names(forms)
     body_env = dict(env)
     for form in forms:
         if _head_name(form) == 'define-values':
             for sym in form[1]:
-                body_env[sym.name] = ctr.fresh()
+                body_env[sym.name] = sym.name if sym.name in provided else ctr.fresh()
 
     new_forms = []
     for form in forms:

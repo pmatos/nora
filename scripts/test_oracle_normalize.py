@@ -219,5 +219,46 @@ class RemainingGrammarRenaming(unittest.TestCase):
         )
 
 
+class ProvideRequireBoundary(unittest.TestCase):
+    def normalized(self, text):
+        return oracle_datum.write(oracle_alpha.normalize(oracle_datum.parse(text)))
+
+    def test_provided_name_keeps_its_text_definition_and_clause(self):
+        out = self.normalized(
+            '(module m racket/base (#%module-begin '
+            '(#%provide exported) '
+            '(define-values (exported) 1) '
+            '(define-values (internal) 2)))')
+        self.assertEqual(
+            out,
+            '(module m racket/base (#%module-begin '
+            '(#%provide exported) '
+            '(define-values (exported) 1) '
+            '(define-values (v0) 2)))')
+
+    def test_provided_rename_clause_keeps_internal_name(self):
+        # (#%provide (rename internal external)): `internal` is the
+        # define-values LHS being exported (kept verbatim); `external` is
+        # just a public label, never a binder, so it always passes through.
+        out = self.normalized(
+            '(module m racket/base (#%module-begin '
+            '(#%provide (rename internal external)) '
+            '(define-values (internal) 1)))')
+        self.assertEqual(
+            out,
+            '(module m racket/base (#%module-begin '
+            '(#%provide (rename internal external)) '
+            '(define-values (internal) 1)))')
+
+    def test_require_module_path_passes_through_untouched(self):
+        out = self.normalized(
+            '(module m racket/base (#%module-begin '
+            '(#%require racket/list (for-syntax racket/base))))')
+        self.assertEqual(
+            out,
+            '(module m racket/base (#%module-begin '
+            '(#%require racket/list (for-syntax racket/base))))')
+
+
 if __name__ == '__main__':
     unittest.main()
