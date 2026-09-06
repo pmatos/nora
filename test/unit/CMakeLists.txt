@@ -39,6 +39,7 @@ catch_discover_tests(test_parse)
 
 add_executable(test_interpreter
   test_interpreter.cpp
+  test_environment.cpp
   test_main.cpp
   test_gc.cpp
   ${PROJECT_SOURCE_DIR}/src/AnalysisFreeVars.cpp
