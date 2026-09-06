@@ -35,8 +35,10 @@ handles can point at the same `ast::ValueNode`.
 - `test/unit/CMakeLists.txt` — add `test_environment.cpp` to `test_interpreter`.
 - `test/integration/alias-args.rkt` (new), `test/integration/wcm-var-key.rkt`
   (new), `test/integration/arith-self-ref.rkt` (new).
-- `test/integration/box.rkt`, `test/integration/pair.rkt` — fix the
-  now-inaccurate "the interpreter clones values on every lookup" comment.
+- `test/integration/box.rkt` — fix the now-inaccurate "the interpreter clones
+  values on every lookup" comment (`pair.rkt`'s comment already describes the
+  shared-cell end state without mentioning clone-on-lookup; nothing to fix
+  there).
 
 No change to `src/include/AST.h`, `ASTNodeKind`, or any `ASTVisitor`/
 `Interpreter` `visit()` overload — this slice touches only the runtime value
@@ -211,7 +213,7 @@ commit buildable (see the advisor note this plan was checked against).
    (Catch2 mains + `lit`/FileCheck integration corpus).
 
 4. **Aliasing + audit regression tests.** RED-then-GREEN (these should pass
-   immediately once slices 1–4 are correct; if one fails it means the
+   immediately once slices 1–3 are correct; if one fails it means the
    materialize-on-demand boundary in `takeLegacy()` has a real bug, not that
    the test is wrong):
    - `test/integration/alias-args.rkt` — the issue's own example: bind a
@@ -230,10 +232,10 @@ commit buildable (see the advisor note this plan was checked against).
      `SubtractFunction`'s existing "clone the first arg before `-=`"
      (`Runtime.cpp:52-53`) is unaffected by the two call-site `Args`
      pointers now potentially aliasing the same materialized object.
-   - Update the stale "clones on every lookup" comments in
-     `test/integration/box.rkt` and `test/integration/pair.rkt` — they
-     already describe the *end-state* aliasing correctly, they just
-     misattribute *why* it holds (it no longer depends on clone-on-lookup).
+   - Update the stale "clones on every lookup" comment in
+     `test/integration/box.rkt` — it already describes the *end-state*
+     aliasing correctly, it just misattributes *why* it holds (it no longer
+     depends on clone-on-lookup). `pair.rkt` needs no change (see §2).
 
 5. **Sanitizer gate.** Run `cmake --preset asan && cmake --build --preset
    asan && ctest --preset asan`, then the same for `ubsan`. This is the
