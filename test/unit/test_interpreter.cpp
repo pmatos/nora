@@ -330,3 +330,14 @@ TEST_CASE("#f literal result is the NR_FALSE immediate, not an allocated "
   REQUIRE(*R.RawImmediate == NR_FALSE);
   R.expectBool(false);
 }
+
+TEST_CASE("if branches on a let-bound #f via the materialized fallback, not "
+          "the immediate fast path",
+          "[interp][m2][gc]") {
+  // x is bound via Environment/toShared(), which materializes the immediate
+  // into a real ast::BooleanLiteral - this pins step(IfBranch)'s
+  // dyn_cast_or_null<BooleanLiteral> fallback so it isn't deleted alongside
+  // the new nr_truthy fast path.
+  Run R = runLinklet("(linklet () () (let-values ([(x) #f]) (if x 1 2)))");
+  R.expectInt(2);
+}

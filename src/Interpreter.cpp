@@ -185,10 +185,21 @@ void Interpreter::step(Frame::IfBranch &K) {
   const ast::ExprNode *ThenE = K.ThenE;
   const ast::ExprNode *ElseE = K.ElseE;
   EnvPtr E = K.Env;
-  std::unique_ptr<ast::ValueNode> Cond = Val.takeLegacy();
+  Value Cond = std::move(Val);
   Kont.pop_back();
-  auto *B = llvm::dyn_cast_or_null<ast::BooleanLiteral>(Cond.get());
-  Control = (B && !B->value()) ? ElseE : ThenE;
+  bool Falsy;
+  if (Cond.isImmediate()) {
+    // Fast path: branch on the raw word, no allocation.
+    Falsy = !nr_truthy(Cond.rawImmediate());
+  } else {
+    // Fallback: a value that round-tripped through Environment/toShared()
+    // (e.g. a bound #f) is a materialized ast::BooleanLiteral, not an
+    // immediate.
+    std::unique_ptr<ast::ValueNode> Legacy = Cond.takeLegacy();
+    auto *B = llvm::dyn_cast_or_null<ast::BooleanLiteral>(Legacy.get());
+    Falsy = B && !B->value();
+  }
+  Control = Falsy ? ElseE : ThenE;
   Env = E;
   M = Mode::Eval;
 }
