@@ -546,7 +546,7 @@ void Interpreter::applyProcedure(
   // still the same continuation frame - which, after reuse, it is.
   if (!Kont.empty() && Kont.back().isReusable()) {
     Frame &Enc = Kont.back();
-    Enc.Callee = std::move(Op); // frees the previous activation's closure
+    Enc.Callee = std::move(Op); // releases the previous activation's closure
     Control = &Clause->getBody();
     Env = CalleeScope;
     M = Mode::Eval;

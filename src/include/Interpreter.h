@@ -104,7 +104,7 @@ private:
   // header rather than a payload: the mark map (Marks), read by snapshotMarks
   // on every frame and written by setMark on the top activation; and Callee,
   // the applied closure owned by a tail-reusable activation (Call/WcmMark/Halt)
-  // so Control, which points into its (cloned) lambda body, outlives the call.
+  // so Control, which points into its lambda body, outlives the call.
   struct Frame {
     // Halt / WcmMark / Call carry no per-kind state (their content is the
     // header): Halt is a form's bottom, WcmMark holds a with-continuation-mark
@@ -173,8 +173,8 @@ private:
         std::variant<Seq, IfBranch, App, MkValues, LetBind, LetRec, Define, Set,
                      WcmKey, WcmVal, Halt, WcmMark, Call>;
 
-    ast::MarkFrame Marks;                   // marks belonging to this frame
-    std::unique_ptr<ast::ValueNode> Callee; // activation's owned closure
+    ast::MarkFrame Marks; // marks belonging to this frame
+    Value Callee;         // activation's owned closure
     Payload P;
 
     // Construct from any payload alternative; excludes Frame itself so the
