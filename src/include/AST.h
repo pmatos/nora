@@ -10,11 +10,14 @@
 
 #include <cassert>
 #include <compare>
+#include <cstdint>
+#include <cstdio>
 #include <gmp.h>
 #include <iostream>
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <string>
 #include <utility>
 
 // Forward declarations
@@ -412,17 +415,18 @@ private:
   bool Value;
 };
 
-// A character datum, e.g. #\a. Value holds the character's printed glyph(s)
-// without the leading #\ (so "a" for #\a). Characters are self-quoting.
+// A character datum, e.g. #\a. CodePoint holds its Unicode scalar value.
+// Characters are self-quoting.
 class Char : public ClonableNode<Char, ValueNode> {
 public:
-  explicit Char(llvm::StringRef Value)
-      : ClonableNode(ASTNodeKind::AST_Char), Value(Value) {}
-  Char(const Char &C) : ClonableNode(ASTNodeKind::AST_Char), Value(C.Value) {}
+  explicit Char(uint32_t CodePoint)
+      : ClonableNode(ASTNodeKind::AST_Char), CodePoint(CodePoint) {}
+  Char(const Char &C)
+      : ClonableNode(ASTNodeKind::AST_Char), CodePoint(C.CodePoint) {}
   Char(Char &&) = default;
   ~Char() = default;
 
-  [[nodiscard]] llvm::StringRef getValue() const { return Value; }
+  [[nodiscard]] uint32_t getCodePoint() const { return CodePoint; }
   LLVM_DUMP_METHOD void dump() const override;
   void write(llvm::raw_ostream &OS) const override;
 
@@ -430,8 +434,92 @@ public:
     return N->getKind() == ASTNodeKind::AST_Char;
   }
 
+  // Racket's printed spelling (the text after #\) for a code point: named
+  // control characters use their name, other non-graphic ASCII controls use
+  // the #\uHHHH escape (uppercase), everything else its UTF-8 glyph.
+  static std::string reprFor(uint32_t CP) {
+    switch (CP) {
+    case 0x00:
+      return "nul";
+    case 0x08:
+      return "backspace";
+    case 0x09:
+      return "tab";
+    case 0x0A:
+      return "newline";
+    case 0x0B:
+      return "vtab";
+    case 0x0C:
+      return "page";
+    case 0x0D:
+      return "return";
+    case 0x20:
+      return "space";
+    case 0x7F:
+      return "rubout";
+    default:
+      break;
+    }
+    if (CP < 0x20) {
+      char Buf[8];
+      std::snprintf(Buf, sizeof(Buf), "u%04X", CP);
+      return std::string(Buf);
+    }
+    std::string Out;
+    appendUTF8(CP, Out);
+    return Out;
+  }
+
+  // The reverse of Lex.cpp's named-character table: the code point for a
+  // named character (e.g. "space" -> 0x20), or nullopt for an unrecognized
+  // name.
+  static std::optional<uint32_t> codePointForName(llvm::StringRef Name) {
+    if (Name == "space")
+      return 0x20;
+    if (Name == "newline")
+      return 0x0A;
+    if (Name == "alarm")
+      return 0x07;
+    if (Name == "backspace")
+      return 0x08;
+    if (Name == "delete" || Name == "rubout")
+      return 0x7F;
+    if (Name == "escape")
+      return 0x1B;
+    if (Name == "null" || Name == "nul")
+      return 0x00;
+    if (Name == "return")
+      return 0x0D;
+    if (Name == "tab")
+      return 0x09;
+    if (Name == "vtab")
+      return 0x0B;
+    if (Name == "page")
+      return 0x0C;
+    return std::nullopt;
+  }
+
 private:
-  llvm::SmallString<8> Value;
+  // UTF-8 encode a single code point onto Out.
+  static void appendUTF8(uint32_t CP, std::string &Out) {
+    if (CP < 0x80) {
+      Out.push_back(static_cast<char>(CP));
+    } else if (CP < 0x800) {
+      Out.push_back(static_cast<char>(0xC0 | (CP >> 6)));
+      Out.push_back(static_cast<char>(0x80 | (CP & 0x3F)));
+    } else if (CP < 0x10000) {
+      Out.push_back(static_cast<char>(0xE0 | (CP >> 12)));
+      Out.push_back(static_cast<char>(0x80 | ((CP >> 6) & 0x3F)));
+      Out.push_back(static_cast<char>(0x80 | (CP & 0x3F)));
+    } else {
+      Out.push_back(static_cast<char>(0xF0 | (CP >> 18)));
+      Out.push_back(static_cast<char>(0x80 | ((CP >> 12) & 0x3F)));
+      Out.push_back(static_cast<char>(0x80 | ((CP >> 6) & 0x3F)));
+      Out.push_back(static_cast<char>(0x80 | (CP & 0x3F)));
+    }
+  }
+
+  uint32_t CodePoint;
 };
 
 class DefineValues : public ClonableNode<DefineValues, TLNode> {
