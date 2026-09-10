@@ -341,3 +341,23 @@ TEST_CASE("if branches on a let-bound #f via the materialized fallback, not "
   Run R = runLinklet("(linklet () () (let-values ([(x) #f]) (if x 1 2)))");
   R.expectInt(2);
 }
+
+TEST_CASE("eq? on immediate-boolean arguments materializes at the "
+          "RuntimeFunction boundary",
+          "[interp][m2][gc]") {
+  // Nothing before S6 ever passed a bare boolean literal to a
+  // RuntimeFunction; EqFunction dereferences its Args unconditionally, so
+  // this would segfault if Value::get() returned null for an engaged
+  // immediate instead of materializing it.
+  Run Same = runLinklet("(linklet () () (eq? #t #t))");
+  Same.expectBool(true);
+
+  Run Diff = runLinklet("(linklet () () (eq? #t #f))");
+  Diff.expectBool(false);
+}
+
+TEST_CASE("a box can hold and return an immediate boolean",
+          "[interp][m2][gc]") {
+  Run R = runLinklet("(linklet () () (unbox (box #t)))");
+  R.expectBool(true);
+}
