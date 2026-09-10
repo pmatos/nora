@@ -26,7 +26,7 @@ struct Run {
   std::unique_ptr<ast::ValueNode> result; // Interpreter::getResult()
   // Interpreter::getResultImmediate(): the M2/GC forcing seam, captured
   // alongside result regardless of getResult() being called first.
-  std::optional<nr_value> rawImmediate;
+  std::optional<nr_value> RawImmediate;
 
   // The seam S18 will rewrite: downcast to a materialized ValueNode view.
   // Localized here so the eventual nr_value read replaces one definition.
@@ -66,7 +66,7 @@ Run runLinklet(const std::string &Src) {
   AST->accept(I);
   Run R;
   R.ok = !Diag.hadError();
-  R.rawImmediate = I.getResultImmediate();
+  R.RawImmediate = I.getResultImmediate();
   R.result = I.getResult();
   return R;
 }
@@ -326,7 +326,7 @@ TEST_CASE("#f literal result is the NR_FALSE immediate, not an allocated "
           "[interp][m2][gc]") {
   Run R = runLinklet("(linklet () () #f)");
   REQUIRE(R.ok);
-  REQUIRE(R.rawImmediate.has_value());
-  REQUIRE(*R.rawImmediate == NR_FALSE);
+  REQUIRE(R.RawImmediate.has_value());
+  REQUIRE(*R.RawImmediate == NR_FALSE);
   R.expectBool(false);
 }

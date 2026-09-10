@@ -19,6 +19,7 @@
 #include "Casting.h"
 #include "Environment.h"
 #include "Value.h"
+#include "nora_rt.h"
 
 #undef DEBUG_TYPE
 #define DEBUG_TYPE "Interpreter"
