@@ -341,7 +341,7 @@ void Interpreter::step(Frame::WcmKey &K) {
   const ast::ExprNode *ValE = K.WcmValE;
   const ast::ExprNode *ResultE = K.WcmResultE;
   EnvPtr E = K.Env;
-  std::unique_ptr<ast::ValueNode> KeyV = Val.takeLegacy();
+  Value KeyV = std::move(Val);
   Kont.pop_back();
   Frame::WcmVal &WV = pushK(Frame::WcmVal{});
   WV.WcmResultE = ResultE;
@@ -355,8 +355,8 @@ void Interpreter::step(Frame::WcmKey &K) {
 void Interpreter::step(Frame::WcmVal &K) {
   const ast::ExprNode *ResultE = K.WcmResultE;
   EnvPtr E = K.Env;
-  std::unique_ptr<ast::ValueNode> KeyV = std::move(K.WcmKeyV);
-  std::unique_ptr<ast::ValueNode> ValV = Val.takeLegacy();
+  Value KeyV = std::move(K.WcmKeyV);
+  Value ValV = std::move(Val);
   Kont.pop_back();
   // The result expression is in tail position with respect to whatever frame
   // is now on top. Call/WcmMark/Halt frames are exactly the frames that a tail

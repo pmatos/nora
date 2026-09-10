@@ -2,6 +2,7 @@
 
 #include "AST.h"
 #include "Environment.h"
+#include "Value.h"
 
 #include <llvm/Support/raw_ostream.h>
 
@@ -132,8 +133,7 @@ private:
 // A single continuation mark is a key/value pair. A MarkFrame collects the
 // marks belonging to one continuation frame; within a frame each key appears
 // at most once (setMark overwrites an existing entry for the same key).
-using MarkEntry =
-    std::pair<std::unique_ptr<ValueNode>, std::unique_ptr<ValueNode>>;
+using MarkEntry = std::pair<Value, Value>;
 using MarkFrame = std::vector<MarkEntry>;
 
 // Structural eq?/eqv? approximation used to compare continuation-mark keys.
@@ -146,8 +146,7 @@ MarkFrame cloneMarkFrame(const MarkFrame &F);
 
 // Install Key -> Val in Frame, overwriting any existing entry whose key is
 // valueEq to Key.
-void setMark(MarkFrame &Frame, std::unique_ptr<ValueNode> Key,
-             std::unique_ptr<ValueNode> Val);
+void setMark(MarkFrame &Frame, Value Key, Value Val);
 
 // The reified result of (current-continuation-marks): a snapshot of the marks
 // on the current continuation, one MarkFrame per continuation frame ordered

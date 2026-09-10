@@ -162,7 +162,7 @@ private:
     struct WcmVal { // with-continuation-mark: after val, install mark + result
       EnvPtr Env;
       const ast::ExprNode *WcmResultE = nullptr;
-      std::unique_ptr<ast::ValueNode> WcmKeyV;
+      Value WcmKeyV;
     };
 
     // The three tail-reusable activation kinds (Call/WcmMark/Halt) are the last
