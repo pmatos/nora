@@ -208,13 +208,13 @@ void Interpreter::step(Frame::App &K) {
 }
 
 void Interpreter::step(Frame::MkValues &K) {
-  K.Done.push_back(Val.takeLegacy());
+  K.Done.push_back(std::move(Val));
   if (K.Done.size() < K.Exprs.size()) {
     Control = K.Exprs[K.Done.size()];
     Env = K.Env;
     M = Mode::Eval;
   } else {
-    std::vector<std::unique_ptr<ast::ValueNode>> Vals = std::move(K.Done);
+    std::vector<Value> Vals = std::move(K.Done);
     Kont.pop_back();
     if (Vals.size() == 1) {
       deliver(std::move(Vals[0]));
@@ -222,7 +222,7 @@ void Interpreter::step(Frame::MkValues &K) {
       llvm::SmallVector<std::unique_ptr<ast::ExprNode>> Exprs;
       Exprs.reserve(Vals.size());
       for (auto &Vv : Vals) {
-        Exprs.emplace_back(std::move(Vv));
+        Exprs.emplace_back(Vv.takeLegacy());
       }
       deliver(std::make_unique<ast::Values>(std::move(Exprs)));
     }

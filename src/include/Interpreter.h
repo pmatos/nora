@@ -134,7 +134,7 @@ private:
     struct MkValues { // (values ...): accumulate then build a Values
       EnvPtr Env;
       llvm::SmallVector<const ast::ExprNode *> Exprs;
-      std::vector<std::unique_ptr<ast::ValueNode>> Done;
+      std::vector<Value> Done;
     };
     struct LetBind { // let-values: accumulate binding values, then bind + body
       EnvPtr Env;
