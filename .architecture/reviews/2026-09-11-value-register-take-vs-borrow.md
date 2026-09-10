@@ -6,9 +6,9 @@ supporting files. Chosen because the last stretch of `git log` (S5–S7 immediat
 #197/#199/#201, the `toShared()` fix #198, the builtin-registry seam #200) keeps
 landing there; deepening pays off where change concentrates.
 **Picked**: `value-register-take-vs-borrow` — see the PR and `.architecture/backlog.md`.
-**Degradations**: advisor rate-limited at the approach-validation call (step 3);
-will retry at step-4 adjudication and fall back to self-adjudication against the
-written designs if still limited. Sub-agent exploration was available and used.
+**Degradations**: advisor rate-limited only at the step-3 approach-validation
+call; it was available at the step-4 design adjudication and confirmed the pick.
+Parallel sub-agents were used for both exploration and design-it-twice.
 
 > **Diagram legend**: solid edges are the module's public interface; dashed
 > edges are calls that live *inside* the implementation, behind the seam.
@@ -396,4 +396,112 @@ below the pick and are recorded in the backlog for future firings.
 
 ## Design
 
-_Filled in at step 4 (design-it-twice + adjudication)._
+Three designs were produced by parallel sub-agents, each with a radically
+different mandate. The adjudication was confirmed by the advisor (available at
+step 4; it was only rate-limited at the step-3 approach check — see Degradations).
+
+### Design A — minimal surface (no interface change)
+
+Add nothing to `Value`. Recognise `get()` as the borrow and "move the whole
+`Value` into a sink that already takes one" as the into-sink path; fix the five
+sites with `get()` + `std::move(Val)`. Net −1 line, one file.
+**Rejected.** It does not deepen the module at all — `Value` stays exactly as
+shallow, and `takeLegacy()` remains the easy footgun. Decisively, under the
+test-first rule it **cannot produce a red test**: its proposed unit test pins the
+`get()`/move contracts that *already hold*, so it is green before the change.
+A design whose pinning test never goes red fails step 5 by construction.
+
+### Design B — intent-named typed borrow `as<T>()`  *(WINNER)*
+
+Add one non-consuming, non-cloning typed peek to `Value`:
+
+```cpp
+template <std::derived_from<ast::ValueNode> T>
+[[nodiscard]] const T *as() const { return llvm::dyn_cast_or_null<T>(get()); }
+```
+
+Read-only arms ask `V.as<ast::BooleanLiteral>()` / `V.as<ast::Values>()` /
+`Op.as<ast::Closure>()`; pass-through arms move the whole `Value` into their
+sink; `takeLegacy()` is left only for the three genuine `unique_ptr<ExprNode>`
+AST-child sinks, becoming visibly transfer-only. The `std::derived_from`
+constraint makes `as<ast::Identifier>()` (a non-`ValueNode`) a compile error
+rather than an always-null silent bug. Adds `#include <llvm/Support/Casting.h>`
+to `Value.h` (`AST.h` does not transitively provide it).
+
+### Design C — consume-policy split (rename `takeLegacy` → `cloneOutLegacy`)  *(runner-up design)*
+
+Rename the consuming method so the clone cost is in the name; reroute the five
+avoidable sites to borrow/move and rename the three genuine sinks to
+`cloneOutLegacy()`. Makes an accidental clone unrepresentable (you must type
+"clone"). Real improvement, but it adds **naming, not behaviour**, has the
+largest blast radius (4 files, plus a prose reference in `ASTRuntime.h:67` and
+two renamed test titles), and renames a method the migration schedules for
+deletion at S18.
+
+### Adjudication
+
+Criteria in order — depth, locality, seam placement, test surface, blast radius:
+
+1. **Depth** — B adds a genuinely deep verb (materialize-if-immediate +
+   non-cloning-borrow + typed-downcast, behind one call); A adds nothing;
+   C only renames. **B.**
+2. **Locality** — B concentrates "peek register as AST kind T" behind the handle
+   (used at ≥6 arms); C concentrates the clone decision in a named method; A
+   leaves each arm open-coding. **B ≥ C > A.**
+3. **Seam placement** — "peek as type T" varies at ≥2 real sites
+   (`IfBranch`/`Define`/`bindValues`/operator dispatch), so the seam is real, not
+   hypothetical; B places it there. **B.**
+4. **Test surface** — B and C both pin non-consuming/non-cloning through the
+   interface (pointer identity vs the backing `shared_ptr`); A admits its test
+   cannot pin the call sites. **B ≈ C > A.**
+5. **Blast radius** — A smallest, B medium (3 files), C largest — a tiebreak only,
+   and the first four criteria already separate the designs.
+
+**Winner: Design B.** It is the only design that deepens the interface (the whole
+point of the exercise) while keeping the diff contained.
+
+### Scope decided (recorded so a reviewer sees it was chosen, not missed)
+
+- **Route through `as<T>()`** the six read-only peeks: `bindValues` (67),
+  `IfBranch` (198), `Define` multi-id inspection (314), and — for one spelling of
+  "peek register as type" — the operator dispatch in `applyProcedure`
+  (432/461/484). All operator accessors (`getName`/`getLambda`/`getEnv`/
+  `getCaseLambda`) are `const`, so `as<T>()` returning `const T*` is safe there.
+- **Move the whole `Value` into the sink** at the four pass-through/store arms:
+  `Define` single-id (306) → `add(id, std::move(Val))`, `Set` (341) →
+  `envSet(…, std::move(Val))`, `WcmMark` (400) / `Call` (408) →
+  `deliver(std::move(Val))`.
+- **Keep `takeLegacy()`** at the three genuine `unique_ptr<ExprNode>` AST-child
+  sinks (`MkValues` 237, `applyProcedure` rest/id 525/534); update its doc to
+  name them as the transfer-only survivors.
+
+### Behaviour-preservation argument
+
+On the `Shared` path, `Set` and `Define`-single-id change from clone-then-store
+to move-the-`shared_ptr`, so a binding now **aliases** the source node instead of
+holding a private copy. This is unobservable: `Box`/`Pair` keep their mutable
+state and `identity()` in a **shared cell that survives `clone()`**, and `eq?`
+compares those cell pointers, not `ValueNode` pointers — so clone and alias are
+observationally identical for the only identity/mutation-sensitive types, and the
+alias is in fact the correct Racket sharing semantics. All three sub-agents
+reached this independently. Confirmation is empirical: the **full integration
+suite** (box/pair/set!/eq? coverage) must pass, not just the unit tests.
+
+### Test-pinning note (per the immediacy-assertion check)
+
+No existing test pins the *old* materialization as a requirement. The
+`RawImmediate` assertions (`test_interpreter.cpp` 396–453) are all *positive* and
+either top-level or on paths this change does not touch; test 406 pins the
+`IfBranch` *fallback* (preserved — `as<>` still walks it); and the `set!` test
+(457) explicitly declines to pin `RawImmediate`, anticipating exactly this
+Call/WcmMark deferral. So no test is weakened to reach green. After the change an
+immediate may survive a `Call`/`WcmMark` frame pop *as an immediate* (a saved
+allocation), which only ever satisfies more `expect*`/`RawImmediate` assertions,
+never contradicts one.
+
+### Blast radius (actual)
+
+3 files: `src/include/Value.h` (+1 include, +~11-line `as<T>()`, doc touch),
+`src/Interpreter.cpp` (~10 arms edited, net negative), and
+`test/unit/test_environment.cpp` (+`as<T>()` unit tests). The candidate was
+scored at ~2 files (blast radius 1); actual 3 is within the step-5 2× guard.
