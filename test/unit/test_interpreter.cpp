@@ -40,6 +40,15 @@ struct Run {
     REQUIRE(ok);
     expectInt(result.get(), Expected);
   }
+
+  static void expectBool(const ast::ValueNode *Node, bool Expected) {
+    REQUIRE(expectResult<ast::BooleanLiteral>(Node)->value() == Expected);
+  }
+
+  void expectBool(bool Expected) const {
+    REQUIRE(ok);
+    expectBool(result.get(), Expected);
+  }
 };
 
 Run runLinklet(const std::string &Src) {
@@ -148,18 +157,10 @@ TEST_CASE("eq? distinguishes box identity", "[interp][m2]") {
   // A box is eq? to itself; two freshly allocated boxes are not.
   Run Same =
       runLinklet("(linklet () () (let-values ([(b) (box 0)]) (eq? b b)))");
-  REQUIRE(Same.ok);
-  REQUIRE(Same.result);
-  auto *S = llvm::dyn_cast<ast::BooleanLiteral>(Same.result.get());
-  REQUIRE(S);
-  REQUIRE(S->value());
+  Same.expectBool(true);
 
   Run Diff = runLinklet("(linklet () () (eq? (box 0) (box 0)))");
-  REQUIRE(Diff.ok);
-  REQUIRE(Diff.result);
-  auto *D = llvm::dyn_cast<ast::BooleanLiteral>(Diff.result.get());
-  REQUIRE(D);
-  REQUIRE_FALSE(D->value());
+  Diff.expectBool(false);
 }
 
 TEST_CASE("cons/car/cdr round-trip", "[interp][m2]") {
@@ -181,37 +182,21 @@ TEST_CASE("set-car!/set-cdr! mutate through a shared reference",
 TEST_CASE("eq? distinguishes pair identity", "[interp][m2]") {
   Run Same =
       runLinklet("(linklet () () (let-values ([(p) (cons 1 2)]) (eq? p p)))");
-  REQUIRE(Same.ok);
-  REQUIRE(Same.result);
-  auto *S = llvm::dyn_cast<ast::BooleanLiteral>(Same.result.get());
-  REQUIRE(S);
-  REQUIRE(S->value());
+  Same.expectBool(true);
 
   Run Diff = runLinklet("(linklet () () (eq? (cons 1 2) (cons 1 2)))");
-  REQUIRE(Diff.ok);
-  REQUIRE(Diff.result);
-  auto *D = llvm::dyn_cast<ast::BooleanLiteral>(Diff.result.get());
-  REQUIRE(D);
-  REQUIRE_FALSE(D->value());
+  Diff.expectBool(false);
 }
 
 TEST_CASE("symbol eq? is identity, not name", "[interp][m2]") {
   // Two uninterned symbols with the same name are distinct objects...
   Run Un = runLinklet("(linklet () () (eq? (string->uninterned-symbol \"s\") "
                       "(string->uninterned-symbol \"s\")))");
-  REQUIRE(Un.ok);
-  REQUIRE(Un.result);
-  auto *U = llvm::dyn_cast<ast::BooleanLiteral>(Un.result.get());
-  REQUIRE(U);
-  REQUIRE_FALSE(U->value());
+  Un.expectBool(false);
 
   // ...while interned symbols with the same name are eq?.
   Run In = runLinklet("(linklet () () (eq? 'a 'a))");
-  REQUIRE(In.ok);
-  REQUIRE(In.result);
-  auto *I = llvm::dyn_cast<ast::BooleanLiteral>(In.result.get());
-  REQUIRE(I);
-  REQUIRE(I->value());
+  In.expectBool(true);
 }
 
 TEST_CASE("eq? unwraps a quoted symbol before comparing identity",
@@ -250,11 +235,7 @@ TEST_CASE("eq? unwraps a quoted symbol before comparing identity",
 
 TEST_CASE("gensym produces fresh distinct symbols", "[interp][m2]") {
   Run R = runLinklet("(linklet () () (eq? (gensym) (gensym)))");
-  REQUIRE(R.ok);
-  REQUIRE(R.result);
-  auto *B = llvm::dyn_cast<ast::BooleanLiteral>(R.result.get());
-  REQUIRE(B);
-  REQUIRE_FALSE(B->value());
+  R.expectBool(false);
 }
 
 TEST_CASE("gensym rejects more than one argument", "[interp][m2]") {
