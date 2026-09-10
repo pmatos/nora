@@ -54,6 +54,7 @@ public:
   // under every tag: fixnums set bit 0, heap pointers/immediates/chars are all
   // nonzero by construction).
   static Value immediate(nr_value W) {
+    // NOLINTNEXTLINE(misc-static-assert): a runtime check, not a constant.
     assert(W != 0);
     Value Result;
     Result.Imm = W;
@@ -79,6 +80,7 @@ public:
   bool isImmediate() const { return Imm != 0; }
   // The raw immediate word. isImmediate() must hold.
   nr_value rawImmediate() const {
+    // NOLINTNEXTLINE(misc-static-assert): a runtime check, not a constant.
     assert(isImmediate());
     return Imm;
   }
@@ -113,6 +115,7 @@ private:
   // per-kind dispatch rather than let it silently mismaterialize.
   void materializeLegacy() const {
     if (Imm != 0 && !Legacy && !Shared) {
+      // NOLINTNEXTLINE(misc-static-assert): a runtime check, not a constant.
       assert(Imm == NR_TRUE || Imm == NR_FALSE);
       Legacy = std::make_unique<ast::BooleanLiteral>(nr_truthy(Imm));
       Imm = 0;
