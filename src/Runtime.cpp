@@ -126,7 +126,8 @@ Runtime::Runtime() {
       }};
 
   // (box v)/(unbox b)/(set-box! b v): a fresh mutable cell shared across copies
-  // of the Box value, so mutation and identity survive clone-on-lookup.
+  // of the Box value, so mutation and identity survive whenever a clone is
+  // materialized from a shared environment binding.
   Builtins["box"] = {Arity::exactly(1),
                      [](Args A) -> std::unique_ptr<ast::ValueNode> {
                        return std::make_unique<ast::Box>(

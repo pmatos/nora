@@ -3,10 +3,16 @@
 #include "AST.h"
 #include "Value.h"
 
+#include <cassert>
 #include <utility>
 
 // Add a new identifier to the environment.
 void Environment::add(ast::Identifier const &Id, Value Val) {
+  // A binding is never engineered to be empty; catch that in debug builds
+  // rather than have a later lookup silently read back as "unbound" (assert
+  // is a no-op under NDEBUG, same as every other invariant check in this
+  // codebase - see AST.cpp, Lex.cpp, Runtime.h, Interpreter.cpp).
+  assert(Val && "Environment::add given an empty Value");
   Env[Id] = Val.toShared();
 }
 
