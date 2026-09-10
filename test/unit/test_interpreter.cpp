@@ -11,6 +11,7 @@
 
 #include <gc.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -20,6 +21,34 @@ namespace {
 struct Run {
   bool ok = false;                        // no diagnostics were reported
   std::unique_ptr<ast::ValueNode> result; // Interpreter::getResult()
+
+  // The seam S18 will rewrite: downcast to a materialized ValueNode view.
+  // Localized here so the eventual nr_value read replaces one definition.
+  template <typename T>
+  static const T *expectResult(const ast::ValueNode *Node) {
+    REQUIRE(Node);
+    const auto *Downcast = llvm::dyn_cast<T>(Node);
+    REQUIRE(Downcast);
+    return Downcast;
+  }
+
+  static void expectInt(const ast::ValueNode *Node, int64_t Expected) {
+    REQUIRE(*expectResult<ast::Integer>(Node) == Expected);
+  }
+
+  void expectInt(int64_t Expected) const {
+    REQUIRE(ok);
+    expectInt(result.get(), Expected);
+  }
+
+  static void expectBool(const ast::ValueNode *Node, bool Expected) {
+    REQUIRE(expectResult<ast::BooleanLiteral>(Node)->value() == Expected);
+  }
+
+  void expectBool(bool Expected) const {
+    REQUIRE(ok);
+    expectBool(result.get(), Expected);
+  }
 };
 
 Run runLinklet(const std::string &Src) {
@@ -42,11 +71,7 @@ TEST_CASE("tail-recursive loop computes the correct value", "[interp][tco]") {
                      "(letrec-values ([(loop) "
                      "  (lambda (n) (if (zero? n) 42 (loop (- n 1))))]) "
                      "(loop 1000)))");
-  REQUIRE(R.ok);
-  REQUIRE(R.result);
-  auto *Int = llvm::dyn_cast<ast::Integer>(R.result.get());
-  REQUIRE(Int);
-  REQUIRE(*Int == 42);
+  R.expectInt(42);
 }
 
 namespace {
@@ -115,11 +140,7 @@ TEST_CASE("the continuation lives in the GC heap", "[m2][gc]") {
 
 TEST_CASE("a box round-trips its contents", "[interp][m2]") {
   Run R = runLinklet("(linklet () () (unbox (box 5)))");
-  REQUIRE(R.ok);
-  REQUIRE(R.result);
-  auto *Int = llvm::dyn_cast<ast::Integer>(R.result.get());
-  REQUIRE(Int);
-  REQUIRE(*Int == 5);
+  R.expectInt(5);
 }
 
 TEST_CASE("set-box! mutates through a shared reference", "[interp][m2]") {
@@ -129,45 +150,25 @@ TEST_CASE("set-box! mutates through a shared reference", "[interp][m2]") {
   Run R = runLinklet("(linklet () () "
                      "(let-values ([(b) (box 1)]) "
                      "(begin (set-box! b 10) (unbox b))))");
-  REQUIRE(R.ok);
-  REQUIRE(R.result);
-  auto *Int = llvm::dyn_cast<ast::Integer>(R.result.get());
-  REQUIRE(Int);
-  REQUIRE(*Int == 10);
+  R.expectInt(10);
 }
 
 TEST_CASE("eq? distinguishes box identity", "[interp][m2]") {
   // A box is eq? to itself; two freshly allocated boxes are not.
   Run Same =
       runLinklet("(linklet () () (let-values ([(b) (box 0)]) (eq? b b)))");
-  REQUIRE(Same.ok);
-  REQUIRE(Same.result);
-  auto *S = llvm::dyn_cast<ast::BooleanLiteral>(Same.result.get());
-  REQUIRE(S);
-  REQUIRE(S->value());
+  Same.expectBool(true);
 
   Run Diff = runLinklet("(linklet () () (eq? (box 0) (box 0)))");
-  REQUIRE(Diff.ok);
-  REQUIRE(Diff.result);
-  auto *D = llvm::dyn_cast<ast::BooleanLiteral>(Diff.result.get());
-  REQUIRE(D);
-  REQUIRE_FALSE(D->value());
+  Diff.expectBool(false);
 }
 
 TEST_CASE("cons/car/cdr round-trip", "[interp][m2]") {
   Run Ca = runLinklet("(linklet () () (car (cons 1 2)))");
-  REQUIRE(Ca.ok);
-  REQUIRE(Ca.result);
-  auto *A = llvm::dyn_cast<ast::Integer>(Ca.result.get());
-  REQUIRE(A);
-  REQUIRE(*A == 1);
+  Ca.expectInt(1);
 
   Run Cd = runLinklet("(linklet () () (cdr (cons 1 2)))");
-  REQUIRE(Cd.ok);
-  REQUIRE(Cd.result);
-  auto *D = llvm::dyn_cast<ast::Integer>(Cd.result.get());
-  REQUIRE(D);
-  REQUIRE(*D == 2);
+  Cd.expectInt(2);
 }
 
 TEST_CASE("set-car!/set-cdr! mutate through a shared reference",
@@ -175,47 +176,27 @@ TEST_CASE("set-car!/set-cdr! mutate through a shared reference",
   Run R = runLinklet(
       "(linklet () () (let-values ([(p) (cons 1 2)]) "
       "(begin (set-car! p 10) (set-cdr! p 20) (+ (car p) (cdr p)))))");
-  REQUIRE(R.ok);
-  REQUIRE(R.result);
-  auto *Int = llvm::dyn_cast<ast::Integer>(R.result.get());
-  REQUIRE(Int);
-  REQUIRE(*Int == 30);
+  R.expectInt(30);
 }
 
 TEST_CASE("eq? distinguishes pair identity", "[interp][m2]") {
   Run Same =
       runLinklet("(linklet () () (let-values ([(p) (cons 1 2)]) (eq? p p)))");
-  REQUIRE(Same.ok);
-  REQUIRE(Same.result);
-  auto *S = llvm::dyn_cast<ast::BooleanLiteral>(Same.result.get());
-  REQUIRE(S);
-  REQUIRE(S->value());
+  Same.expectBool(true);
 
   Run Diff = runLinklet("(linklet () () (eq? (cons 1 2) (cons 1 2)))");
-  REQUIRE(Diff.ok);
-  REQUIRE(Diff.result);
-  auto *D = llvm::dyn_cast<ast::BooleanLiteral>(Diff.result.get());
-  REQUIRE(D);
-  REQUIRE_FALSE(D->value());
+  Diff.expectBool(false);
 }
 
 TEST_CASE("symbol eq? is identity, not name", "[interp][m2]") {
   // Two uninterned symbols with the same name are distinct objects...
   Run Un = runLinklet("(linklet () () (eq? (string->uninterned-symbol \"s\") "
                       "(string->uninterned-symbol \"s\")))");
-  REQUIRE(Un.ok);
-  REQUIRE(Un.result);
-  auto *U = llvm::dyn_cast<ast::BooleanLiteral>(Un.result.get());
-  REQUIRE(U);
-  REQUIRE_FALSE(U->value());
+  Un.expectBool(false);
 
   // ...while interned symbols with the same name are eq?.
   Run In = runLinklet("(linklet () () (eq? 'a 'a))");
-  REQUIRE(In.ok);
-  REQUIRE(In.result);
-  auto *I = llvm::dyn_cast<ast::BooleanLiteral>(In.result.get());
-  REQUIRE(I);
-  REQUIRE(I->value());
+  In.expectBool(true);
 }
 
 TEST_CASE("eq? unwraps a quoted symbol before comparing identity",
@@ -236,29 +217,19 @@ TEST_CASE("eq? unwraps a quoted symbol before comparing identity",
                                                     Uninterned.get()};
   std::unique_ptr<ast::ValueNode> Result =
       Runtime::getInstance().callFunction("eq?", Args);
-  REQUIRE(Result);
-  auto *B = llvm::dyn_cast<ast::BooleanLiteral>(Result.get());
-  REQUIRE(B);
-  REQUIRE_FALSE(B->value());
+  Run::expectBool(Result.get(), false);
 
   // Same check with operands swapped.
   llvm::SmallVector<const ast::ValueNode *> ArgsRev = {Uninterned.get(),
                                                        Quoted.get()};
   std::unique_ptr<ast::ValueNode> ResultRev =
       Runtime::getInstance().callFunction("eq?", ArgsRev);
-  REQUIRE(ResultRev);
-  auto *BR = llvm::dyn_cast<ast::BooleanLiteral>(ResultRev.get());
-  REQUIRE(BR);
-  REQUIRE_FALSE(BR->value());
+  Run::expectBool(ResultRev.get(), false);
 }
 
 TEST_CASE("gensym produces fresh distinct symbols", "[interp][m2]") {
   Run R = runLinklet("(linklet () () (eq? (gensym) (gensym)))");
-  REQUIRE(R.ok);
-  REQUIRE(R.result);
-  auto *B = llvm::dyn_cast<ast::BooleanLiteral>(R.result.get());
-  REQUIRE(B);
-  REQUIRE_FALSE(B->value());
+  R.expectBool(false);
 }
 
 TEST_CASE("gensym rejects more than one argument", "[interp][m2]") {
@@ -274,11 +245,7 @@ TEST_CASE("mutual tail recursion is bounded and correct", "[interp][tco]") {
                      "  ((ev) (lambda (n) (if (zero? n) 1 (od (- n 1)))))"
                      "  ((od) (lambda (n) (if (zero? n) 0 (ev (- n 1))))))"
                      "  (ev 100000)))");
-  REQUIRE(R.ok);
-  REQUIRE(R.result);
-  auto *Int = llvm::dyn_cast<ast::Integer>(R.result.get());
-  REQUIRE(Int);
-  REQUIRE(*Int == 1); // ev(100000): 100000 is even
+  R.expectInt(1); // ev(100000): 100000 is even
 }
 
 namespace {
@@ -325,13 +292,9 @@ TEST_CASE("a tail-position with-continuation-mark replaces, not "
                      "                  (current-continuation-marks) 'k) "
                      "      (loop (- n 1)))))]) (loop 5)))");
   REQUIRE(R.ok);
-  REQUIRE(R.result);
-  auto *L = llvm::dyn_cast<ast::List>(R.result.get());
-  REQUIRE(L);
+  auto *L = Run::expectResult<ast::List>(R.result.get());
   REQUIRE(L->length() == 1);
-  auto *Elem = llvm::dyn_cast<ast::Integer>(&(*L)[0]);
-  REQUIRE(Elem);
-  REQUIRE(*Elem == 0);
+  Run::expectInt(&(*L)[0], 0);
 }
 
 TEST_CASE("a box installed as a continuation mark keeps its identity",
@@ -348,9 +311,5 @@ TEST_CASE("a box installed as a continuation mark keeps its identity",
                      "      (set-box! (continuation-mark-set-first "
                      "                  (current-continuation-marks) 'k) 42) "
                      "      (unbox b)))))");
-  REQUIRE(R.ok);
-  REQUIRE(R.result);
-  auto *Int = llvm::dyn_cast<ast::Integer>(R.result.get());
-  REQUIRE(Int);
-  REQUIRE(*Int == 42);
+  R.expectInt(42);
 }
