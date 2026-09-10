@@ -5,7 +5,7 @@
 supporting files. Chosen because the last stretch of `git log` (S5–S7 immediates
 #197/#199/#201, the `toShared()` fix #198, the builtin-registry seam #200) keeps
 landing there; deepening pays off where change concentrates.
-**Picked**: `value-register-take-vs-borrow` — see the PR and `.architecture/backlog.md`.
+**Picked**: `value-register-take-vs-borrow` — see PR #202 and `.architecture/backlog.md`.
 **Degradations**: advisor rate-limited only at the step-3 approach-validation
 call; it was available at the step-4 design adjudication and confirmed the pick.
 Parallel sub-agents were used for both exploration and design-it-twice.
