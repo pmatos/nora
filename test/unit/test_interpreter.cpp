@@ -408,3 +408,28 @@ TEST_CASE("set! result is void", "[interp][m2][gc]") {
   Run R = runLinklet("(linklet () () (let-values ([(x) 1]) (set! x 2)))");
   R.expectVoid();
 }
+
+TEST_CASE("eq? on immediate-char arguments materializes at the "
+          "RuntimeFunction boundary",
+          "[interp][m2][gc]") {
+  // No existing test passes a bare Char to a RuntimeFunction; EqFunction
+  // dereferences its Args unconditionally, so this would segfault if
+  // Value::get() returned null for an engaged char immediate.
+  Run Same = runLinklet("(linklet () () (eq? #\\a #\\a))");
+  Same.expectBool(true);
+
+  Run Diff = runLinklet("(linklet () () (eq? #\\a #\\b))");
+  Diff.expectBool(false);
+}
+
+TEST_CASE("a box can hold and return an immediate char", "[interp][m2][gc]") {
+  Run R = runLinklet("(linklet () () (unbox (box #\\a)))");
+  R.expectChar('a');
+}
+
+TEST_CASE("quoted chars with different spellings for the same code point are "
+          "eq?",
+          "[interp][m2][gc]") {
+  Run R = runLinklet("(linklet () () (eq? '#\\nul '#\\null))");
+  R.expectBool(true);
+}
