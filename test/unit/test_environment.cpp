@@ -76,6 +76,38 @@ TEST_CASE("toShared on a Shared-engaged Value hands out the same node and "
   REQUIRE_FALSE(V);
 }
 
+TEST_CASE("as<T> borrows a typed view without consuming or cloning",
+          "[value]") {
+  auto SP = std::make_shared<ast::Integer>(7);
+  Value V = Value::share(SP);
+
+  // Non-cloning: the typed borrow is the very node the binding shares.
+  REQUIRE(V.as<ast::Integer>() == SP.get());
+  // Non-consuming: still engaged, repeatable, get() still valid.
+  REQUIRE(V);
+  REQUIRE(V.get() == SP.get());
+  REQUIRE(V.as<ast::Integer>() == SP.get());
+
+  // Wrong-type borrow yields nullptr and still does not consume.
+  REQUIRE(V.as<ast::BooleanLiteral>() == nullptr);
+  REQUIRE(V);
+  REQUIRE(V.get() == SP.get());
+}
+
+TEST_CASE("as<T> on an unengaged handle is nullptr", "[value]") {
+  REQUIRE(Value{}.as<ast::Integer>() == nullptr);
+}
+
+TEST_CASE("as<T> materializes an engaged immediate then borrows it",
+          "[value]") {
+  Value V = Value::immediate(NR_TRUE);
+  const ast::BooleanLiteral *B = V.as<ast::BooleanLiteral>();
+  REQUIRE(B);
+  REQUIRE(B->value());
+  // The one observable side effect of the peek: the immediate materialized.
+  REQUIRE_FALSE(V.isImmediate());
+}
+
 // Slice 3 (issue #119): Environment/envLookup/envSet share instead of clone.
 
 TEST_CASE("Environment::lookup shares identity across repeated lookups",
