@@ -3,6 +3,7 @@
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/Twine.h>
 #include <llvm/Support/Casting.h>
+#include <llvm/Support/SMLoc.h>
 #include <llvm/Support/raw_ostream.h>
 
 #include <iostream>
@@ -17,6 +18,7 @@
 #include "ASTRuntime.h"
 #include "Casting.h"
 #include "Environment.h"
+#include "Value.h"
 
 #undef DEBUG_TYPE
 #define DEBUG_TYPE "Interpreter"
@@ -191,13 +193,13 @@ void Interpreter::step(Frame::IfBranch &K) {
 }
 
 void Interpreter::step(Frame::App &K) {
-  K.Done.push_back(Val.takeLegacy());
+  K.Done.push_back(std::move(Val));
   if (K.Done.size() < K.Exprs.size()) {
     Control = K.Exprs[K.Done.size()];
     Env = K.Env;
     M = Mode::Eval;
   } else {
-    std::vector<std::unique_ptr<ast::ValueNode>> Vals = std::move(K.Done);
+    std::vector<Value> Vals = std::move(K.Done);
     llvm::SMLoc AppLoc = K.AppLoc;
     llvm::SMLoc OpLoc = K.Exprs[0]->getLoc();
     Kont.pop_back();
@@ -405,10 +407,9 @@ void Interpreter::step(Frame::Halt & /*K*/) {
 // Application
 //
 
-void Interpreter::applyProcedure(
-    std::vector<std::unique_ptr<ast::ValueNode>> Vals, llvm::SMLoc AppLoc,
-    llvm::SMLoc OpLoc) {
-  std::unique_ptr<ast::ValueNode> Op = std::move(Vals[0]);
+void Interpreter::applyProcedure(std::vector<Value> Vals, llvm::SMLoc AppLoc,
+                                 llvm::SMLoc OpLoc) {
+  Value Op = std::move(Vals[0]);
   const size_t NArgs = Vals.size() - 1;
 
   if (!Op) {
@@ -509,7 +510,7 @@ void Interpreter::applyProcedure(
     }
     auto Rest = std::make_unique<ast::List>();
     for (; I < NArgs; ++I) {
-      Rest->appendExpr(std::move(Vals[I + 1]));
+      Rest->appendExpr(Vals[I + 1].takeLegacy());
     }
     CalleeScope->Vars.add(LRF.getRestFormal(), std::move(Rest));
     break;
@@ -518,7 +519,7 @@ void Interpreter::applyProcedure(
     auto IF = static_cast<const ast::IdentifierFormal &>(F);
     auto Lst = std::make_unique<ast::List>();
     for (size_t I = 0; I < NArgs; ++I) {
-      Lst->appendExpr(std::move(Vals[I + 1]));
+      Lst->appendExpr(Vals[I + 1].takeLegacy());
     }
     CalleeScope->Vars.add(IF.getIdentifier(), std::move(Lst));
     break;

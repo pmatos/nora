@@ -128,8 +128,8 @@ private:
     struct App { // application: accumulate operator + args, then apply
       EnvPtr Env;
       llvm::SmallVector<const ast::ExprNode *> Exprs;
-      std::vector<std::unique_ptr<ast::ValueNode>> Done; // cursor = Done.size()
-      llvm::SMLoc AppLoc; // source location, for arity/procedure errors
+      std::vector<Value> Done; // cursor = Done.size()
+      llvm::SMLoc AppLoc;      // source location, for arity/procedure errors
     };
     struct MkValues { // (values ...): accumulate then build a Values
       EnvPtr Env;
@@ -230,8 +230,8 @@ private:
   // Deliver the value register to the top continuation frame.
   void continueStep();
   // Apply Vals[0] to Vals[1..]. AppLoc/OpLoc anchor arity/procedure errors.
-  void applyProcedure(std::vector<std::unique_ptr<ast::ValueNode>> Vals,
-                      llvm::SMLoc AppLoc, llvm::SMLoc OpLoc);
+  void applyProcedure(std::vector<Value> Vals, llvm::SMLoc AppLoc,
+                      llvm::SMLoc OpLoc);
   // Evaluate a (non-empty) body sequence in environment E.
   void evalBody(llvm::SmallVector<const ast::ExprNode *> Body, const EnvPtr &E);
   // Bind one let-values / letrec-values clause into Vars: a single identifier
