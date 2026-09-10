@@ -217,20 +217,14 @@ TEST_CASE("eq? unwraps a quoted symbol before comparing identity",
                                                     Uninterned.get()};
   std::unique_ptr<ast::ValueNode> Result =
       Runtime::getInstance().callFunction("eq?", Args);
-  REQUIRE(Result);
-  auto *B = llvm::dyn_cast<ast::BooleanLiteral>(Result.get());
-  REQUIRE(B);
-  REQUIRE_FALSE(B->value());
+  Run::expectBool(Result.get(), false);
 
   // Same check with operands swapped.
   llvm::SmallVector<const ast::ValueNode *> ArgsRev = {Uninterned.get(),
                                                        Quoted.get()};
   std::unique_ptr<ast::ValueNode> ResultRev =
       Runtime::getInstance().callFunction("eq?", ArgsRev);
-  REQUIRE(ResultRev);
-  auto *BR = llvm::dyn_cast<ast::BooleanLiteral>(ResultRev.get());
-  REQUIRE(BR);
-  REQUIRE_FALSE(BR->value());
+  Run::expectBool(ResultRev.get(), false);
 }
 
 TEST_CASE("gensym produces fresh distinct symbols", "[interp][m2]") {
@@ -298,13 +292,9 @@ TEST_CASE("a tail-position with-continuation-mark replaces, not "
                      "                  (current-continuation-marks) 'k) "
                      "      (loop (- n 1)))))]) (loop 5)))");
   REQUIRE(R.ok);
-  REQUIRE(R.result);
-  auto *L = llvm::dyn_cast<ast::List>(R.result.get());
-  REQUIRE(L);
+  auto *L = Run::expectResult<ast::List>(R.result.get());
   REQUIRE(L->length() == 1);
-  auto *Elem = llvm::dyn_cast<ast::Integer>(&(*L)[0]);
-  REQUIRE(Elem);
-  REQUIRE(*Elem == 0);
+  Run::expectInt(&(*L)[0], 0);
 }
 
 TEST_CASE("a box installed as a continuation mark keeps its identity",
