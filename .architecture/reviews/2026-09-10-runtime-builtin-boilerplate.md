@@ -270,4 +270,112 @@ with care.
 
 ## Design
 
-<!-- Written in step 4; the file is committed before the design pass runs. -->
+Three interfaces for the deepened builtin seam were produced **inline** (not by
+parallel sub-agents) and are recorded here before adjudication, per the
+skill's inline-design path. Adjudication was done **without the advisor**
+(rate-limited this firing) against these written designs, on the fixed criteria:
+depth → locality → seam placement → test surface → blast radius.
+
+A behaviour constraint shapes all three: the failure semantics of the 18
+builtins are **not uniform**. Most return `nullptr` (→ the caller's
+`"invalid arguments to '<name>'"`), but `continuation-mark-set-first` /
+`continuation-mark-set->list` return a default value (`#f` / empty list) on any
+mismatch, and `gensym` silently ignores a wrong-typed argument. Any seam must
+preserve each builtin's exact current behaviour, so arity/type *failure* cannot
+be forced into a single policy for all builtins.
+
+### Design A — handler-on-node: one concrete `RuntimeFunction` carrying `{arity, std::function handler}`
+
+`RuntimeFunction` stays a `ValueNode` but becomes **concrete** and stores an
+`Arity` plus a `std::function` handler; `operator()` checks arity then calls the
+handler. The registry constructs nodes with lambdas.
+
+```cpp
+std::unique_ptr<ast::ValueNode> operator()(ArgsRef Args) const override {
+  if (!Ar.accepts(Args.size())) return nullptr;
+  return Handler(Args);
+}
+```
+
+- **Hides**: clone/accept plumbing, the node kind, and the arity guard.
+- **Trade-off**: behaviour still lives *on the value node*; every identifier
+  lookup clones the node, now copying a `std::function`. The node is "callable",
+  a capability only `Runtime::callFunction` ever uses.
+
+### Design B — helpers-on-base: keep the 18 subclasses, add `checkArity` / `argAs<T>`
+
+Least invasive: the 18 subclasses remain; the base gains protected helpers so
+each `operator()` opens with `if (auto E = checkArity(Args, Exact(1))) return E;`
+and uses `argAs<ast::Box>(Args, 0)`.
+
+- **Hides**: only the arity comparison and the `dyn_cast` idiom.
+- **Trade-off**: the dominant duplication — 18× `clone()`, 18× `accept()`, 18
+  class scaffolds — **survives**. It moves a few lines into a helper rather than
+  concentrating the boilerplate. Weakest against the deletion test.
+
+### Design C — registry-owns-behaviour: `RuntimeFunction` node becomes a pure name tag; `{arity, handler}` live in a `Runtime` table  ·  WINNER
+
+`operator()` is removed from the node entirely. `RuntimeFunction` becomes a
+`ClonableNode<RuntimeFunction, ValueNode>` leaf holding only its name (its sole
+job: be a value an identifier can resolve to). `Runtime` owns a
+`unordered_map<string, {Arity, Handler}>`; `callFunction` validates arity then
+invokes the handler.
+
+```cpp
+// Runtime.h — the seam
+struct Arity { size_t Min, Max;
+  static Arity exactly(size_t N); static Arity atLeast(size_t N);
+  static Arity atMost(size_t N);  static Arity any();
+  bool accepts(size_t N) const { return N >= Min && N <= Max; } };
+using Handler = std::function<std::unique_ptr<ast::ValueNode>(ArgsRef)>;
+
+// Runtime.cpp — callFunction
+auto It = Builtins.find(Name);
+if (!It->second.Ar.accepts(Args.size())) return nullptr;
+return It->second.Fn(Args);
+```
+
+Registration is one data row per builtin: `{"unbox", Arity::exactly(1), <lambda>}`.
+The two continuation-mark builtins take `Arity::any()` and keep their `size()==2`
+guard inline, so their default-return behaviour is preserved byte-for-byte;
+`gensym` takes `Arity::atMost(1)` (exactly its current `> 1 → nullptr`).
+
+- **Hides**: arity validation, the node kind, clone/accept (via `ClonableNode`),
+  *and* the very notion that the value node has behaviour.
+- **Trade-off**: touches the node's virtual interface in `AST.h` (removes a pure
+  virtual, adds a `ClonableNode` base) — one more file than A, but a strictly
+  smaller and simpler node afterwards.
+
+### Adjudication
+
+| Criterion | A | B | **C** |
+|---|---|---|---|
+| **Depth** | node hides arity + plumbing | hides only arity/cast | **node hides everything; behaviour is entirely behind the Runtime seam** |
+| **Locality** | registry + node | scattered across 18 classes | **one table row per builtin; adding one is a one-line edit** |
+| **Seam placement** | on the node | none new | **on `Runtime` — where "the set of builtins" actually varies; 18 adapters make it a real seam, not hypothetical** |
+| **Test surface** | need a handler to build a node | 18 surfaces remain | **`Runtime::callFunction` is the seam and is already unit-tested directly (`test_interpreter.cpp:219`); the node is trivially constructible** |
+| **Blast radius** | `Runtime.{cpp,h}` + `AST.h` (concrete) | `Runtime.{cpp,h}` | `Runtime.{cpp,h}` + `AST.h` (concrete + `ClonableNode`) |
+
+**C wins.** It is the only design that fully passes the deletion test: the 18
+subclasses' arity/type/clone/accept boilerplate does not move, it disappears
+into one shared seam, and the value node is reduced to what it actually is — a
+name. B is eliminated first (it leaves the dominant duplication intact, failing
+the deletion test). Between A and C, blast radius is the only axis A leads on,
+and only by one file; C beats it decisively on depth, locality, and test surface
+by taking behaviour *off* the value node rather than leaving a fat, self-cloning
+callable node. The one-file difference does not outweigh three higher-priority
+criteria.
+
+**Runner-up design: A** (handler-on-node). It loses because it keeps behaviour
+on a `ValueNode` that is cloned on every identifier lookup — a shallower
+separation and a fatter node — for the sake of touching one fewer file.
+
+### CONTEXT.md
+
+The repo has no `CONTEXT.md`. The deepened seam is named after existing code
+vocabulary (`RuntimeFunction`, "builtin"), so no new domain term is introduced
+and none is created this firing.
+
+### Proposed ADR
+
+Carried into the PR body under `## Proposed ADR` (this run does not write ADRs).
