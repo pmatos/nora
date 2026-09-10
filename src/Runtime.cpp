@@ -1,521 +1,262 @@
 #include "Runtime.h"
 
+#include "AST.h"
 #include "ASTRuntime.h"
 
+#include <llvm/ADT/SmallVector.h>
 #include <llvm/Support/Casting.h>
 
-class AddFunction : public ast::RuntimeFunction {
-public:
-  AddFunction(const std::string &Name) : RuntimeFunction(Name) {}
-
-  virtual std::unique_ptr<ast::ValueNode> operator()(
-      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
-    auto Sum = std::make_unique<ast::Integer>(0);
-
-    for (const auto *Arg : Args) {
-      if (auto const *I = llvm::dyn_cast<ast::Integer>(Arg)) {
-        *Sum += *I;
-      } else {
-        // FIXME: Throw an error. Unsupported type for +.
-        return nullptr;
-      }
-    }
-    return Sum;
-  }
-
-  virtual ast::RuntimeFunction *clone() const override {
-    return new AddFunction(*this);
-  }
-
-  virtual void accept(ASTVisitor &V) const override { V.visit(*this); }
-};
-
-class SubtractFunction : public ast::RuntimeFunction {
-public:
-  SubtractFunction(const std::string &Name) : RuntimeFunction(Name) {}
-
-  virtual std::unique_ptr<ast::ValueNode> operator()(
-      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
-    if (Args.empty()) {
-      // Runtime error, no args to -
-      // FIXME: issue error message
-      return nullptr;
-    }
-
-    std::unique_ptr<ast::Integer> Sub;
-    bool First = true;
-
-    for (const auto *Arg : Args) {
-      if (auto const *I = llvm::dyn_cast<ast::Integer>(Arg)) {
-        if (First) {
-
-          Sub = std::unique_ptr<ast::Integer>(
-              llvm::cast<ast::Integer>(I->clone()));
-          First = false;
-        } else {
-          *Sub -= *I;
-        }
-      } else {
-        // FIXME: Throw an error. Unsupported type for -.
-        return nullptr;
-      }
-    }
-
-    return Sub;
-  }
-
-  virtual ast::RuntimeFunction *clone() const override {
-    return new SubtractFunction(*this);
-  }
-
-  virtual void accept(ASTVisitor &V) const override { V.visit(*this); }
-};
-
-class MultiplyFunction : public ast::RuntimeFunction {
-public:
-  MultiplyFunction(const std::string &Name) : RuntimeFunction(Name) {}
-
-  virtual std::unique_ptr<ast::ValueNode> operator()(
-      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
-    auto Mul = std::make_unique<ast::Integer>(1);
-
-    for (const auto *Arg : Args) {
-      if (auto const *I = llvm::dyn_cast<ast::Integer>(Arg)) {
-        *Mul *= *I;
-      } else {
-        // FIXME: Throw an error. Unsupported type for -.
-        return nullptr;
-      }
-    }
-
-    return Mul;
-  }
-
-  virtual ast::RuntimeFunction *clone() const override {
-    return new MultiplyFunction(*this);
-  }
-
-  virtual void accept(ASTVisitor &V) const override { V.visit(*this); }
-};
-
-// (current-continuation-marks) is intercepted by the interpreter, which has
-// access to the machine's continuation. This runtime entry exists only so the
-// identifier resolves to a callable value; it is not invoked in practice.
-class CurrentContinuationMarksFunction : public ast::RuntimeFunction {
-public:
-  CurrentContinuationMarksFunction(const std::string &Name)
-      : RuntimeFunction(Name) {}
-
-  std::unique_ptr<ast::ValueNode> operator()(
-      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
-    (void)Args;
-    return std::make_unique<ast::ContinuationMarkSet>();
-  }
-
-  ast::RuntimeFunction *clone() const override {
-    return new CurrentContinuationMarksFunction(*this);
-  }
-
-  void accept(ASTVisitor &V) const override { V.visit(*this); }
-};
-
-// (continuation-mark-set-first mark-set key) returns the innermost (most
-// recent) value marked with key, or #f if there is none.
-class ContinuationMarkSetFirstFunction : public ast::RuntimeFunction {
-public:
-  ContinuationMarkSetFirstFunction(const std::string &Name)
-      : RuntimeFunction(Name) {}
-
-  std::unique_ptr<ast::ValueNode> operator()(
-      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
-    if (Args.size() == 2) {
-      const auto *CMS = llvm::dyn_cast<ast::ContinuationMarkSet>(Args[0]);
-      const ast::ValueNode *Key = Args[1];
-      if (CMS != nullptr && Key != nullptr) {
-        for (auto const &Frame : CMS->getFrames()) {
-          for (auto const &E : Frame) {
-            if (ast::valueEq(*E.first.get(), *Key)) {
-              return std::unique_ptr<ast::ValueNode>(E.second.get()->clone());
-            }
-          }
-        }
-      }
-    }
-    return std::make_unique<ast::BooleanLiteral>(false);
-  }
-
-  ast::RuntimeFunction *clone() const override {
-    return new ContinuationMarkSetFirstFunction(*this);
-  }
-
-  void accept(ASTVisitor &V) const override { V.visit(*this); }
-};
-
-// (continuation-mark-set->list mark-set key) returns the list of values marked
-// with key, ordered from innermost (most recent) to outermost.
-class ContinuationMarkSetToListFunction : public ast::RuntimeFunction {
-public:
-  ContinuationMarkSetToListFunction(const std::string &Name)
-      : RuntimeFunction(Name) {}
-
-  std::unique_ptr<ast::ValueNode> operator()(
-      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
-    auto L = std::make_unique<ast::List>();
-    if (Args.size() == 2) {
-      const auto *CMS = llvm::dyn_cast<ast::ContinuationMarkSet>(Args[0]);
-      const ast::ValueNode *Key = Args[1];
-      if (CMS != nullptr && Key != nullptr) {
-        for (auto const &Frame : CMS->getFrames()) {
-          for (auto const &E : Frame) {
-            if (ast::valueEq(*E.first.get(), *Key)) {
-              L->appendExpr(
-                  std::unique_ptr<ast::ValueNode>(E.second.get()->clone()));
-            }
-          }
-        }
-      }
-    }
-    return L;
-  }
-
-  ast::RuntimeFunction *clone() const override {
-    return new ContinuationMarkSetToListFunction(*this);
-  }
-
-  void accept(ASTVisitor &V) const override { V.visit(*this); }
-};
-
-// (zero? n) is a minimal integer predicate. It exists so a terminating
-// tail-recursive loop can be written to exercise proper tail calls (M1); the
-// full numeric tower and its predicates arrive in M4.
-class ZeroPredicateFunction : public ast::RuntimeFunction {
-public:
-  ZeroPredicateFunction(const std::string &Name) : RuntimeFunction(Name) {}
-
-  std::unique_ptr<ast::ValueNode> operator()(
-      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
-    if (Args.size() != 1) {
-      return nullptr;
-    }
-    if (auto const *I = llvm::dyn_cast<ast::Integer>(Args[0])) {
-      return std::make_unique<ast::BooleanLiteral>(*I == 0);
-    }
-    return nullptr;
-  }
-
-  ast::RuntimeFunction *clone() const override {
-    return new ZeroPredicateFunction(*this);
-  }
-
-  void accept(ASTVisitor &V) const override { V.visit(*this); }
-};
-
-// (box v) allocates a fresh mutable cell holding v. (unbox b) reads it. The
-// box's cell is shared across copies of the Box value, so mutation and identity
-// survive the interpreter's clone-on-lookup - the start of M2's shared value
-// model.
-class BoxFunction : public ast::RuntimeFunction {
-public:
-  BoxFunction(const std::string &Name) : RuntimeFunction(Name) {}
-
-  std::unique_ptr<ast::ValueNode> operator()(
-      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
-    if (Args.size() != 1) {
-      return nullptr;
-    }
-    return std::make_unique<ast::Box>(
-        std::unique_ptr<ast::ValueNode>(Args[0]->clone()));
-  }
-
-  ast::RuntimeFunction *clone() const override {
-    return new BoxFunction(*this);
-  }
-  void accept(ASTVisitor &V) const override { V.visit(*this); }
-};
-
-class UnboxFunction : public ast::RuntimeFunction {
-public:
-  UnboxFunction(const std::string &Name) : RuntimeFunction(Name) {}
-
-  std::unique_ptr<ast::ValueNode> operator()(
-      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
-    if (Args.size() != 1) {
-      return nullptr;
-    }
-    if (auto const *B = llvm::dyn_cast<ast::Box>(Args[0])) {
-      return B->get();
-    }
-    return nullptr;
-  }
-
-  ast::RuntimeFunction *clone() const override {
-    return new UnboxFunction(*this);
-  }
-  void accept(ASTVisitor &V) const override { V.visit(*this); }
-};
-
-class SetBoxFunction : public ast::RuntimeFunction {
-public:
-  SetBoxFunction(const std::string &Name) : RuntimeFunction(Name) {}
-
-  std::unique_ptr<ast::ValueNode> operator()(
-      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
-    if (Args.size() != 2) {
-      return nullptr;
-    }
-    if (auto const *B = llvm::dyn_cast<ast::Box>(Args[0])) {
-      B->set(std::unique_ptr<ast::ValueNode>(Args[1]->clone()));
-      return std::make_unique<ast::Void>();
-    }
-    return nullptr;
-  }
-
-  ast::RuntimeFunction *clone() const override {
-    return new SetBoxFunction(*this);
-  }
-  void accept(ASTVisitor &V) const override { V.visit(*this); }
-};
-
-// (eq? a b): object identity. Heap objects with a cell (boxes) compare by cell
-// pointer; other values fall back to the structural valueEq approximation
-// (interned symbols, fixnums, chars, booleans). This is the identity operation
-// the clone-everything model could not provide.
-class EqFunction : public ast::RuntimeFunction {
-public:
-  EqFunction(const std::string &Name) : RuntimeFunction(Name) {}
-
-  std::unique_ptr<ast::ValueNode> operator()(
-      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
-    if (Args.size() != 2) {
-      return nullptr;
-    }
-    // A quoted datum such as 'k evaluates to a QuotedExpr wrapping the
-    // symbol/box/pair rather than the bare value, which would otherwise skip
-    // the identity branches below and fall through to valueEq's structural
-    // (name-only) symbol comparison - losing the distinction between an
-    // interned and an uninterned symbol of the same name.
-    const ast::ValueNode *A = Args[0];
-    const ast::ValueNode *B = Args[1];
-    while (auto const *QA = llvm::dyn_cast<ast::QuotedExpr>(A)) {
-      A = &QA->getQuotedExpr();
-    }
-    while (auto const *QB = llvm::dyn_cast<ast::QuotedExpr>(B)) {
-      B = &QB->getQuotedExpr();
-    }
-    bool Eq;
-    if (auto const *BA = llvm::dyn_cast<ast::Box>(A)) {
-      auto const *BB = llvm::dyn_cast<ast::Box>(B);
-      Eq = (BB != nullptr) && BA->identity() == BB->identity();
-    } else if (auto const *PA = llvm::dyn_cast<ast::Pair>(A)) {
-      auto const *PB = llvm::dyn_cast<ast::Pair>(B);
-      Eq = (PB != nullptr) && PA->identity() == PB->identity();
-    } else if (auto const *SA = llvm::dyn_cast<ast::Symbol>(A)) {
-      auto const *SB = llvm::dyn_cast<ast::Symbol>(B);
-      Eq = (SB != nullptr) && SA->identity() == SB->identity();
-    } else {
-      Eq = ast::valueEq(*A, *B);
-    }
-    return std::make_unique<ast::BooleanLiteral>(Eq);
-  }
-
-  ast::RuntimeFunction *clone() const override { return new EqFunction(*this); }
-  void accept(ASTVisitor &V) const override { V.visit(*this); }
-};
-
-// (cons a d) allocates a fresh mutable pair; (car p)/(cdr p) read its fields.
-// The pair's cell is shared across copies of the Pair value, so mutation and
-// identity survive the interpreter's clone-on-lookup.
-class ConsFunction : public ast::RuntimeFunction {
-public:
-  ConsFunction(const std::string &Name) : RuntimeFunction(Name) {}
-
-  std::unique_ptr<ast::ValueNode> operator()(
-      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
-    if (Args.size() != 2) {
-      return nullptr;
-    }
-    return std::make_unique<ast::Pair>(
-        std::unique_ptr<ast::ValueNode>(Args[0]->clone()),
-        std::unique_ptr<ast::ValueNode>(Args[1]->clone()));
-  }
-
-  ast::RuntimeFunction *clone() const override {
-    return new ConsFunction(*this);
-  }
-  void accept(ASTVisitor &V) const override { V.visit(*this); }
-};
-
-class CarFunction : public ast::RuntimeFunction {
-public:
-  CarFunction(const std::string &Name) : RuntimeFunction(Name) {}
-
-  std::unique_ptr<ast::ValueNode> operator()(
-      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
-    if (Args.size() != 1) {
-      return nullptr;
-    }
-    if (auto const *P = llvm::dyn_cast<ast::Pair>(Args[0])) {
-      return P->car();
-    }
-    return nullptr;
-  }
-
-  ast::RuntimeFunction *clone() const override {
-    return new CarFunction(*this);
-  }
-  void accept(ASTVisitor &V) const override { V.visit(*this); }
-};
-
-class CdrFunction : public ast::RuntimeFunction {
-public:
-  CdrFunction(const std::string &Name) : RuntimeFunction(Name) {}
-
-  std::unique_ptr<ast::ValueNode> operator()(
-      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
-    if (Args.size() != 1) {
-      return nullptr;
-    }
-    if (auto const *P = llvm::dyn_cast<ast::Pair>(Args[0])) {
-      return P->cdr();
-    }
-    return nullptr;
-  }
-
-  ast::RuntimeFunction *clone() const override {
-    return new CdrFunction(*this);
-  }
-  void accept(ASTVisitor &V) const override { V.visit(*this); }
-};
-
-class SetCarFunction : public ast::RuntimeFunction {
-public:
-  SetCarFunction(const std::string &Name) : RuntimeFunction(Name) {}
-
-  std::unique_ptr<ast::ValueNode> operator()(
-      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
-    if (Args.size() != 2) {
-      return nullptr;
-    }
-    if (auto const *P = llvm::dyn_cast<ast::Pair>(Args[0])) {
-      P->setCar(std::unique_ptr<ast::ValueNode>(Args[1]->clone()));
-      return std::make_unique<ast::Void>();
-    }
-    return nullptr;
-  }
-
-  ast::RuntimeFunction *clone() const override {
-    return new SetCarFunction(*this);
-  }
-  void accept(ASTVisitor &V) const override { V.visit(*this); }
-};
-
-class SetCdrFunction : public ast::RuntimeFunction {
-public:
-  SetCdrFunction(const std::string &Name) : RuntimeFunction(Name) {}
-
-  std::unique_ptr<ast::ValueNode> operator()(
-      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
-    if (Args.size() != 2) {
-      return nullptr;
-    }
-    if (auto const *P = llvm::dyn_cast<ast::Pair>(Args[0])) {
-      P->setCdr(std::unique_ptr<ast::ValueNode>(Args[1]->clone()));
-      return std::make_unique<ast::Void>();
-    }
-    return nullptr;
-  }
-
-  ast::RuntimeFunction *clone() const override {
-    return new SetCdrFunction(*this);
-  }
-  void accept(ASTVisitor &V) const override { V.visit(*this); }
-};
-
-// (string->uninterned-symbol s) makes a fresh uninterned symbol: distinct from
-// every other symbol (interned or not), even one with the same name. Interned
-// symbols, by contrast, are canonical by name, so eq? on symbols is identity.
-class StringToUninternedSymbolFunction : public ast::RuntimeFunction {
-public:
-  StringToUninternedSymbolFunction(const std::string &Name)
-      : RuntimeFunction(Name) {}
-
-  std::unique_ptr<ast::ValueNode> operator()(
-      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
-    if (Args.size() != 1) {
-      return nullptr;
-    }
-    if (auto const *S = llvm::dyn_cast<ast::String>(Args[0])) {
-      return ast::Symbol::makeUninterned(S->getValue());
-    }
-    return nullptr;
-  }
-
-  ast::RuntimeFunction *clone() const override {
-    return new StringToUninternedSymbolFunction(*this);
-  }
-  void accept(ASTVisitor &V) const override { V.visit(*this); }
-};
-
-// (gensym [base]) returns a fresh uninterned symbol, never eq? to any other.
-// A monotonic counter gives it a readable, unique name; distinctness comes from
-// its uninterned identity, not the name.
-class GensymFunction : public ast::RuntimeFunction {
-public:
-  GensymFunction(const std::string &Name) : RuntimeFunction(Name) {}
-
-  std::unique_ptr<ast::ValueNode> operator()(
-      const llvm::SmallVector<const ast::ValueNode *> &Args) const override {
-    if (Args.size() > 1) {
-      return nullptr;
-    }
-    static unsigned Counter = 0;
-    std::string Base = "g";
-    if (Args.size() == 1) {
-      if (auto const *S = llvm::dyn_cast<ast::Symbol>(Args[0])) {
-        Base = S->getName().str();
-      } else if (auto const *Str = llvm::dyn_cast<ast::String>(Args[0])) {
-        Base = Str->getValue().str();
-      }
-    }
-    return ast::Symbol::makeUninterned(Base + std::to_string(++Counter));
-  }
-
-  ast::RuntimeFunction *clone() const override {
-    return new GensymFunction(*this);
-  }
-  void accept(ASTVisitor &V) const override { V.visit(*this); }
-};
-
-#define RUNTIME_FUNC(Identifier, Name)                                         \
-  RuntimeFunctions[Identifier] = std::make_shared<Name>(Identifier);
+#include <memory>
+#include <string>
+
+using Args = const llvm::SmallVector<const ast::ValueNode *> &;
+
+// Every builtin is registered as data: a name, an arity spec the seam checks
+// before dispatch, and a handler carrying only its core logic. The arity guard,
+// the clone/accept plumbing, and the node kind that each hand-rolled subclass
+// used to repeat now live once, behind this seam.
 Runtime::Runtime() {
-  // List of runtime functions.
-  RUNTIME_FUNC("+", AddFunction);
-  RUNTIME_FUNC("-", SubtractFunction);
-  RUNTIME_FUNC("*", MultiplyFunction);
-  RUNTIME_FUNC("current-continuation-marks", CurrentContinuationMarksFunction);
-  RUNTIME_FUNC("continuation-mark-set-first", ContinuationMarkSetFirstFunction);
-  RUNTIME_FUNC("continuation-mark-set->list",
-               ContinuationMarkSetToListFunction);
-  RUNTIME_FUNC("zero?", ZeroPredicateFunction);
-  RUNTIME_FUNC("box", BoxFunction);
-  RUNTIME_FUNC("unbox", UnboxFunction);
-  RUNTIME_FUNC("set-box!", SetBoxFunction);
-  RUNTIME_FUNC("eq?", EqFunction);
-  RUNTIME_FUNC("cons", ConsFunction);
-  RUNTIME_FUNC("car", CarFunction);
-  RUNTIME_FUNC("cdr", CdrFunction);
-  RUNTIME_FUNC("set-car!", SetCarFunction);
-  RUNTIME_FUNC("set-cdr!", SetCdrFunction);
-  RUNTIME_FUNC("string->uninterned-symbol", StringToUninternedSymbolFunction);
-  RUNTIME_FUNC("gensym", GensymFunction);
+  Builtins["+"] = {Arity::any(), [](Args A) -> std::unique_ptr<ast::ValueNode> {
+                     auto Sum = std::make_unique<ast::Integer>(0);
+                     for (const auto *Arg : A) {
+                       if (auto const *I = llvm::dyn_cast<ast::Integer>(Arg)) {
+                         *Sum += *I;
+                       } else {
+                         return nullptr;
+                       }
+                     }
+                     return Sum;
+                   }};
+
+  Builtins["-"] = {Arity::atLeast(1),
+                   [](Args A) -> std::unique_ptr<ast::ValueNode> {
+                     std::unique_ptr<ast::Integer> Sub;
+                     bool First = true;
+                     for (const auto *Arg : A) {
+                       if (auto const *I = llvm::dyn_cast<ast::Integer>(Arg)) {
+                         if (First) {
+                           Sub = std::unique_ptr<ast::Integer>(
+                               llvm::cast<ast::Integer>(I->clone()));
+                           First = false;
+                         } else {
+                           *Sub -= *I;
+                         }
+                       } else {
+                         return nullptr;
+                       }
+                     }
+                     return Sub;
+                   }};
+
+  Builtins["*"] = {Arity::any(), [](Args A) -> std::unique_ptr<ast::ValueNode> {
+                     auto Mul = std::make_unique<ast::Integer>(1);
+                     for (const auto *Arg : A) {
+                       if (auto const *I = llvm::dyn_cast<ast::Integer>(Arg)) {
+                         *Mul *= *I;
+                       } else {
+                         return nullptr;
+                       }
+                     }
+                     return Mul;
+                   }};
+
+  // (current-continuation-marks) is intercepted by the interpreter, which has
+  // access to the machine's continuation. This entry exists only so the
+  // identifier resolves to a callable value; it is not invoked in practice.
+  Builtins["current-continuation-marks"] = {
+      Arity::any(), [](Args A) -> std::unique_ptr<ast::ValueNode> {
+        (void)A;
+        return std::make_unique<ast::ContinuationMarkSet>();
+      }};
+
+  // (continuation-mark-set-first mark-set key) returns the innermost value
+  // marked with key, or #f if there is none. Note: a wrong-arity call yields #f
+  // rather than the nullptr error channel, so the size guard stays inline and
+  // the arity is `any`.
+  Builtins["continuation-mark-set-first"] = {
+      Arity::any(), [](Args A) -> std::unique_ptr<ast::ValueNode> {
+        if (A.size() == 2) {
+          const auto *CMS = llvm::dyn_cast<ast::ContinuationMarkSet>(A[0]);
+          const ast::ValueNode *Key = A[1];
+          if (CMS != nullptr && Key != nullptr) {
+            for (auto const &Frame : CMS->getFrames()) {
+              for (auto const &E : Frame) {
+                if (ast::valueEq(*E.first.get(), *Key)) {
+                  return std::unique_ptr<ast::ValueNode>(
+                      E.second.get()->clone());
+                }
+              }
+            }
+          }
+        }
+        return std::make_unique<ast::BooleanLiteral>(false);
+      }};
+
+  // (continuation-mark-set->list mark-set key) returns the values marked with
+  // key, innermost first. A wrong-arity call yields the empty list, not an
+  // error, so the size guard stays inline and the arity is `any`.
+  Builtins["continuation-mark-set->list"] = {
+      Arity::any(), [](Args A) -> std::unique_ptr<ast::ValueNode> {
+        auto L = std::make_unique<ast::List>();
+        if (A.size() == 2) {
+          const auto *CMS = llvm::dyn_cast<ast::ContinuationMarkSet>(A[0]);
+          const ast::ValueNode *Key = A[1];
+          if (CMS != nullptr && Key != nullptr) {
+            for (auto const &Frame : CMS->getFrames()) {
+              for (auto const &E : Frame) {
+                if (ast::valueEq(*E.first.get(), *Key)) {
+                  L->appendExpr(
+                      std::unique_ptr<ast::ValueNode>(E.second.get()->clone()));
+                }
+              }
+            }
+          }
+        }
+        return L;
+      }};
+
+  // (zero? n) is a minimal integer predicate (M1's tail-call harness); the full
+  // numeric tower arrives in M4.
+  Builtins["zero?"] = {
+      Arity::exactly(1), [](Args A) -> std::unique_ptr<ast::ValueNode> {
+        if (auto const *I = llvm::dyn_cast<ast::Integer>(A[0])) {
+          return std::make_unique<ast::BooleanLiteral>(*I == 0);
+        }
+        return nullptr;
+      }};
+
+  // (box v)/(unbox b)/(set-box! b v): a fresh mutable cell shared across copies
+  // of the Box value, so mutation and identity survive clone-on-lookup.
+  Builtins["box"] = {Arity::exactly(1),
+                     [](Args A) -> std::unique_ptr<ast::ValueNode> {
+                       return std::make_unique<ast::Box>(
+                           std::unique_ptr<ast::ValueNode>(A[0]->clone()));
+                     }};
+
+  Builtins["unbox"] = {Arity::exactly(1),
+                       [](Args A) -> std::unique_ptr<ast::ValueNode> {
+                         if (auto const *B = llvm::dyn_cast<ast::Box>(A[0])) {
+                           return B->get();
+                         }
+                         return nullptr;
+                       }};
+
+  Builtins["set-box!"] = {
+      Arity::exactly(2), [](Args A) -> std::unique_ptr<ast::ValueNode> {
+        if (auto const *B = llvm::dyn_cast<ast::Box>(A[0])) {
+          B->set(std::unique_ptr<ast::ValueNode>(A[1]->clone()));
+          return std::make_unique<ast::Void>();
+        }
+        return nullptr;
+      }};
+
+  // (eq? a b): object identity. Heap objects with a cell (boxes, pairs) compare
+  // by cell pointer; symbols by interned identity; other values fall back to
+  // the structural valueEq approximation. A quoted datum is unwrapped first so
+  // 'k does not skip the identity branches.
+  Builtins["eq?"] = {
+      Arity::exactly(2), [](Args A) -> std::unique_ptr<ast::ValueNode> {
+        const ast::ValueNode *AA = A[0];
+        const ast::ValueNode *B = A[1];
+        while (auto const *QA = llvm::dyn_cast<ast::QuotedExpr>(AA)) {
+          AA = &QA->getQuotedExpr();
+        }
+        while (auto const *QB = llvm::dyn_cast<ast::QuotedExpr>(B)) {
+          B = &QB->getQuotedExpr();
+        }
+        bool Eq;
+        if (auto const *BA = llvm::dyn_cast<ast::Box>(AA)) {
+          auto const *BB = llvm::dyn_cast<ast::Box>(B);
+          Eq = (BB != nullptr) && BA->identity() == BB->identity();
+        } else if (auto const *PA = llvm::dyn_cast<ast::Pair>(AA)) {
+          auto const *PB = llvm::dyn_cast<ast::Pair>(B);
+          Eq = (PB != nullptr) && PA->identity() == PB->identity();
+        } else if (auto const *SA = llvm::dyn_cast<ast::Symbol>(AA)) {
+          auto const *SB = llvm::dyn_cast<ast::Symbol>(B);
+          Eq = (SB != nullptr) && SA->identity() == SB->identity();
+        } else {
+          Eq = ast::valueEq(*AA, *B);
+        }
+        return std::make_unique<ast::BooleanLiteral>(Eq);
+      }};
+
+  // (cons a d)/(car p)/(cdr p)/(set-car! p v)/(set-cdr! p v): a fresh mutable
+  // pair whose cell is shared across copies of the Pair value.
+  Builtins["cons"] = {Arity::exactly(2),
+                      [](Args A) -> std::unique_ptr<ast::ValueNode> {
+                        return std::make_unique<ast::Pair>(
+                            std::unique_ptr<ast::ValueNode>(A[0]->clone()),
+                            std::unique_ptr<ast::ValueNode>(A[1]->clone()));
+                      }};
+
+  Builtins["car"] = {Arity::exactly(1),
+                     [](Args A) -> std::unique_ptr<ast::ValueNode> {
+                       if (auto const *P = llvm::dyn_cast<ast::Pair>(A[0])) {
+                         return P->car();
+                       }
+                       return nullptr;
+                     }};
+
+  Builtins["cdr"] = {Arity::exactly(1),
+                     [](Args A) -> std::unique_ptr<ast::ValueNode> {
+                       if (auto const *P = llvm::dyn_cast<ast::Pair>(A[0])) {
+                         return P->cdr();
+                       }
+                       return nullptr;
+                     }};
+
+  Builtins["set-car!"] = {
+      Arity::exactly(2), [](Args A) -> std::unique_ptr<ast::ValueNode> {
+        if (auto const *P = llvm::dyn_cast<ast::Pair>(A[0])) {
+          P->setCar(std::unique_ptr<ast::ValueNode>(A[1]->clone()));
+          return std::make_unique<ast::Void>();
+        }
+        return nullptr;
+      }};
+
+  Builtins["set-cdr!"] = {
+      Arity::exactly(2), [](Args A) -> std::unique_ptr<ast::ValueNode> {
+        if (auto const *P = llvm::dyn_cast<ast::Pair>(A[0])) {
+          P->setCdr(std::unique_ptr<ast::ValueNode>(A[1]->clone()));
+          return std::make_unique<ast::Void>();
+        }
+        return nullptr;
+      }};
+
+  // (string->uninterned-symbol s): a fresh uninterned symbol, distinct from
+  // every other symbol even one with the same name.
+  Builtins["string->uninterned-symbol"] = {
+      Arity::exactly(1), [](Args A) -> std::unique_ptr<ast::ValueNode> {
+        if (auto const *S = llvm::dyn_cast<ast::String>(A[0])) {
+          return ast::Symbol::makeUninterned(S->getValue());
+        }
+        return nullptr;
+      }};
+
+  // (gensym [base]) returns a fresh uninterned symbol, never eq? to any other.
+  // A monotonic counter gives it a readable, unique name; distinctness comes
+  // from its uninterned identity, not the name. A wrong-typed base is ignored.
+  Builtins["gensym"] = {
+      Arity::atMost(1), [](Args A) -> std::unique_ptr<ast::ValueNode> {
+        static unsigned Counter = 0;
+        std::string Base = "g";
+        if (A.size() == 1) {
+          if (auto const *S = llvm::dyn_cast<ast::Symbol>(A[0])) {
+            Base = S->getName().str();
+          } else if (auto const *Str = llvm::dyn_cast<ast::String>(A[0])) {
+            Base = Str->getValue().str();
+          }
+        }
+        return ast::Symbol::makeUninterned(Base + std::to_string(++Counter));
+      }};
 }
 
 std::unique_ptr<ast::ValueNode>
 Runtime::callFunction(const std::string &Name,
                       const llvm::SmallVector<const ast::ValueNode *> &Args) {
-  assert(RuntimeFunctions.find(Name) != RuntimeFunctions.end() &&
-         "Function not found in runtime.");
-  auto Fn = RuntimeFunctions[Name];
-  return (*Fn)(Args);
+  auto It = Builtins.find(Name);
+  if (It == Builtins.end() || !It->second.Ar.accepts(Args.size())) {
+    return nullptr;
+  }
+  return It->second.Fn(Args);
 }

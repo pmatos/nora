@@ -5,6 +5,7 @@
 #include "Diagnostics.h"
 #include "Interpreter.h"
 #include "Parse.h"
+#include "Runtime.h"
 #include "SourceStream.h"
 
 #include <llvm/Support/Casting.h>
@@ -260,6 +261,59 @@ TEST_CASE("gensym produces fresh distinct symbols", "[interp][m2]") {
 TEST_CASE("gensym rejects more than one argument", "[interp][m2]") {
   Run R = runLinklet("(linklet () () (gensym 'a 'b))");
   REQUIRE_FALSE(R.ok);
+}
+
+// Pins the deepened builtin seam's arity abstraction (Runtime::Arity): the
+// central spec every builtin registration is scored against.
+TEST_CASE("Runtime::Arity accepts the intended argument counts",
+          "[interp][runtime]") {
+  using Arity = Runtime::Arity;
+  REQUIRE(Arity::exactly(1).accepts(1));
+  REQUIRE_FALSE(Arity::exactly(1).accepts(0));
+  REQUIRE_FALSE(Arity::exactly(1).accepts(2));
+  REQUIRE(Arity::atLeast(1).accepts(1));
+  REQUIRE(Arity::atLeast(1).accepts(5));
+  REQUIRE_FALSE(Arity::atLeast(1).accepts(0));
+  REQUIRE(Arity::atMost(1).accepts(0));
+  REQUIRE(Arity::atMost(1).accepts(1));
+  REQUIRE_FALSE(Arity::atMost(1).accepts(2));
+  REQUIRE(Arity::any().accepts(0));
+  REQUIRE(Arity::any().accepts(9));
+}
+
+// Characterizes the arity behaviour routed through the callFunction seam,
+// including the two continuation-mark builtins whose wrong-arity path returns a
+// default value rather than the nullptr error channel. The registry must
+// preserve every one of these exactly.
+TEST_CASE("callFunction enforces builtin arity at the seam",
+          "[interp][runtime]") {
+  Runtime &RT = Runtime::getInstance();
+  auto Five = std::make_unique<ast::Integer>(5);
+  const llvm::SmallVector<const ast::ValueNode *> None;
+  const llvm::SmallVector<const ast::ValueNode *> One = {Five.get()};
+  const llvm::SmallVector<const ast::ValueNode *> Two = {Five.get(),
+                                                         Five.get()};
+
+  // Fixed arity: a wrong count is rejected through the nullptr channel.
+  REQUIRE(RT.callFunction("unbox", None) == nullptr);
+  REQUIRE(RT.callFunction("unbox", Two) == nullptr);
+  REQUIRE(RT.callFunction("box", None) == nullptr);
+  REQUIRE(RT.callFunction("box", One) != nullptr);
+
+  // Variadic: (+) is 0, (*) is 1, (-) needs at least one argument.
+  Run::expectInt(RT.callFunction("+", None).get(), 0);
+  Run::expectInt(RT.callFunction("*", None).get(), 1);
+  REQUIRE(RT.callFunction("-", None) == nullptr);
+
+  // gensym accepts zero or one argument.
+  REQUIRE(RT.callFunction("gensym", None) != nullptr);
+
+  // Preserved quirk: the continuation-mark builtins do not use the nullptr
+  // arity channel; a wrong-arity call yields their default value.
+  Run::expectBool(RT.callFunction("continuation-mark-set-first", None).get(),
+                  false);
+  REQUIRE(llvm::isa<ast::List>(
+      RT.callFunction("continuation-mark-set->list", None).get()));
 }
 
 TEST_CASE("mutual tail recursion is bounded and correct", "[interp][tco]") {

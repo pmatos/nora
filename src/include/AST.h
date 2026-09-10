@@ -1062,14 +1062,17 @@ private:
   std::unique_ptr<ValueNode> Node;
 };
 
-class RuntimeFunction : public ValueNode {
+// A builtin's value: a name tag an identifier resolves to. Its behaviour
+// (arity + handler) lives in the Runtime registry, keyed by this name, not on
+// the node - so the node is a pure value, cloned cheaply on lookup.
+class RuntimeFunction : public ClonableNode<RuntimeFunction, ValueNode> {
 public:
   RuntimeFunction(const std::string &Name)
-      : ValueNode(ASTNodeKind::AST_RuntimeFunction), Name(Name) {}
-
-  virtual ~RuntimeFunction() = default;
-  virtual std::unique_ptr<ast::ValueNode>
-  operator()(const llvm::SmallVector<const ast::ValueNode *> &Args) const = 0;
+      : ClonableNode(ASTNodeKind::AST_RuntimeFunction), Name(Name) {}
+  RuntimeFunction(const RuntimeFunction &Other) = default;
+  RuntimeFunction(RuntimeFunction &&Other) = default;
+  RuntimeFunction &operator=(const RuntimeFunction &Other) = delete;
+  ~RuntimeFunction() = default;
 
   LLVM_DUMP_METHOD void dump() const override {
     llvm::dbgs() << "#<runtime:" << getName() << ">";
@@ -1081,8 +1084,6 @@ public:
   static bool classof(const ASTNode *N) {
     return N->getKind() == ASTNodeKind::AST_RuntimeFunction;
   }
-
-  virtual RuntimeFunction *clone() const override = 0;
 
   const std::string &getName() const { return Name; }
 
