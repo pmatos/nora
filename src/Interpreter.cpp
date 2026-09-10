@@ -308,7 +308,7 @@ void Interpreter::step(Frame::Define &K) {
 
   if (DV->countIds() == 1) {
     DefEnv->Vars.add(DV->getIds()[0], std::move(V));
-    deliver(std::make_unique<ast::Void>());
+    deliver(Value::immediate(NR_VOID));
     return;
   }
   auto *Vs = llvm::dyn_cast_or_null<ast::Values>(V.get());
@@ -332,7 +332,7 @@ void Interpreter::step(Frame::Define &K) {
     std::unique_ptr<ast::ValueNode> Vv = dyn_castU<ast::ValueNode>(EP);
     DefEnv->Vars.add(Id, std::move(Vv));
   }
-  deliver(std::make_unique<ast::Void>());
+  deliver(Value::immediate(NR_VOID));
 }
 
 void Interpreter::step(Frame::Set &K) {
@@ -346,7 +346,7 @@ void Interpreter::step(Frame::Set &K) {
     abortEval();
     return;
   }
-  deliver(std::make_unique<ast::Void>());
+  deliver(Value::immediate(NR_VOID));
 }
 
 void Interpreter::step(Frame::WcmKey &K) {
@@ -797,8 +797,8 @@ void Interpreter::visit(ast::Vector const &Vec) {
   deliver(std::unique_ptr<ast::ValueNode>(Vec.clone()));
 }
 
-void Interpreter::visit(ast::Void const &Vd) {
-  deliver(std::unique_ptr<ast::ValueNode>(Vd.clone()));
+void Interpreter::visit(ast::Void const &) {
+  deliver(Value::immediate(NR_VOID));
 }
 
 void Interpreter::visit(ast::QuotedExpr const &QE) {

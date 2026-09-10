@@ -64,6 +64,15 @@ struct Run {
     REQUIRE(ok);
     expectChar(result.get(), Expected);
   }
+
+  static void expectVoid(const ast::ValueNode *Node) {
+    expectResult<ast::Void>(Node);
+  }
+
+  void expectVoid() const {
+    REQUIRE(ok);
+    expectVoid(result.get());
+  }
 };
 
 Run runLinklet(const std::string &Src) {
@@ -379,4 +388,23 @@ TEST_CASE("bare char literal result is the nr_char immediate, not an "
   REQUIRE(R.RawImmediate.has_value());
   REQUIRE(*R.RawImmediate == nr_char('a'));
   R.expectChar('a');
+}
+
+TEST_CASE("define-values result is the NR_VOID immediate, not an allocated "
+          "Void",
+          "[interp][m2][gc]") {
+  Run R = runLinklet("(linklet () () (define-values (x) 5))");
+  REQUIRE(R.ok);
+  REQUIRE(R.RawImmediate.has_value());
+  REQUIRE(*R.RawImmediate == NR_VOID);
+  R.expectVoid();
+}
+
+TEST_CASE("set! result is void", "[interp][m2][gc]") {
+  // Whether this also round-trips through RawImmediate depends on whether the
+  // enclosing let-values body frame materializes the result on its way out
+  // (the same Call/WcmMark deferral S6 already documented for booleans) - the
+  // forcing case above (top-level define-values) is what pins RawImmediate.
+  Run R = runLinklet("(linklet () () (let-values ([(x) 1]) (set! x 2)))");
+  R.expectVoid();
 }
