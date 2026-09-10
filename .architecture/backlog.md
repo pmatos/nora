@@ -2,6 +2,36 @@
 
 Persistent memory for the `pm-deepen` routine. One `## <slug>` entry per candidate ever seen; statuses change, rows stay. `### Run` blocks under an entry (or under `## Run log`) are history, not candidates.
 
+## runtime-builtin-boilerplate
+
+- **Status**: proposed
+- **Score**: 24/25 (leverage 5, locality 5, blast radius 2, heat 5)
+- **Files**: ~3 estimated (`src/Runtime.cpp`, `src/include/Runtime.h`, `src/include/AST.h`)
+- **Modules**: `src/Runtime.cpp`, `src/include/Runtime.h`, `src/include/AST.h`
+- **Summary**: Collapse the 18 hand-rolled `RuntimeFunction` subclasses — each re-rolling the same arity check, per-arg `dyn_cast` type prologue, and `clone()`/`accept()` tails — behind one deep `RuntimeFunction` seam that owns arity + argument-type dispatch, registering builtins as `{name, arity-spec, typed-handler}` data with handler cores unchanged. All builtins share one `AST_RuntimeFunction` node kind and one visitor overload, so the change never touches the enum, visitors, RTTI, or the caller's `nullptr`→diagnostic contract.
+- **First seen**: 2026-09-10
+- **Reason (picked)**: Top of the 2026-09-10 ranking at 24/25; outranks runner-up candidate `value-register-take-vs-borrow` (22/25) by 2 points. Fresh candidate from the M2/GC hot-spot scan; the "sibling functions repeat the same prologue" collapse.
+
+## value-register-take-vs-borrow
+
+- **Status**: proposed
+- **Score**: 22/25 (leverage 4, locality 4, blast radius 1, heat 5)
+- **Files**: ~1-2 estimated
+- **Modules**: `src/include/Value.h`, `src/Interpreter.cpp`
+- **Summary**: The `Value` handle leaks its two representations through `get()`/`takeLegacy()`/`toShared()`; six `step` arms reflexively `takeLegacy()` — which clones a shared value — where a borrow or an into-`Value`-sink move would do, re-introducing the copies #195/#196 removed. Give `Value` a non-cloning borrow/into-sink path and route the read-only/pass-through arms through it.
+- **First seen**: 2026-09-10
+- **Reason (deprioritised)**: 22/25, runner-up candidate and the natural next firing; sits in GC-critical, mid-migration code, so handle with care. Overlaps `bind-result-helper`.
+
+## continuation-mark-query-seam
+
+- **Status**: proposed
+- **Score**: 19/25 (leverage 3, locality 4, blast radius 2, heat 5)
+- **Files**: ~3 estimated
+- **Modules**: `src/Runtime.cpp`, `src/include/ASTRuntime.h`, `src/ASTRuntime.cpp`
+- **Summary**: `ContinuationMarkSet` exposes only `getFrames()`; `continuation-mark-set-first` and `continuation-mark-set->list` both reach past the seam and re-implement the same innermost-first key scan. Offer `firstForKey(key)`/`allForKey(key)`. A bundled eq-drift (mark keys compared by symbol name via `valueEq`, while `eq?` compares identity) is scope creep, excluded from the estimate and left for a human.
+- **First seen**: 2026-09-10
+- **Reason (deprioritised)**: 19/25; smaller leverage than the pick, and the correctness-flavoured eq-drift should not ride along in a pure seam extraction.
+
 ## value-printing-raw-ostream-seam
 
 - **Status**: landed
@@ -14,14 +44,15 @@ Persistent memory for the `pm-deepen` routine. One `## <slug>` entry per candida
 
 ## frame-per-kind-continuation
 
-- **Status**: in-flight
+- **Status**: landed
 - **Score**: 22/25 (leverage 5, locality 5, blast radius 3, heat 4)
 - **Files**: ~3 estimated (actual: 5 — the two source files `src/include/Interpreter.h`, `src/Interpreter.cpp` plus three new `.rkt` arity pins; `test/unit/test_interpreter.cpp` was left untouched, its existing `getPeakKont`/wcm invariants already covered the refactor)
 - **Modules**: `src/include/Interpreter.h`, `src/Interpreter.cpp`
 - **Summary**: Split the fat multi-purpose `Frame` struct (13-value `Kind` enum, ~20 kind-specific fields) into one small per-`Kind` continuation type with a `resume()` transition, replacing the 13-arm `continueStep` switch with dispatch, while preserving the GC-scanned `Kont` buffer, the universal `Marks` header, and the Call/WcmMark/Halt tail-call reuse seam.
 - **First seen**: 2026-09-02
-- **PR**: #191 (branch `sym/nora/routine/refactor-audit/01M1MR2N1J`, adopted)
+- **PR**: #191 (branch `sym/nora/routine/refactor-audit/01M1MR2N1J`, adopted) — **merged 2026-09-04**
 - **Reason (picked)**: Top surviving `proposed` candidate at 22/25 once `value-printing-raw-ostream-seam` landed. Within 1 point of the runner-up candidate `formal-deep-interface` (21/25).
+- **Reconciled 2026-09-10**: `gh pr view 191` → MERGED, `in-flight` → `landed`.
 
 ### Run 2026-09-04 — complete
 
@@ -60,17 +91,17 @@ Persistent memory for the `pm-deepen` routine. One `## <slug>` entry per candida
 - **Modules**: `src/Interpreter.cpp` (optionally `src/include/AST.h`, `src/include/ASTRuntime.h`)
 - **Summary**: Extract one `bindResult` helper for multiple-values destructuring, used by let/letrec/define, eliminating the duplicated 1-id/N-id logic with divergent error text (`bindValues` at Interpreter.cpp:54 vs the inline `Frame::Define` arm at :303, which does not call it).
 - **First seen**: 2026-09-02
-- **Reason (deprioritised)**: 19/25; smaller leverage than the pick.
+- **Reason (deprioritised)**: 19/25; smaller leverage than the pick. 2026-09-10: friction grown — the two arms now also diverge on the `Value` seam (`bindValues` passes/borrows a `Value`; the `Define` arm `takeLegacy()`s then re-wraps); overlaps `value-register-take-vs-borrow`.
 
 ## environment-deepen
 
 - **Status**: proposed
-- **Score**: 18/25 (leverage 4, locality 4, blast radius 2, heat 2)
+- **Score**: 19/25 (leverage 4, locality 4, blast radius 2, heat 3)
 - **Files**: ~4 estimated
 - **Modules**: `src/include/Environment.h`, `src/Environment.cpp`, `src/AST.cpp`, `src/Interpreter.cpp`
 - **Summary**: Fold Environment + Scope + free functions + interpreter-owned cycle-breaking (`AllScopes`) into one scope module with `contains()`, arena ownership, and pointer-identity keys; delete dead surface.
 - **First seen**: 2026-09-02
-- **Reason (deprioritised)**: 18/25; `Environment.cpp` is cold (heat 2), so YAGNI docks the pick despite real inefficiencies. Borderline deletion test: the win depends on the arena absorbing teardown, not merely moving the free functions onto methods.
+- **Reason (deprioritised)**: 19/25 (heat 2→3 after 2026-09-10 re-score); still below the pick. #195 added a third concern (`toShared()`/`Value::share`) to the Environment/Scope tangle and `envSet` still walks the chain twice (`lookup`+`add`). Borderline deletion test: the win depends on the arena absorbing teardown, not merely moving the free functions onto methods.
 
 ## visitor-defaults-dead-code
 
