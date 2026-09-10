@@ -139,7 +139,7 @@ private:
     struct LetBind { // let-values: accumulate binding values, then bind + body
       EnvPtr Env;
       const ast::LetValues *Let = nullptr;
-      std::vector<std::unique_ptr<ast::ValueNode>> Done;
+      std::vector<Value> Done;
     };
     struct LetRec { // letrec-values: bind each value into the recursive scope
       const ast::LetValues *Let = nullptr;
@@ -234,6 +234,11 @@ private:
                       llvm::SMLoc AppLoc, llvm::SMLoc OpLoc);
   // Evaluate a (non-empty) body sequence in environment E.
   void evalBody(llvm::SmallVector<const ast::ExprNode *> Body, const EnvPtr &E);
+  // Bind one let-values / letrec-values clause into Vars: a single identifier
+  // takes the whole value, while several identifiers require a Values result
+  // whose arity matches. Returns false (after reporting) on a mismatch.
+  bool bindValues(llvm::SMLoc Loc, Environment &Vars,
+                  const ast::LetValues::IdRange &Ids, Value Val);
   // Create a fresh scope enclosed by Parent, tracked so its bindings can be
   // cleared at teardown to break closure/scope reference cycles.
   EnvPtr newScope(const EnvPtr &Parent);

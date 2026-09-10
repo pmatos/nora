@@ -54,18 +54,14 @@ EnvPtr Interpreter::newScope(const EnvPtr &Parent) {
   return S;
 }
 
-// Bind one let-values / letrec-values clause into Vars: a single identifier
-// takes the whole value, while several identifiers require a Values result
-// whose arity matches. Returns false (after reporting) on a mismatch.
-static bool bindValues(nora::DiagnosticEngine &Diag, llvm::SMLoc Loc,
-                       Environment &Vars, const ast::LetValues::IdRange &Ids,
-                       std::unique_ptr<ast::ValueNode> Val) {
+bool Interpreter::bindValues(llvm::SMLoc Loc, Environment &Vars,
+                             const ast::LetValues::IdRange &Ids, Value Val) {
   if (std::ranges::size(Ids) == 1) {
     Vars.add(Ids[0], std::move(Val));
     return true;
   }
 
-  auto Vs = dyn_castU<ast::Values>(Val);
+  auto *Vs = llvm::dyn_cast_or_null<ast::Values>(Val.get());
   if (!Vs) {
     Diag.error(Loc, "let-values binding expected multiple values");
     return false;
@@ -232,7 +228,7 @@ void Interpreter::step(Frame::MkValues &K) {
 }
 
 void Interpreter::step(Frame::LetBind &K) {
-  K.Done.push_back(Val.takeLegacy());
+  K.Done.push_back(std::move(Val));
   const ast::LetValues *Let = K.Let;
   if (K.Done.size() < Let->exprsCount()) {
     Control = &Let->getBindingExpr(K.Done.size());
@@ -241,7 +237,7 @@ void Interpreter::step(Frame::LetBind &K) {
     return;
   }
 
-  std::vector<std::unique_ptr<ast::ValueNode>> Vals = std::move(K.Done);
+  std::vector<Value> Vals = std::move(K.Done);
   EnvPtr OuterEnv = K.Env;
   Kont.pop_back();
 
@@ -249,7 +245,7 @@ void Interpreter::step(Frame::LetBind &K) {
   // environment; only now are the identifiers bound, in a fresh scope.
   EnvPtr ScopePtr = newScope(OuterEnv);
   for (size_t I = 0; I < Vals.size(); ++I) {
-    if (!bindValues(Diag, Let->getLoc(), ScopePtr->Vars, Let->getBindingIds(I),
+    if (!bindValues(Let->getLoc(), ScopePtr->Vars, Let->getBindingIds(I),
                     std::move(Vals[I]))) {
       abortEval();
       return;
@@ -269,8 +265,8 @@ void Interpreter::step(Frame::LetRec &K) {
   // in that same scope so forward/mutual references resolve.
   const ast::LetValues *Let = K.Let;
   EnvPtr RecScope = K.RecScope;
-  if (!bindValues(Diag, Let->getLoc(), RecScope->Vars,
-                  Let->getBindingIds(K.Idx), Val.takeLegacy())) {
+  if (!bindValues(Let->getLoc(), RecScope->Vars, Let->getBindingIds(K.Idx),
+                  std::move(Val))) {
     abortEval();
     return;
   }
