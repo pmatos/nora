@@ -13,7 +13,10 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
+
+#include "nora_rt.h"
 
 namespace {
 
@@ -21,6 +24,9 @@ namespace {
 struct Run {
   bool ok = false;                        // no diagnostics were reported
   std::unique_ptr<ast::ValueNode> result; // Interpreter::getResult()
+  // Interpreter::getResultImmediate(): the M2/GC forcing seam, captured
+  // alongside result regardless of getResult() being called first.
+  std::optional<nr_value> RawImmediate;
 
   // The seam S18 will rewrite: downcast to a materialized ValueNode view.
   // Localized here so the eventual nr_value read replaces one definition.
@@ -60,6 +66,7 @@ Run runLinklet(const std::string &Src) {
   AST->accept(I);
   Run R;
   R.ok = !Diag.hadError();
+  R.RawImmediate = I.getResultImmediate();
   R.result = I.getResult();
   return R;
 }
@@ -312,4 +319,45 @@ TEST_CASE("a box installed as a continuation mark keeps its identity",
                      "                  (current-continuation-marks) 'k) 42) "
                      "      (unbox b)))))");
   R.expectInt(42);
+}
+
+TEST_CASE("#f literal result is the NR_FALSE immediate, not an allocated "
+          "BooleanLiteral",
+          "[interp][m2][gc]") {
+  Run R = runLinklet("(linklet () () #f)");
+  REQUIRE(R.ok);
+  REQUIRE(R.RawImmediate.has_value());
+  REQUIRE(*R.RawImmediate == NR_FALSE);
+  R.expectBool(false);
+}
+
+TEST_CASE("if branches on a let-bound #f via the materialized fallback, not "
+          "the immediate fast path",
+          "[interp][m2][gc]") {
+  // x is bound via Environment/toShared(), which materializes the immediate
+  // into a real ast::BooleanLiteral - this pins step(IfBranch)'s
+  // dyn_cast_or_null<BooleanLiteral> fallback so it isn't deleted alongside
+  // the new nr_truthy fast path.
+  Run R = runLinklet("(linklet () () (let-values ([(x) #f]) (if x 1 2)))");
+  R.expectInt(2);
+}
+
+TEST_CASE("eq? on immediate-boolean arguments materializes at the "
+          "RuntimeFunction boundary",
+          "[interp][m2][gc]") {
+  // Nothing before S6 ever passed a bare boolean literal to a
+  // RuntimeFunction; EqFunction dereferences its Args unconditionally, so
+  // this would segfault if Value::get() returned null for an engaged
+  // immediate instead of materializing it.
+  Run Same = runLinklet("(linklet () () (eq? #t #t))");
+  Same.expectBool(true);
+
+  Run Diff = runLinklet("(linklet () () (eq? #t #f))");
+  Diff.expectBool(false);
+}
+
+TEST_CASE("a box can hold and return an immediate boolean",
+          "[interp][m2][gc]") {
+  Run R = runLinklet("(linklet () () (unbox (box #t)))");
+  R.expectBool(true);
 }

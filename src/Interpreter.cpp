@@ -19,6 +19,7 @@
 #include "Casting.h"
 #include "Environment.h"
 #include "Value.h"
+#include "nora_rt.h"
 
 #undef DEBUG_TYPE
 #define DEBUG_TYPE "Interpreter"
@@ -107,7 +108,7 @@ void Interpreter::visit(ast::Linklet const &Linklet) {
   // define-values are visible to earlier closures at call time.
   GlobalEnv = newScope(nullptr);
 
-  std::unique_ptr<ast::ValueNode> Last;
+  Value Last;
   for (const auto &BodyForm : Linklet.getBody()) {
     Kont.clear();
     Kont.emplace_back(Frame(Frame::Halt{}));
@@ -116,7 +117,7 @@ void Interpreter::visit(ast::Linklet const &Linklet) {
     Val = nullptr;
     M = Mode::Eval;
     run();
-    Last = Val.takeLegacy();
+    Last = std::move(Val);
     if (Diag.hadError()) {
       break;
     }
@@ -184,10 +185,21 @@ void Interpreter::step(Frame::IfBranch &K) {
   const ast::ExprNode *ThenE = K.ThenE;
   const ast::ExprNode *ElseE = K.ElseE;
   EnvPtr E = K.Env;
-  std::unique_ptr<ast::ValueNode> Cond = Val.takeLegacy();
+  Value Cond = std::move(Val);
   Kont.pop_back();
-  auto *B = llvm::dyn_cast_or_null<ast::BooleanLiteral>(Cond.get());
-  Control = (B && !B->value()) ? ElseE : ThenE;
+  bool Falsy;
+  if (Cond.isImmediate()) {
+    // Fast path: branch on the raw word, no allocation.
+    Falsy = !nr_truthy(Cond.rawImmediate());
+  } else {
+    // Fallback: a value that round-tripped through Environment/toShared()
+    // (e.g. a bound #f) is a materialized ast::BooleanLiteral, not an
+    // immediate.
+    std::unique_ptr<ast::ValueNode> Legacy = Cond.takeLegacy();
+    auto *B = llvm::dyn_cast_or_null<ast::BooleanLiteral>(Legacy.get());
+    Falsy = B && !B->value();
+  }
+  Control = Falsy ? ElseE : ThenE;
   Env = E;
   M = Mode::Eval;
 }
@@ -750,7 +762,7 @@ void Interpreter::visit(ast::Integer const &Int) {
 }
 
 void Interpreter::visit(ast::BooleanLiteral const &Bool) {
-  deliver(std::unique_ptr<ast::ValueNode>(Bool.clone()));
+  deliver(Value::immediate(nr_bool(Bool.value())));
 }
 
 void Interpreter::visit(ast::Box const &B) {

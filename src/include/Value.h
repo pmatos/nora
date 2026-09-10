@@ -1,19 +1,24 @@
 #ifndef NORA_VALUE_H
 #define NORA_VALUE_H
 
+#include <cassert>
 #include <concepts>
 #include <memory>
 #include <utility>
 
 #include "AST.h"
+#include "nora_rt.h"
 
 // A machine value handle — the vehicle for the value-model + GC migration
 // (docs/value-model-gc-migration.md §3). It will become a bare nr_value word
 // (immediate | GC pointer | legacy pin-index) so GC cells can hold it. In the
-// current phase it carries either an exclusively-owned legacy ValueNode
-// (behaviourally identical to a plain unique_ptr) or a shared reference into
-// an Environment binding (share()), so a lookup can hand out a value without
-// cloning it. At most one of the two alternatives is engaged at a time.
+// current phase it carries an exclusively-owned legacy ValueNode (behaviourally
+// identical to a plain unique_ptr), a shared reference into an Environment
+// binding (share()), so a lookup can hand out a value without cloning it, or a
+// bare nr_value immediate word (immediate(), M2/GC S6+) for allocation-free
+// values such as booleans. At most one of the three alternatives is engaged at
+// a time; Legacy and Imm are mutable so a const accessor (get()) can still
+// materialize an immediate into Legacy on first use.
 class Value {
 public:
   Value() = default;
@@ -22,8 +27,17 @@ public:
   // NOLINTNEXTLINE(google-explicit-constructor): implicit boundary from legacy.
   template <std::derived_from<ast::ValueNode> T>
   Value(std::unique_ptr<T> V) : Legacy(std::move(V)) {}
-  Value(Value &&) = default;
-  Value &operator=(Value &&) = default;
+  // Hand-written (not `= default`): a scalar member's implicit move is a copy,
+  // and moving-out must empty Imm the same way it empties Legacy/Shared.
+  Value(Value &&Other) noexcept
+      : Legacy(std::move(Other.Legacy)), Shared(std::move(Other.Shared)),
+        Imm(std::exchange(Other.Imm, 0)) {}
+  Value &operator=(Value &&Other) noexcept {
+    Legacy = std::move(Other.Legacy);
+    Shared = std::move(Other.Shared);
+    Imm = std::exchange(Other.Imm, 0);
+    return *this;
+  }
   Value(const Value &) = delete;
   Value &operator=(const Value &) = delete;
   ~Value() = default;
@@ -36,10 +50,22 @@ public:
     return Result;
   }
 
+  // Wrap a bare nr_value immediate word. W must not be 0 (0 is "unengaged"
+  // under every tag: fixnums set bit 0, heap pointers/immediates/chars are all
+  // nonzero by construction).
+  static Value immediate(nr_value W) {
+    // NOLINTNEXTLINE(misc-static-assert): a runtime check, not a constant.
+    assert(W != 0);
+    Value Result;
+    Result.Imm = W;
+    return Result;
+  }
+
   // Get a shared_ptr to the held value, for storing into an Environment
   // binding. Moves Legacy into a fresh shared_ptr (if engaged), or returns a
   // copy of Shared (if engaged).
   std::shared_ptr<ast::ValueNode> toShared() {
+    materializeLegacy();
     if (Legacy) {
       return std::shared_ptr<ast::ValueNode>(std::move(Legacy));
     }
@@ -47,14 +73,28 @@ public:
   }
 
   explicit operator bool() const {
-    return static_cast<bool>(Legacy) || static_cast<bool>(Shared);
+    return static_cast<bool>(Legacy) || static_cast<bool>(Shared) || Imm != 0;
   }
-  ast::ValueNode *get() const { return Legacy ? Legacy.get() : Shared.get(); }
+  // Whether the immediate alternative is engaged (before any materialization
+  // on this handle). Does not itself materialize.
+  bool isImmediate() const { return Imm != 0; }
+  // The raw immediate word. isImmediate() must hold.
+  nr_value rawImmediate() const {
+    // NOLINTNEXTLINE(misc-static-assert): a runtime check, not a constant.
+    assert(isImmediate());
+    return Imm;
+  }
+  ast::ValueNode *get() const {
+    materializeLegacy();
+    return Legacy ? Legacy.get() : Shared.get();
+  }
   // Move the value out as an exclusively-owned legacy pointer, emptying this
-  // handle. If Legacy is engaged this is a plain move (no extra cost). If
-  // Shared is engaged, the caller needs exclusive ownership (e.g. to store
-  // into a still-unique_ptr-typed Frame slot), so materialize a private copy.
+  // handle. If Legacy is engaged (or an immediate just materialized into it)
+  // this is a plain move. If Shared is engaged, the caller needs exclusive
+  // ownership (e.g. to store into a still-unique_ptr-typed Frame slot), so
+  // materialize a private copy.
   std::unique_ptr<ast::ValueNode> takeLegacy() {
+    materializeLegacy();
     if (Legacy) {
       return std::move(Legacy);
     }
@@ -67,8 +107,24 @@ public:
   }
 
 private:
-  std::unique_ptr<ast::ValueNode> Legacy;
+  // Materialize an engaged immediate into Legacy, a real ast::BooleanLiteral,
+  // so every existing consumer that expects a non-null ast::ValueNode* keeps
+  // working unchanged. Only booleans are ever wrapped as immediates today
+  // (M2/GC S6); a later slice that starts constructing other immediate kinds
+  // (char/void/null/eof, fixnums) must replace this assert with a real
+  // per-kind dispatch rather than let it silently mismaterialize.
+  void materializeLegacy() const {
+    if (Imm != 0 && !Legacy && !Shared) {
+      // NOLINTNEXTLINE(misc-static-assert): a runtime check, not a constant.
+      assert(Imm == NR_TRUE || Imm == NR_FALSE);
+      Legacy = std::make_unique<ast::BooleanLiteral>(nr_truthy(Imm));
+      Imm = 0;
+    }
+  }
+
+  mutable std::unique_ptr<ast::ValueNode> Legacy;
   std::shared_ptr<ast::ValueNode> Shared;
+  mutable nr_value Imm = 0;
 };
 
 #endif // NORA_VALUE_H
