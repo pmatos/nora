@@ -1,5 +1,6 @@
 #include "Parse.h"
 
+#include "AST.h"
 #include "Casting.h"
 #include "Diagnostics.h"
 #include "IdPool.h"
@@ -10,6 +11,7 @@
 #include <array>
 #include <cassert>
 #include <codecvt>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>

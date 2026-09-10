@@ -3,6 +3,8 @@
 #include "Casting.h"
 #include "Value.h"
 
+#include <llvm/Support/Casting.h>
+
 #include <iostream>
 #include <utility>
 
