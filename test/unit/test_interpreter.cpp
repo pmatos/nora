@@ -22,8 +22,6 @@ struct Run {
   bool ok = false;                        // no diagnostics were reported
   std::unique_ptr<ast::ValueNode> result; // Interpreter::getResult()
 
-  // The seam S18 will rewrite: downcast to a materialized ValueNode view.
-  // Localized here so the eventual nr_value read replaces one definition.
   template <typename T>
   static const T *expectResult(const ast::ValueNode *Node) {
     REQUIRE(Node);
