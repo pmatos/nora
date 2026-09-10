@@ -1,17 +1,21 @@
 #include "Environment.h"
 
+#include "AST.h"
+#include "Value.h"
+
+#include <utility>
+
 // Add a new identifier to the environment.
-void Environment::add(ast::Identifier const &Id,
-                      std::unique_ptr<ast::ValueNode> Val) {
-  Env[Id] = std::move(Val);
+void Environment::add(ast::Identifier const &Id, Value Val) {
+  Env[Id] = Val.toShared();
 }
 
-// Lookup an identifier in the environment.
-std::unique_ptr<ast::ValueNode>
-Environment::lookup(ast::Identifier const &Id) const {
+// Lookup an identifier in the environment. Shares the bound value instead of
+// cloning it.
+Value Environment::lookup(ast::Identifier const &Id) const {
   auto It = Env.find(Id);
   if (It != Env.end()) {
-    return std::unique_ptr<ast::ValueNode>(It->second->clone());
+    return Value::share(It->second);
   }
   return nullptr;
 }
@@ -20,8 +24,7 @@ EnvPtr envExtend(const EnvPtr &Parent, const Environment &Vars) {
   return std::make_shared<Scope>(Scope{Environment(Vars), Parent});
 }
 
-std::unique_ptr<ast::ValueNode> envLookup(const EnvPtr &Env,
-                                          ast::Identifier const &Id) {
+Value envLookup(const EnvPtr &Env, ast::Identifier const &Id) {
   for (const Scope *S = Env.get(); S != nullptr; S = S->Parent.get()) {
     if (auto V = S->Vars.lookup(Id)) {
       return V;
@@ -30,8 +33,7 @@ std::unique_ptr<ast::ValueNode> envLookup(const EnvPtr &Env,
   return nullptr;
 }
 
-bool envSet(const EnvPtr &Env, ast::Identifier const &Id,
-            std::unique_ptr<ast::ValueNode> Val) {
+bool envSet(const EnvPtr &Env, ast::Identifier const &Id, Value Val) {
   for (Scope *S = Env.get(); S != nullptr; S = S->Parent.get()) {
     if (S->Vars.lookup(Id)) {
       S->Vars.add(Id, std::move(Val));

@@ -240,7 +240,7 @@ private:
   // Snapshot the marks on the current continuation, innermost frame first.
   std::vector<ast::MarkFrame> snapshotMarks() const;
   // Set the value register and switch to Continue mode.
-  void deliver(std::unique_ptr<ast::ValueNode> V) {
+  void deliver(Value V) {
     Val = std::move(V);
     M = Mode::Continue;
   }
