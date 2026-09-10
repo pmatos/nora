@@ -1,13 +1,17 @@
 #include "Parse.h"
 
+#include "AST.h"
 #include "Casting.h"
 #include "Diagnostics.h"
 #include "IdPool.h"
 #include "Lex.h"
 
+#include <llvm/Support/ConvertUTF.h>
+
 #include <array>
 #include <cassert>
 #include <codecvt>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -225,6 +229,11 @@ std::unique_ptr<ast::ExprNode> Parse::parseExpr(SourceStream &S) {
     return Bool;
   }
 
+  std::unique_ptr<ast::Char> C = parseChar(S);
+  if (C) {
+    return C;
+  }
+
   // A string literal is a self-evaluating expression (its leading '"' matches
   // no other expression parser).
   std::unique_ptr<ast::String> Str = parseString(S);
@@ -367,95 +376,43 @@ static bool isSymbolTok(const Tok &T) {
          T.is(Tok::TokType::MAKE_STRUCT_TYPE);
 }
 
-// Decode a CHAR_HEX lexeme (a u/x/U/X prefix followed by hex digits, e.g.
-// "u03bb") into the UTF-8 bytes of the represented code point, so the character
-// prints as its glyph (#\λ) rather than the escape.
-// UTF-8 encode a single code point onto Out.
-static void appendUTF8(unsigned CP, std::string &Out) {
-  if (CP < 0x80) {
-    Out.push_back(static_cast<char>(CP));
-  } else if (CP < 0x800) {
-    Out.push_back(static_cast<char>(0xC0 | (CP >> 6)));
-    Out.push_back(static_cast<char>(0x80 | (CP & 0x3F)));
-  } else if (CP < 0x10000) {
-    Out.push_back(static_cast<char>(0xE0 | (CP >> 12)));
-    Out.push_back(static_cast<char>(0x80 | ((CP >> 6) & 0x3F)));
-    Out.push_back(static_cast<char>(0x80 | (CP & 0x3F)));
-  } else {
-    Out.push_back(static_cast<char>(0xF0 | (CP >> 18)));
-    Out.push_back(static_cast<char>(0x80 | ((CP >> 12) & 0x3F)));
-    Out.push_back(static_cast<char>(0x80 | ((CP >> 6) & 0x3F)));
-    Out.push_back(static_cast<char>(0x80 | (CP & 0x3F)));
-  }
-}
-
-// Printed spelling (the text after #\) for a code point, in Racket's `print`
-// form: named control characters use their name, other non-graphic ASCII
-// controls use the #\uHHHH escape (uppercase), everything else its UTF-8 glyph.
-static std::string charReprFromCodePoint(unsigned CP) {
-  switch (CP) {
-  case 0x00:
-    return "nul";
-  case 0x08:
-    return "backspace";
-  case 0x09:
-    return "tab";
-  case 0x0A:
-    return "newline";
-  case 0x0B:
-    return "vtab";
-  case 0x0C:
-    return "page";
-  case 0x0D:
-    return "return";
-  case 0x20:
-    return "space";
-  case 0x7F:
-    return "rubout";
-  default:
-    break;
-  }
-  if (CP < 0x20) {
-    char Buf[8];
-    std::snprintf(Buf, sizeof(Buf), "u%04X", CP);
-    return std::string(Buf);
-  }
-  std::string Out;
-  appendUTF8(CP, Out);
-  return Out;
-}
-
-// Decode a CHAR_HEX lexeme (a u/x/U/X prefix followed by hex digits, e.g.
-// "u03bb") to its Racket printed spelling, so the escape for U+0020 prints as
-// #\space and the escape for U+03BB as its glyph.
-static std::string decodeHexChar(std::string_view HexTok) {
-  auto HexVal = [](char C) -> unsigned {
-    if (C >= '0' && C <= '9')
-      return C - '0';
-    if (C >= 'a' && C <= 'f')
-      return C - 'a' + 10;
-    return C - 'A' + 10;
-  };
-  unsigned CodePoint = 0;
-  for (char C : HexTok.substr(1)) // skip the u/x/U/X prefix
-    CodePoint = CodePoint * 16 + HexVal(C);
-  return charReprFromCodePoint(CodePoint);
-}
-
 // Parse a character datum. The lexer distinguishes plain characters (#\a),
 // named characters (#\space) and hex-escaped characters (#\uHHHH); all three
-// are Char value nodes. Named characters keep their name; hex escapes decode to
-// the represented glyph.
+// decode to a Char value node holding the represented code point.
 std::unique_ptr<ast::Char> Parse::parseChar(SourceStream &S) {
   size_t Start = S.getPosition();
   Tok T = gettok(S);
-  if (T.is(Tok::TokType::CHAR) || T.is(Tok::TokType::CHAR_NAMED)) {
-    auto C = std::make_unique<ast::Char>(T.Value);
+  if (T.is(Tok::TokType::CHAR)) {
+    const auto *Src = reinterpret_cast<const llvm::UTF8 *>(T.Value.data());
+    llvm::UTF32 CodePoint = 0;
+    llvm::convertUTF8Sequence(&Src, Src + T.Value.size(), &CodePoint,
+                              llvm::strictConversion);
+    auto C = std::make_unique<ast::Char>(static_cast<uint32_t>(CodePoint));
+    C->setRange(tokRange(S, T));
+    return C;
+  }
+  if (T.is(Tok::TokType::CHAR_NAMED)) {
+    std::optional<uint32_t> CodePoint = ast::Char::codePointForName(T.Value);
+    if (!CodePoint) {
+      parseError(S, Start, llvm::Twine("unknown character name: ") + T.Value);
+      return nullptr;
+    }
+    auto C = std::make_unique<ast::Char>(*CodePoint);
     C->setRange(tokRange(S, T));
     return C;
   }
   if (T.is(Tok::TokType::CHAR_HEX)) {
-    auto C = std::make_unique<ast::Char>(decodeHexChar(T.Value));
+    auto HexVal = [](char C) -> unsigned {
+      if (C >= '0' && C <= '9')
+        return C - '0';
+      if (C >= 'a' && C <= 'f')
+        return C - 'a' + 10;
+      return C - 'A' + 10;
+    };
+    uint32_t CodePoint = 0;
+    for (char C : std::string_view(T.Value).substr(1)) // skip u/x/U/X prefix
+      CodePoint = CodePoint * 16 + HexVal(C);
+    auto C = std::make_unique<ast::Char>(CodePoint);
     C->setRange(tokRange(S, T));
     return C;
   }

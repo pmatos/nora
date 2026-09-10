@@ -117,12 +117,12 @@ void Keyword::write(llvm::raw_ostream &OS) const {
 //
 // Implementation of Char node.
 //
-void Char::dump() const { llvm::dbgs() << "#\\" << Value; }
+void Char::dump() const { llvm::dbgs() << "#\\" << reprFor(CodePoint); }
 
 // Characters print in Racket read syntax (#\a). The leading quote (if any) is
 // emitted by the enclosing QuotedExpr; characters are self-quoting so none is.
 void Char::write(llvm::raw_ostream &OS) const {
-  OS << "#\\" << getValue().str();
+  OS << "#\\" << reprFor(CodePoint);
 }
 
 //

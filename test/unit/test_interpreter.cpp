@@ -55,6 +55,24 @@ struct Run {
     REQUIRE(ok);
     expectBool(result.get(), Expected);
   }
+
+  static void expectChar(const ast::ValueNode *Node, uint32_t Expected) {
+    REQUIRE(expectResult<ast::Char>(Node)->getCodePoint() == Expected);
+  }
+
+  void expectChar(uint32_t Expected) const {
+    REQUIRE(ok);
+    expectChar(result.get(), Expected);
+  }
+
+  static void expectVoid(const ast::ValueNode *Node) {
+    expectResult<ast::Void>(Node);
+  }
+
+  void expectVoid() const {
+    REQUIRE(ok);
+    expectVoid(result.get());
+  }
 };
 
 Run runLinklet(const std::string &Src) {
@@ -359,5 +377,59 @@ TEST_CASE("eq? on immediate-boolean arguments materializes at the "
 TEST_CASE("a box can hold and return an immediate boolean",
           "[interp][m2][gc]") {
   Run R = runLinklet("(linklet () () (unbox (box #t)))");
+  R.expectBool(true);
+}
+
+TEST_CASE("bare char literal result is the nr_char immediate, not an "
+          "allocated Char",
+          "[interp][m2][gc]") {
+  Run R = runLinklet("(linklet () () #\\a)");
+  REQUIRE(R.ok);
+  REQUIRE(R.RawImmediate.has_value());
+  REQUIRE(*R.RawImmediate == nr_char('a'));
+  R.expectChar('a');
+}
+
+TEST_CASE("define-values result is the NR_VOID immediate, not an allocated "
+          "Void",
+          "[interp][m2][gc]") {
+  Run R = runLinklet("(linklet () () (define-values (x) 5))");
+  REQUIRE(R.ok);
+  REQUIRE(R.RawImmediate.has_value());
+  REQUIRE(*R.RawImmediate == NR_VOID);
+  R.expectVoid();
+}
+
+TEST_CASE("set! result is void", "[interp][m2][gc]") {
+  // Whether this also round-trips through RawImmediate depends on whether the
+  // enclosing let-values body frame materializes the result on its way out
+  // (the same Call/WcmMark deferral S6 already documented for booleans) - the
+  // forcing case above (top-level define-values) is what pins RawImmediate.
+  Run R = runLinklet("(linklet () () (let-values ([(x) 1]) (set! x 2)))");
+  R.expectVoid();
+}
+
+TEST_CASE("eq? on immediate-char arguments materializes at the "
+          "RuntimeFunction boundary",
+          "[interp][m2][gc]") {
+  // No existing test passes a bare Char to a RuntimeFunction; EqFunction
+  // dereferences its Args unconditionally, so this would segfault if
+  // Value::get() returned null for an engaged char immediate.
+  Run Same = runLinklet("(linklet () () (eq? #\\a #\\a))");
+  Same.expectBool(true);
+
+  Run Diff = runLinklet("(linklet () () (eq? #\\a #\\b))");
+  Diff.expectBool(false);
+}
+
+TEST_CASE("a box can hold and return an immediate char", "[interp][m2][gc]") {
+  Run R = runLinklet("(linklet () () (unbox (box #\\a)))");
+  R.expectChar('a');
+}
+
+TEST_CASE("quoted chars with different spellings for the same code point are "
+          "eq?",
+          "[interp][m2][gc]") {
+  Run R = runLinklet("(linklet () () (eq? '#\\nul '#\\null))");
   R.expectBool(true);
 }

@@ -3,6 +3,8 @@
 #include "Casting.h"
 #include "Value.h"
 
+#include <llvm/Support/Casting.h>
+
 #include <iostream>
 #include <utility>
 
@@ -120,7 +122,8 @@ bool ast::valueEq(const ValueNode &A, const ValueNode &B) {
     return llvm::cast<BooleanLiteral>(A).value() ==
            llvm::cast<BooleanLiteral>(B).value();
   case ASTNode::ASTNodeKind::AST_Char:
-    return llvm::cast<Char>(A).getValue() == llvm::cast<Char>(B).getValue();
+    return llvm::cast<Char>(A).getCodePoint() ==
+           llvm::cast<Char>(B).getCodePoint();
   case ASTNode::ASTNodeKind::AST_String:
     return llvm::cast<String>(A).getValue() == llvm::cast<String>(B).getValue();
   default:
