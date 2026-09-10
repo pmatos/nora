@@ -63,8 +63,9 @@ private:
 };
 
 // A box is a mutable single-slot cell. Its cell is heap-allocated and shared:
-// copying a Box (which the interpreter does on every environment lookup) shares
-// the same cell, so a set-box! through one reference is visible through all of
+// copying a Box (which happens whenever a shared environment binding is
+// materialized into a private clone, e.g. Value::takeLegacy()) shares the
+// same cell, so a set-box! through one reference is visible through all of
 // them and (eq? b b) holds. This is the first piece of M2's shared, identity-
 // bearing value model; the cell moves onto the GC heap in a later M2 slice.
 class Box : public ClonableNode<Box, ValueNode> {
@@ -98,8 +99,8 @@ private:
 
 // A mutable pair (cons cell). Like Box, its car/cdr cell is heap-allocated and
 // shared across copies, so set-car!/set-cdr! and eq? observe one identity
-// through the interpreter's clone-on-lookup. (Interim shared_ptr cell; moves
-// onto the GC heap in a later M2 slice.)
+// whenever a clone is materialized from a shared environment binding. (Interim
+// shared_ptr cell; moves onto the GC heap in a later M2 slice.)
 class Pair : public ClonableNode<Pair, ValueNode> {
 public:
   Pair(std::unique_ptr<ValueNode> Car, std::unique_ptr<ValueNode> Cdr);

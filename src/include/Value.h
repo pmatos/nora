@@ -78,15 +78,17 @@ public:
     return std::make_unique<ast::BooleanLiteral>(nr_truthy(W));
   }
 
-  // Get a shared_ptr to the held value, for storing into an Environment
-  // binding. Moves Legacy into a fresh shared_ptr (if engaged), or returns a
-  // copy of Shared (if engaged).
-  std::shared_ptr<ast::ValueNode> toShared() {
+  // Move a shared_ptr to the held value out, for storing into an Environment
+  // binding. Moves Legacy into a fresh shared_ptr (if engaged, materializing
+  // an immediate into Legacy first), or moves Shared out directly (if
+  // engaged). Either way, emptying this handle: unlike get(), this is a
+  // one-shot consuming read, not a peek.
+  [[nodiscard]] std::shared_ptr<ast::ValueNode> toShared() {
     materializeLegacy();
     if (Legacy) {
       return std::shared_ptr<ast::ValueNode>(std::move(Legacy));
     }
-    return Shared;
+    return std::exchange(Shared, nullptr);
   }
 
   explicit operator bool() const {
@@ -107,10 +109,10 @@ public:
   }
   // Move the value out as an exclusively-owned legacy pointer, emptying this
   // handle. If Legacy is engaged (or an immediate just materialized into it)
-  // this is a plain move. If Shared is engaged, the caller needs exclusive
-  // ownership (e.g. to store into a still-unique_ptr-typed Frame slot), so
-  // materialize a private copy.
-  std::unique_ptr<ast::ValueNode> takeLegacy() {
+  // this is a plain move (no extra cost). If Shared is engaged, the caller
+  // needs exclusive ownership (e.g. to store into a still-unique_ptr-typed
+  // Frame slot), so materialize a private copy.
+  [[nodiscard]] std::unique_ptr<ast::ValueNode> takeLegacy() {
     materializeLegacy();
     if (Legacy) {
       return std::move(Legacy);

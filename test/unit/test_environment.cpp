@@ -59,6 +59,23 @@ TEST_CASE("toShared round-trips through a second share()", "[value]") {
   REQUIRE(Shared1.get() == SP1.get());
 }
 
+TEST_CASE("toShared on a Legacy-engaged Value empties the handle", "[value]") {
+  Value V = std::make_unique<ast::Integer>(11);
+  std::shared_ptr<ast::ValueNode> SP = V.toShared();
+  REQUIRE(SP);
+  REQUIRE_FALSE(V);
+}
+
+TEST_CASE("toShared on a Shared-engaged Value hands out the same node and "
+          "empties the handle",
+          "[value]") {
+  auto Backing = std::make_shared<ast::Integer>(13);
+  Value V = Value::share(Backing);
+  std::shared_ptr<ast::ValueNode> SP = V.toShared();
+  REQUIRE(SP.get() == Backing.get());
+  REQUIRE_FALSE(V);
+}
+
 // Slice 3 (issue #119): Environment/envLookup/envSet share instead of clone.
 
 TEST_CASE("Environment::lookup shares identity across repeated lookups",
