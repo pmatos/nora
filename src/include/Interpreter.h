@@ -79,13 +79,12 @@ public:
   // Get the current saved result, or null if interpretation failed (e.g. an
   // unbound identifier). main() reports the failure and exits non-zero.
   // Special-cases an immediate Result (never calls Result.get(), so Result
-  // itself is left unmaterialized) and builds a BooleanLiteral view directly,
-  // so this seam's output is unchanged whether or not the result is later
-  // forced through the immediate seam below.
+  // itself is left unmaterialized) and builds a view directly via
+  // Value::viewOf(), so this seam's output is unchanged whether or not the
+  // result is later forced through the immediate seam below.
   std::unique_ptr<ast::ValueNode> getResult() const {
     if (Result.isImmediate()) {
-      return std::make_unique<ast::BooleanLiteral>(
-          nr_truthy(Result.rawImmediate()));
+      return Value::viewOf(Result.rawImmediate());
     }
     if (!Result) {
       return nullptr;

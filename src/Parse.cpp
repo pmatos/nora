@@ -227,6 +227,11 @@ std::unique_ptr<ast::ExprNode> Parse::parseExpr(SourceStream &S) {
     return Bool;
   }
 
+  std::unique_ptr<ast::Char> C = parseChar(S);
+  if (C) {
+    return C;
+  }
+
   // A string literal is a self-evaluating expression (its leading '"' matches
   // no other expression parser).
   std::unique_ptr<ast::String> Str = parseString(S);

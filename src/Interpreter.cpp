@@ -774,7 +774,7 @@ void Interpreter::visit(ast::Pair const &P) {
 }
 
 void Interpreter::visit(ast::Char const &C) {
-  deliver(std::unique_ptr<ast::ValueNode>(C.clone()));
+  deliver(Value::immediate(nr_char(C.getCodePoint())));
 }
 
 void Interpreter::visit(ast::String const &Str) {

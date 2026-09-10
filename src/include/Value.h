@@ -61,6 +61,23 @@ public:
     return Result;
   }
 
+  // Build a legacy ValueNode view of an engaged immediate word, so every
+  // existing consumer that expects a non-null ast::ValueNode* keeps working
+  // unchanged. The single dispatcher shared by materializeLegacy() and
+  // Interpreter::getResult(), so a later slice adding another immediate kind
+  // (fixnums) extends this one place rather than re-deriving a second copy.
+  static std::unique_ptr<ast::ValueNode> viewOf(nr_value W) {
+    if (nr_is_char(W)) {
+      return std::make_unique<ast::Char>(nr_char_val(W));
+    }
+    if (W == NR_VOID) {
+      return std::make_unique<ast::Void>();
+    }
+    // NOLINTNEXTLINE(misc-static-assert): a runtime check, not a constant.
+    assert(W == NR_TRUE || W == NR_FALSE);
+    return std::make_unique<ast::BooleanLiteral>(nr_truthy(W));
+  }
+
   // Get a shared_ptr to the held value, for storing into an Environment
   // binding. Moves Legacy into a fresh shared_ptr (if engaged), or returns a
   // copy of Shared (if engaged).
@@ -107,17 +124,12 @@ public:
   }
 
 private:
-  // Materialize an engaged immediate into Legacy, a real ast::BooleanLiteral,
-  // so every existing consumer that expects a non-null ast::ValueNode* keeps
-  // working unchanged. Only booleans are ever wrapped as immediates today
-  // (M2/GC S6); a later slice that starts constructing other immediate kinds
-  // (char/void/null/eof, fixnums) must replace this assert with a real
-  // per-kind dispatch rather than let it silently mismaterialize.
+  // Materialize an engaged immediate into Legacy via viewOf(), so every
+  // existing consumer that expects a non-null ast::ValueNode* keeps working
+  // unchanged.
   void materializeLegacy() const {
     if (Imm != 0 && !Legacy && !Shared) {
-      // NOLINTNEXTLINE(misc-static-assert): a runtime check, not a constant.
-      assert(Imm == NR_TRUE || Imm == NR_FALSE);
-      Legacy = std::make_unique<ast::BooleanLiteral>(nr_truthy(Imm));
+      Legacy = viewOf(Imm);
       Imm = 0;
     }
   }

@@ -55,6 +55,15 @@ struct Run {
     REQUIRE(ok);
     expectBool(result.get(), Expected);
   }
+
+  static void expectChar(const ast::ValueNode *Node, uint32_t Expected) {
+    REQUIRE(expectResult<ast::Char>(Node)->getCodePoint() == Expected);
+  }
+
+  void expectChar(uint32_t Expected) const {
+    REQUIRE(ok);
+    expectChar(result.get(), Expected);
+  }
 };
 
 Run runLinklet(const std::string &Src) {
@@ -360,4 +369,14 @@ TEST_CASE("a box can hold and return an immediate boolean",
           "[interp][m2][gc]") {
   Run R = runLinklet("(linklet () () (unbox (box #t)))");
   R.expectBool(true);
+}
+
+TEST_CASE("bare char literal result is the nr_char immediate, not an "
+          "allocated Char",
+          "[interp][m2][gc]") {
+  Run R = runLinklet("(linklet () () #\\a)");
+  REQUIRE(R.ok);
+  REQUIRE(R.RawImmediate.has_value());
+  REQUIRE(*R.RawImmediate == nr_char('a'));
+  R.expectChar('a');
 }
