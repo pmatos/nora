@@ -4,13 +4,24 @@ Persistent memory for the `pm-deepen` routine. One `## <slug>` entry per candida
 
 ## runtime-builtin-boilerplate
 
-- **Status**: proposed
+- **Status**: in-flight
 - **Score**: 24/25 (leverage 5, locality 5, blast radius 2, heat 5)
-- **Files**: ~3 estimated (`src/Runtime.cpp`, `src/include/Runtime.h`, `src/include/AST.h`)
+- **Files**: ~3 estimated (`src/Runtime.cpp`, `src/include/Runtime.h`, `src/include/AST.h`); actual: 4 (those three plus `test/unit/test_interpreter.cpp`)
 - **Modules**: `src/Runtime.cpp`, `src/include/Runtime.h`, `src/include/AST.h`
 - **Summary**: Collapse the 18 hand-rolled `RuntimeFunction` subclasses — each re-rolling the same arity check, per-arg `dyn_cast` type prologue, and `clone()`/`accept()` tails — behind one deep `RuntimeFunction` seam that owns arity + argument-type dispatch, registering builtins as `{name, arity-spec, typed-handler}` data with handler cores unchanged. All builtins share one `AST_RuntimeFunction` node kind and one visitor overload, so the change never touches the enum, visitors, RTTI, or the caller's `nullptr`→diagnostic contract.
 - **First seen**: 2026-09-10
+- **PR**: #200 (branch `sym/nora/routine/refactor-audit/01M25W8YV7`, adopted)
 - **Reason (picked)**: Top of the 2026-09-10 ranking at 24/25; outranks runner-up candidate `value-register-take-vs-borrow` (22/25) by 2 points. Fresh candidate from the M2/GC hot-spot scan; the "sibling functions repeat the same prologue" collapse.
+
+### Run 2026-09-10 — complete
+
+- **Outcome**: complete
+- **Stopped at**: step 6 — PR #200 opened for `runtime-builtin-boilerplate`
+- **Branch**: `sym/nora/routine/refactor-audit/01M25W8YV7` (adopted — non-default, no unique history, no upstream, unpublished on origin; kept the caller's name, not renamed)
+- **Committed**: report `.architecture/reviews/2026-09-10-runtime-builtin-boilerplate.md`, reconciled backlog (`frame-per-kind-continuation` #191 MERGED → landed; three fresh candidates added), the registry refactor, and its test-first pins in `test/unit/test_interpreter.cpp`
+- **Evidence**: `gh pr view 191/141` both MERGED; no open architecture PR blocked this run; quality gate green — release build warning-clean, `ctest --preset release` 55/55, `clang-format` clean, diff-scoped `clang-tidy` (clang DB, `-warnings-as-errors='*'`) clean
+- **Degradations**: advisor rate-limited — step-4 adjudication self-done against the written designs; step-4 designs produced inline rather than by parallel sub-agents
+- **Next**: review PR #200; the natural next firing is the runner-up candidate `value-register-take-vs-borrow` (22/25)
 
 ## value-register-take-vs-borrow
 
