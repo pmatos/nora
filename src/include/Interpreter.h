@@ -104,7 +104,7 @@ private:
   // header rather than a payload: the mark map (Marks), read by snapshotMarks
   // on every frame and written by setMark on the top activation; and Callee,
   // the applied closure owned by a tail-reusable activation (Call/WcmMark/Halt)
-  // so Control, which points into its (cloned) lambda body, outlives the call.
+  // so Control, which points into its lambda body, outlives the call.
   struct Frame {
     // Halt / WcmMark / Call carry no per-kind state (their content is the
     // header): Halt is a form's bottom, WcmMark holds a with-continuation-mark
@@ -117,7 +117,7 @@ private:
       EnvPtr Env;
       llvm::SmallVector<const ast::ExprNode *> Exprs;
       size_t Idx = 0; // index of the next expression to evaluate
-      std::unique_ptr<ast::ValueNode> Saved; // begin0: saved first value
+      Value Saved;    // begin0: saved first value
       bool Begin0 = false;
     };
     struct IfBranch { // choose the then/else branch
@@ -128,18 +128,18 @@ private:
     struct App { // application: accumulate operator + args, then apply
       EnvPtr Env;
       llvm::SmallVector<const ast::ExprNode *> Exprs;
-      std::vector<std::unique_ptr<ast::ValueNode>> Done; // cursor = Done.size()
-      llvm::SMLoc AppLoc; // source location, for arity/procedure errors
+      std::vector<Value> Done; // cursor = Done.size()
+      llvm::SMLoc AppLoc;      // source location, for arity/procedure errors
     };
     struct MkValues { // (values ...): accumulate then build a Values
       EnvPtr Env;
       llvm::SmallVector<const ast::ExprNode *> Exprs;
-      std::vector<std::unique_ptr<ast::ValueNode>> Done;
+      std::vector<Value> Done;
     };
     struct LetBind { // let-values: accumulate binding values, then bind + body
       EnvPtr Env;
       const ast::LetValues *Let = nullptr;
-      std::vector<std::unique_ptr<ast::ValueNode>> Done;
+      std::vector<Value> Done;
     };
     struct LetRec { // letrec-values: bind each value into the recursive scope
       const ast::LetValues *Let = nullptr;
@@ -162,7 +162,7 @@ private:
     struct WcmVal { // with-continuation-mark: after val, install mark + result
       EnvPtr Env;
       const ast::ExprNode *WcmResultE = nullptr;
-      std::unique_ptr<ast::ValueNode> WcmKeyV;
+      Value WcmKeyV;
     };
 
     // The three tail-reusable activation kinds (Call/WcmMark/Halt) are the last
@@ -173,8 +173,8 @@ private:
         std::variant<Seq, IfBranch, App, MkValues, LetBind, LetRec, Define, Set,
                      WcmKey, WcmVal, Halt, WcmMark, Call>;
 
-    ast::MarkFrame Marks;                   // marks belonging to this frame
-    std::unique_ptr<ast::ValueNode> Callee; // activation's owned closure
+    ast::MarkFrame Marks; // marks belonging to this frame
+    Value Callee;         // activation's owned closure
     Payload P;
 
     // Construct from any payload alternative; excludes Frame itself so the
@@ -230,10 +230,15 @@ private:
   // Deliver the value register to the top continuation frame.
   void continueStep();
   // Apply Vals[0] to Vals[1..]. AppLoc/OpLoc anchor arity/procedure errors.
-  void applyProcedure(std::vector<std::unique_ptr<ast::ValueNode>> Vals,
-                      llvm::SMLoc AppLoc, llvm::SMLoc OpLoc);
+  void applyProcedure(std::vector<Value> Vals, llvm::SMLoc AppLoc,
+                      llvm::SMLoc OpLoc);
   // Evaluate a (non-empty) body sequence in environment E.
   void evalBody(llvm::SmallVector<const ast::ExprNode *> Body, const EnvPtr &E);
+  // Bind one let-values / letrec-values clause into Vars: a single identifier
+  // takes the whole value, while several identifiers require a Values result
+  // whose arity matches. Returns false (after reporting) on a mismatch.
+  bool bindValues(llvm::SMLoc Loc, Environment &Vars,
+                  const ast::LetValues::IdRange &Ids, Value Val);
   // Create a fresh scope enclosed by Parent, tracked so its bindings can be
   // cleared at teardown to break closure/scope reference cycles.
   EnvPtr newScope(const EnvPtr &Parent);

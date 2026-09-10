@@ -3,6 +3,7 @@
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/Twine.h>
 #include <llvm/Support/Casting.h>
+#include <llvm/Support/SMLoc.h>
 #include <llvm/Support/raw_ostream.h>
 
 #include <iostream>
@@ -17,6 +18,7 @@
 #include "ASTRuntime.h"
 #include "Casting.h"
 #include "Environment.h"
+#include "Value.h"
 
 #undef DEBUG_TYPE
 #define DEBUG_TYPE "Interpreter"
@@ -54,18 +56,14 @@ EnvPtr Interpreter::newScope(const EnvPtr &Parent) {
   return S;
 }
 
-// Bind one let-values / letrec-values clause into Vars: a single identifier
-// takes the whole value, while several identifiers require a Values result
-// whose arity matches. Returns false (after reporting) on a mismatch.
-static bool bindValues(nora::DiagnosticEngine &Diag, llvm::SMLoc Loc,
-                       Environment &Vars, const ast::LetValues::IdRange &Ids,
-                       std::unique_ptr<ast::ValueNode> Val) {
+bool Interpreter::bindValues(llvm::SMLoc Loc, Environment &Vars,
+                             const ast::LetValues::IdRange &Ids, Value Val) {
   if (std::ranges::size(Ids) == 1) {
     Vars.add(Ids[0], std::move(Val));
     return true;
   }
 
-  auto Vs = dyn_castU<ast::Values>(Val);
+  auto *Vs = llvm::dyn_cast_or_null<ast::Values>(Val.get());
   if (!Vs) {
     Diag.error(Loc, "let-values binding expected multiple values");
     return false;
@@ -153,7 +151,7 @@ void Interpreter::continueStep() {
 
 void Interpreter::step(Frame::Seq &K) {
   if (K.Begin0 && K.Idx == 1) {
-    K.Saved = Val.takeLegacy();
+    K.Saved = std::move(Val);
   }
   if (K.Idx < K.Exprs.size()) {
     const bool IsLast = K.Idx + 1 == K.Exprs.size();
@@ -176,8 +174,7 @@ void Interpreter::step(Frame::Seq &K) {
   } else {
     // Only begin0 reaches here: its frame persists to the end to return the
     // saved first value; a plain sequence's final expression is handled above.
-    std::unique_ptr<ast::ValueNode> R =
-        K.Begin0 ? std::move(K.Saved) : Val.takeLegacy();
+    Value R = K.Begin0 ? std::move(K.Saved) : std::move(Val);
     Kont.pop_back();
     deliver(std::move(R));
   }
@@ -196,13 +193,13 @@ void Interpreter::step(Frame::IfBranch &K) {
 }
 
 void Interpreter::step(Frame::App &K) {
-  K.Done.push_back(Val.takeLegacy());
+  K.Done.push_back(std::move(Val));
   if (K.Done.size() < K.Exprs.size()) {
     Control = K.Exprs[K.Done.size()];
     Env = K.Env;
     M = Mode::Eval;
   } else {
-    std::vector<std::unique_ptr<ast::ValueNode>> Vals = std::move(K.Done);
+    std::vector<Value> Vals = std::move(K.Done);
     llvm::SMLoc AppLoc = K.AppLoc;
     llvm::SMLoc OpLoc = K.Exprs[0]->getLoc();
     Kont.pop_back();
@@ -211,13 +208,13 @@ void Interpreter::step(Frame::App &K) {
 }
 
 void Interpreter::step(Frame::MkValues &K) {
-  K.Done.push_back(Val.takeLegacy());
+  K.Done.push_back(std::move(Val));
   if (K.Done.size() < K.Exprs.size()) {
     Control = K.Exprs[K.Done.size()];
     Env = K.Env;
     M = Mode::Eval;
   } else {
-    std::vector<std::unique_ptr<ast::ValueNode>> Vals = std::move(K.Done);
+    std::vector<Value> Vals = std::move(K.Done);
     Kont.pop_back();
     if (Vals.size() == 1) {
       deliver(std::move(Vals[0]));
@@ -225,7 +222,7 @@ void Interpreter::step(Frame::MkValues &K) {
       llvm::SmallVector<std::unique_ptr<ast::ExprNode>> Exprs;
       Exprs.reserve(Vals.size());
       for (auto &Vv : Vals) {
-        Exprs.emplace_back(std::move(Vv));
+        Exprs.emplace_back(Vv.takeLegacy());
       }
       deliver(std::make_unique<ast::Values>(std::move(Exprs)));
     }
@@ -233,7 +230,7 @@ void Interpreter::step(Frame::MkValues &K) {
 }
 
 void Interpreter::step(Frame::LetBind &K) {
-  K.Done.push_back(Val.takeLegacy());
+  K.Done.push_back(std::move(Val));
   const ast::LetValues *Let = K.Let;
   if (K.Done.size() < Let->exprsCount()) {
     Control = &Let->getBindingExpr(K.Done.size());
@@ -242,7 +239,7 @@ void Interpreter::step(Frame::LetBind &K) {
     return;
   }
 
-  std::vector<std::unique_ptr<ast::ValueNode>> Vals = std::move(K.Done);
+  std::vector<Value> Vals = std::move(K.Done);
   EnvPtr OuterEnv = K.Env;
   Kont.pop_back();
 
@@ -250,7 +247,7 @@ void Interpreter::step(Frame::LetBind &K) {
   // environment; only now are the identifiers bound, in a fresh scope.
   EnvPtr ScopePtr = newScope(OuterEnv);
   for (size_t I = 0; I < Vals.size(); ++I) {
-    if (!bindValues(Diag, Let->getLoc(), ScopePtr->Vars, Let->getBindingIds(I),
+    if (!bindValues(Let->getLoc(), ScopePtr->Vars, Let->getBindingIds(I),
                     std::move(Vals[I]))) {
       abortEval();
       return;
@@ -270,8 +267,8 @@ void Interpreter::step(Frame::LetRec &K) {
   // in that same scope so forward/mutual references resolve.
   const ast::LetValues *Let = K.Let;
   EnvPtr RecScope = K.RecScope;
-  if (!bindValues(Diag, Let->getLoc(), RecScope->Vars,
-                  Let->getBindingIds(K.Idx), Val.takeLegacy())) {
+  if (!bindValues(Let->getLoc(), RecScope->Vars, Let->getBindingIds(K.Idx),
+                  std::move(Val))) {
     abortEval();
     return;
   }
@@ -344,7 +341,7 @@ void Interpreter::step(Frame::WcmKey &K) {
   const ast::ExprNode *ValE = K.WcmValE;
   const ast::ExprNode *ResultE = K.WcmResultE;
   EnvPtr E = K.Env;
-  std::unique_ptr<ast::ValueNode> KeyV = Val.takeLegacy();
+  Value KeyV = std::move(Val);
   Kont.pop_back();
   Frame::WcmVal &WV = pushK(Frame::WcmVal{});
   WV.WcmResultE = ResultE;
@@ -358,8 +355,8 @@ void Interpreter::step(Frame::WcmKey &K) {
 void Interpreter::step(Frame::WcmVal &K) {
   const ast::ExprNode *ResultE = K.WcmResultE;
   EnvPtr E = K.Env;
-  std::unique_ptr<ast::ValueNode> KeyV = std::move(K.WcmKeyV);
-  std::unique_ptr<ast::ValueNode> ValV = Val.takeLegacy();
+  Value KeyV = std::move(K.WcmKeyV);
+  Value ValV = std::move(Val);
   Kont.pop_back();
   // The result expression is in tail position with respect to whatever frame
   // is now on top. Call/WcmMark/Halt frames are exactly the frames that a tail
@@ -410,10 +407,9 @@ void Interpreter::step(Frame::Halt & /*K*/) {
 // Application
 //
 
-void Interpreter::applyProcedure(
-    std::vector<std::unique_ptr<ast::ValueNode>> Vals, llvm::SMLoc AppLoc,
-    llvm::SMLoc OpLoc) {
-  std::unique_ptr<ast::ValueNode> Op = std::move(Vals[0]);
+void Interpreter::applyProcedure(std::vector<Value> Vals, llvm::SMLoc AppLoc,
+                                 llvm::SMLoc OpLoc) {
+  Value Op = std::move(Vals[0]);
   const size_t NArgs = Vals.size() - 1;
 
   if (!Op) {
@@ -514,7 +510,7 @@ void Interpreter::applyProcedure(
     }
     auto Rest = std::make_unique<ast::List>();
     for (; I < NArgs; ++I) {
-      Rest->appendExpr(std::move(Vals[I + 1]));
+      Rest->appendExpr(Vals[I + 1].takeLegacy());
     }
     CalleeScope->Vars.add(LRF.getRestFormal(), std::move(Rest));
     break;
@@ -523,7 +519,7 @@ void Interpreter::applyProcedure(
     auto IF = static_cast<const ast::IdentifierFormal &>(F);
     auto Lst = std::make_unique<ast::List>();
     for (size_t I = 0; I < NArgs; ++I) {
-      Lst->appendExpr(std::move(Vals[I + 1]));
+      Lst->appendExpr(Vals[I + 1].takeLegacy());
     }
     CalleeScope->Vars.add(IF.getIdentifier(), std::move(Lst));
     break;
@@ -546,7 +542,7 @@ void Interpreter::applyProcedure(
   // still the same continuation frame - which, after reuse, it is.
   if (!Kont.empty() && Kont.back().isReusable()) {
     Frame &Enc = Kont.back();
-    Enc.Callee = std::move(Op); // frees the previous activation's closure
+    Enc.Callee = std::move(Op); // releases the previous activation's closure
     Control = &Clause->getBody();
     Env = CalleeScope;
     M = Mode::Eval;

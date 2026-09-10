@@ -333,3 +333,24 @@ TEST_CASE("a tail-position with-continuation-mark replaces, not "
   REQUIRE(Elem);
   REQUIRE(*Elem == 0);
 }
+
+TEST_CASE("a box installed as a continuation mark keeps its identity",
+          "[interp][m2]") {
+  // Nothing else exercises identity *through* a continuation mark: a Box's
+  // own shared cell already guarantees eq?/mutation survive a clone
+  // regardless of the mark storage's own type, so this passes both before
+  // and after MarkFrame/WcmKeyV move to Value - it pins the invariant going
+  // forward rather than proving new behaviour.
+  Run R = runLinklet("(linklet () () "
+                     "(let-values ([(b) (box 1)]) "
+                     "  (with-continuation-mark 'k b "
+                     "    (begin "
+                     "      (set-box! (continuation-mark-set-first "
+                     "                  (current-continuation-marks) 'k) 42) "
+                     "      (unbox b)))))");
+  REQUIRE(R.ok);
+  REQUIRE(R.result);
+  auto *Int = llvm::dyn_cast<ast::Integer>(R.result.get());
+  REQUIRE(Int);
+  REQUIRE(*Int == 42);
+}

@@ -1,6 +1,7 @@
 #include "ASTRuntime.h"
 
 #include "Casting.h"
+#include "Value.h"
 
 #include <iostream>
 #include <utility>
@@ -131,16 +132,15 @@ MarkFrame ast::cloneMarkFrame(const MarkFrame &F) {
   MarkFrame Out;
   Out.reserve(F.size());
   for (auto const &E : F) {
-    Out.emplace_back(std::unique_ptr<ValueNode>(E.first->clone()),
-                     std::unique_ptr<ValueNode>(E.second->clone()));
+    Out.emplace_back(std::unique_ptr<ValueNode>(E.first.get()->clone()),
+                     std::unique_ptr<ValueNode>(E.second.get()->clone()));
   }
   return Out;
 }
 
-void ast::setMark(MarkFrame &Frame, std::unique_ptr<ValueNode> Key,
-                  std::unique_ptr<ValueNode> Val) {
+void ast::setMark(MarkFrame &Frame, Value Key, Value Val) {
   for (auto &E : Frame) {
-    if (valueEq(*E.first, *Key)) {
+    if (valueEq(*E.first.get(), *Key.get())) {
       E.second = std::move(Val);
       return;
     }

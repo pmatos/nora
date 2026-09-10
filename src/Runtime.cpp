@@ -134,8 +134,8 @@ public:
       if (CMS != nullptr && Key != nullptr) {
         for (auto const &Frame : CMS->getFrames()) {
           for (auto const &E : Frame) {
-            if (ast::valueEq(*E.first, *Key)) {
-              return std::unique_ptr<ast::ValueNode>(E.second->clone());
+            if (ast::valueEq(*E.first.get(), *Key)) {
+              return std::unique_ptr<ast::ValueNode>(E.second.get()->clone());
             }
           }
         }
@@ -167,8 +167,9 @@ public:
       if (CMS != nullptr && Key != nullptr) {
         for (auto const &Frame : CMS->getFrames()) {
           for (auto const &E : Frame) {
-            if (ast::valueEq(*E.first, *Key)) {
-              L->appendExpr(std::unique_ptr<ast::ValueNode>(E.second->clone()));
+            if (ast::valueEq(*E.first.get(), *Key)) {
+              L->appendExpr(
+                  std::unique_ptr<ast::ValueNode>(E.second.get()->clone()));
             }
           }
         }
