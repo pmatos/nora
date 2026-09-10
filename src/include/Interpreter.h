@@ -117,7 +117,7 @@ private:
       EnvPtr Env;
       llvm::SmallVector<const ast::ExprNode *> Exprs;
       size_t Idx = 0; // index of the next expression to evaluate
-      std::unique_ptr<ast::ValueNode> Saved; // begin0: saved first value
+      Value Saved;    // begin0: saved first value
       bool Begin0 = false;
     };
     struct IfBranch { // choose the then/else branch

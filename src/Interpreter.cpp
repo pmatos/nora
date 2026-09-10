@@ -153,7 +153,7 @@ void Interpreter::continueStep() {
 
 void Interpreter::step(Frame::Seq &K) {
   if (K.Begin0 && K.Idx == 1) {
-    K.Saved = Val.takeLegacy();
+    K.Saved = std::move(Val);
   }
   if (K.Idx < K.Exprs.size()) {
     const bool IsLast = K.Idx + 1 == K.Exprs.size();
@@ -176,8 +176,7 @@ void Interpreter::step(Frame::Seq &K) {
   } else {
     // Only begin0 reaches here: its frame persists to the end to return the
     // saved first value; a plain sequence's final expression is handled above.
-    std::unique_ptr<ast::ValueNode> R =
-        K.Begin0 ? std::move(K.Saved) : Val.takeLegacy();
+    Value R = K.Begin0 ? std::move(K.Saved) : std::move(Val);
     Kont.pop_back();
     deliver(std::move(R));
   }
