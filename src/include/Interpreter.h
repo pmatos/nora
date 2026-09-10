@@ -15,6 +15,7 @@
 
 #include <cassert>
 #include <memory>
+#include <optional>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -77,12 +78,29 @@ public:
 
   // Get the current saved result, or null if interpretation failed (e.g. an
   // unbound identifier). main() reports the failure and exits non-zero.
+  // Special-cases an immediate Result (never calls Result.get(), so Result
+  // itself is left unmaterialized) and builds a BooleanLiteral view directly,
+  // so this seam's output is unchanged whether or not the result is later
+  // forced through the immediate seam below.
   std::unique_ptr<ast::ValueNode> getResult() const {
+    if (Result.isImmediate()) {
+      return std::make_unique<ast::BooleanLiteral>(
+          nr_truthy(Result.rawImmediate()));
+    }
     if (!Result) {
       return nullptr;
     }
     return std::unique_ptr<ast::ValueNode>(Result.get()->clone());
   };
+  // The raw nr_value immediate behind Result, or nullopt if Result isn't an
+  // (unmaterialized) immediate. The M2/GC forcing seam: observing this is the
+  // only way to see that a boolean result never allocated.
+  std::optional<nr_value> getResultImmediate() const {
+    if (!Result.isImmediate()) {
+      return std::nullopt;
+    }
+    return Result.rawImmediate();
+  }
   // Peak continuation depth reached across every top-level form run so far.
   // Exposed for the tail-call tests: proper tail calls keep this bounded.
   size_t getPeakKont() const { return PeakKont; }

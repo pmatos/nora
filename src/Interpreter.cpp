@@ -107,7 +107,7 @@ void Interpreter::visit(ast::Linklet const &Linklet) {
   // define-values are visible to earlier closures at call time.
   GlobalEnv = newScope(nullptr);
 
-  std::unique_ptr<ast::ValueNode> Last;
+  Value Last;
   for (const auto &BodyForm : Linklet.getBody()) {
     Kont.clear();
     Kont.emplace_back(Frame(Frame::Halt{}));
@@ -116,7 +116,7 @@ void Interpreter::visit(ast::Linklet const &Linklet) {
     Val = nullptr;
     M = Mode::Eval;
     run();
-    Last = Val.takeLegacy();
+    Last = std::move(Val);
     if (Diag.hadError()) {
       break;
     }
@@ -750,7 +750,7 @@ void Interpreter::visit(ast::Integer const &Int) {
 }
 
 void Interpreter::visit(ast::BooleanLiteral const &Bool) {
-  deliver(std::unique_ptr<ast::ValueNode>(Bool.clone()));
+  deliver(Value::immediate(nr_bool(Bool.value())));
 }
 
 void Interpreter::visit(ast::Box const &B) {
