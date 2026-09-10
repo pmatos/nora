@@ -26,13 +26,24 @@ Persistent memory for the `pm-deepen` routine. One `## <slug>` entry per candida
 
 ## value-register-take-vs-borrow
 
-- **Status**: proposed
+- **Status**: in-flight
 - **Score**: 22/25 (leverage 4, locality 4, blast radius 1, heat 5)
-- **Files**: ~1-2 estimated
+- **Files**: ~1-2 estimated; actual: 3 (`src/include/Value.h`, `src/Interpreter.cpp`, `test/unit/test_environment.cpp`) — within the step-5 2× guard
 - **Modules**: `src/include/Value.h`, `src/Interpreter.cpp`
+- **PR**: #202 (branch `pm-deepen/value-register-take-vs-borrow`, created)
 - **Summary**: The `Value` handle leaks its two representations through `get()`/`takeLegacy()`/`toShared()`; six `step` arms reflexively `takeLegacy()` — which clones a shared value — where a borrow or an into-`Value`-sink move would do, re-introducing the copies #195/#196 removed. Give `Value` a non-cloning borrow/into-sink path and route the read-only/pass-through arms through it.
 - **First seen**: 2026-09-10
 - **Reason (picked 2026-09-11)**: Top surviving `proposed` candidate at 22/25 once `runtime-builtin-boilerplate` (#200) landed — the prior run's recorded "natural next firing". Runner-up candidate this run is `formal-deep-interface` (21/25), within 1 point. Reconfirmed present: 8 `takeLegacy()` sites in `Interpreter.cpp` (6 step arms + 2 in `applyProcedure`), 5 of them avoidable clones (198/306/341/400/408); the 3 genuine `unique_ptr<ExprNode>` sinks (237/525/534) are the AST value-conflation, out of scope. #198 hardened the primitives without changing the call-site friction. Overlaps `bind-result-helper`.
+
+### Run 2026-09-11 — complete
+
+- **Outcome**: complete
+- **Stopped at**: step 6 — PR #202 opened for `value-register-take-vs-borrow`
+- **Branch**: `pm-deepen/value-register-take-vs-borrow` (created from `origin/main` and renamed to the slug — the firing branch `sym/nora/routine/refactor-audit/01M26RZFYA` was **not** adoptable: condition 4 refused it, `refs/remotes/origin/sym/nora/routine/refactor-audit/01M26RZFYA` exists, i.e. it is published on origin)
+- **Committed**: report `.architecture/reviews/2026-09-11-value-register-take-vs-borrow.md` + design section, reconciled backlog (`runtime-builtin-boilerplate` #200 MERGED → landed; four fresh candidates added), the `Value::as<T>()` borrow seam and its test-first pins in `test/unit/test_environment.cpp`, and a seeded `CONTEXT.md`
+- **Evidence**: `gh pr view 200` MERGED, no open architecture PR blocked this run; no `pm-deepen/*` slug branch existed on origin (collision check clear). Quality gate: GCC `release` (`-Werror -O3 -flto`) warning-clean + `ctest` 70/70; GCC `asan` clean + 70/70 + no ASan/LSan reports; Clang 22 `release` warning-clean; diff-scoped `clang-tidy` clean; `clang-format` 22.1.8 clean
+- **Degradations**: advisor rate-limited only at the step-3 approach check (available at step-4 adjudication); the repo's auto-format hook targets `clang-format-22` (absent) — ran unversioned `clang-format` 22.1.8 manually, same version
+- **Next**: review PR #202; the natural next firing is the runner-up candidate `formal-deep-interface` (21/25)
 
 ## continuation-mark-query-seam
 
