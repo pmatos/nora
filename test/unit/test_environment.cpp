@@ -4,6 +4,7 @@
 #include "Environment.h"
 #include "IdPool.h"
 #include "Value.h"
+#include "nora_rt.h"
 
 #include <llvm/Support/Casting.h>
 
