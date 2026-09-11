@@ -4,14 +4,15 @@ Persistent memory for the `pm-deepen` routine. One `## <slug>` entry per candida
 
 ## runtime-builtin-boilerplate
 
-- **Status**: in-flight
+- **Status**: landed
 - **Score**: 24/25 (leverage 5, locality 5, blast radius 2, heat 5)
 - **Files**: ~3 estimated (`src/Runtime.cpp`, `src/include/Runtime.h`, `src/include/AST.h`); actual: 4 (those three plus `test/unit/test_interpreter.cpp`)
 - **Modules**: `src/Runtime.cpp`, `src/include/Runtime.h`, `src/include/AST.h`
 - **Summary**: Collapse the 18 hand-rolled `RuntimeFunction` subclasses — each re-rolling the same arity check, per-arg `dyn_cast` type prologue, and `clone()`/`accept()` tails — behind one deep `RuntimeFunction` seam that owns arity + argument-type dispatch, registering builtins as `{name, arity-spec, typed-handler}` data with handler cores unchanged. All builtins share one `AST_RuntimeFunction` node kind and one visitor overload, so the change never touches the enum, visitors, RTTI, or the caller's `nullptr`→diagnostic contract.
 - **First seen**: 2026-09-10
-- **PR**: #200 (branch `sym/nora/routine/refactor-audit/01M25W8YV7`, adopted)
+- **PR**: #200 (branch `sym/nora/routine/refactor-audit/01M25W8YV7`, adopted) — **merged 2026-09-10**
 - **Reason (picked)**: Top of the 2026-09-10 ranking at 24/25; outranks runner-up candidate `value-register-take-vs-borrow` (22/25) by 2 points. Fresh candidate from the M2/GC hot-spot scan; the "sibling functions repeat the same prologue" collapse.
+- **Reconciled 2026-09-11**: `gh pr view 200` → MERGED (2026-09-10T20:00:54Z), `in-flight` → `landed`. No open architecture PR blocks the 2026-09-11 run.
 
 ### Run 2026-09-10 — complete
 
@@ -25,13 +26,24 @@ Persistent memory for the `pm-deepen` routine. One `## <slug>` entry per candida
 
 ## value-register-take-vs-borrow
 
-- **Status**: proposed
+- **Status**: in-flight
 - **Score**: 22/25 (leverage 4, locality 4, blast radius 1, heat 5)
-- **Files**: ~1-2 estimated
+- **Files**: ~1-2 estimated; actual: 3 (`src/include/Value.h`, `src/Interpreter.cpp`, `test/unit/test_environment.cpp`) — within the step-5 2× guard
 - **Modules**: `src/include/Value.h`, `src/Interpreter.cpp`
+- **PR**: #202 (branch `pm-deepen/value-register-take-vs-borrow`, created)
 - **Summary**: The `Value` handle leaks its two representations through `get()`/`takeLegacy()`/`toShared()`; six `step` arms reflexively `takeLegacy()` — which clones a shared value — where a borrow or an into-`Value`-sink move would do, re-introducing the copies #195/#196 removed. Give `Value` a non-cloning borrow/into-sink path and route the read-only/pass-through arms through it.
 - **First seen**: 2026-09-10
-- **Reason (deprioritised)**: 22/25, runner-up candidate and the natural next firing; sits in GC-critical, mid-migration code, so handle with care. Overlaps `bind-result-helper`.
+- **Reason (picked 2026-09-11)**: Top surviving `proposed` candidate at 22/25 once `runtime-builtin-boilerplate` (#200) landed — the prior run's recorded "natural next firing". Runner-up candidate this run is `formal-deep-interface` (21/25), within 1 point. Reconfirmed present: 8 `takeLegacy()` sites in `Interpreter.cpp` (6 step arms + 2 in `applyProcedure`), 5 of them avoidable clones (198/306/341/400/408); the 3 genuine `unique_ptr<ExprNode>` sinks (237/525/534) are the AST value-conflation, out of scope. #198 hardened the primitives without changing the call-site friction. Overlaps `bind-result-helper`.
+
+### Run 2026-09-11 — complete
+
+- **Outcome**: complete
+- **Stopped at**: step 6 — PR #202 opened for `value-register-take-vs-borrow`
+- **Branch**: `pm-deepen/value-register-take-vs-borrow` (created from `origin/main` and renamed to the slug). **Correction**: the firing branch `sym/nora/routine/refactor-audit/01M26RZFYA` was in fact *adoptable* — `git ls-remote origin` shows it is **not** published on origin, it had no upstream and 0 commits ahead of `origin/main`, so all four adoption conditions held. Preflight misread `git rev-parse refs/remotes/origin/<branch> 2>&1 | tail -1` (which echoes the unresolved argument, not a SHA) as the ref existing, and refused adoption on that false basis. Creating a `pm-deepen/<slug>` branch is nonetheless what this routine expects — it states the PR is pushed from a `pm-deepen/<slug>` branch, not the firing branch — and PR #202's URL is recorded via the Routine Outcome claim, so the outcome is not lost. NB for future firings: `git fetch` here updated only `FETCH_HEAD`, not remote-tracking refs, so local `refs/remotes/origin/*` are unreliable — use `git ls-remote` for the adoption checks.
+- **Committed**: report `.architecture/reviews/2026-09-11-value-register-take-vs-borrow.md` + design section, reconciled backlog (`runtime-builtin-boilerplate` #200 MERGED → landed; four fresh candidates added), the `Value::as<T>()` borrow seam and its test-first pins in `test/unit/test_environment.cpp`, and a seeded `CONTEXT.md`
+- **Evidence**: `gh pr view 200` MERGED, no open architecture PR blocked this run; no `pm-deepen/*` slug branch existed on origin (collision check clear). Quality gate: GCC `release` (`-Werror -O3 -flto`) warning-clean + `ctest` 70/70; GCC `asan` clean + 70/70 + no ASan/LSan reports; Clang 22 `release` warning-clean; diff-scoped `clang-tidy` clean; `clang-format` 22.1.8 clean
+- **Degradations**: advisor rate-limited only at the step-3 approach check (available at step-4 adjudication); the repo's auto-format hook targets `clang-format-22` (absent) — ran unversioned `clang-format` 22.1.8 manually, same version
+- **Next**: review PR #202; the natural next firing is the runner-up candidate `formal-deep-interface` (21/25)
 
 ## continuation-mark-query-seam
 
@@ -123,3 +135,44 @@ Persistent memory for the `pm-deepen` routine. One `## <slug>` entry per candida
 - **Summary**: Default `ASTVisitor`'s 29 pure virtuals to no-ops and remove the entirely-dead `AnalysisFreeVars` pass and undefined `Lambda::findFreeVariables`; optionally collapse the 17 byte-identical `deliver(clone())` self-quoting visit overrides (`Interpreter.cpp:776-842`) behind one hook.
 - **First seen**: 2026-09-02
 - **Reason (deprioritised)**: 16/25; the dead-code half is a cleanup, not a deepening; lowest leverage.
+- **Reconciled 2026-09-11**: self-quoting `deliver(clone())` overrides now 14, not 17 — #199/#201 turned `BooleanLiteral`/`Char`/`Void` into immediates. The dead `AnalysisFreeVars` core is fully present and latently buggy; score unchanged.
+
+## clone-unique-wrap
+
+- **Status**: proposed
+- **Score**: 19/25 (leverage 4, locality 3, blast radius 2, heat 4)
+- **Files**: ~5 estimated
+- **Modules**: `src/include/AST.h` (`ClonableNode` template), 26 wrap-sites across `src/Interpreter.cpp`, `src/Runtime.cpp`, `src/ASTRuntime.cpp`, `src/AST.cpp`
+- **Summary**: `ASTNode::clone()` returns a raw owning `ASTNode*`; 26 callers re-wrap it into `unique_ptr<...>(x->clone())`, an identical leak-prone ceremony. Add a non-virtual `clonePtr()` on `ClonableNode` (or a free `cloneUnique`) that wraps once — the virtual must stay covariant-raw since `unique_ptr` is not covariant — mirroring `Formal::clone()`, which already returns `unique_ptr<Formal>`.
+- **First seen**: 2026-09-11
+- **Reason (deprioritised)**: 19/25, below the 2026-09-11 pick (22/25); mostly mechanical churn across 5 files.
+
+## range-adapter-dedup
+
+- **Status**: proposed
+- **Score**: 19/25 (leverage 3, locality 4, blast radius 1, heat 4)
+- **Files**: ~1-2 estimated
+- **Modules**: `src/include/AST.h`
+- **Summary**: Five hand-rolled range adapters — three byte-identical `IdRange` classes (`DefineValues`, `ListFormal`, `LetValues`) plus `Linklet::FormRange` and `Values::ExprRange` — each an interface as large as its body. Collapse to one generic `IterRange<T>` / `std::ranges::subrange`; the code's own FIXMEs (AST.h:534, :784) already ask for a `view_interface`.
+- **First seen**: 2026-09-11
+- **Reason (deprioritised)**: 19/25, below the pick; callers keep the same range-for usage, only the definitions collapse.
+
+## operand-accumulate-seam
+
+- **Status**: proposed
+- **Score**: 18/25 (leverage 3, locality 2, blast radius 1, heat 5)
+- **Files**: ~1 estimated
+- **Modules**: `src/Interpreter.cpp`
+- **Summary**: `step(App)`, `step(MkValues)` and `step(LetBind)` share a byte-identical accumulate-then-advance operand prologue (Interpreter.cpp:207-251); only the "all done" epilogue differs. An `advanceOrFinish(K)` seam owns the operand state machine, leaving the epilogue per-arm.
+- **First seen**: 2026-09-11
+- **Reason (deprioritised)**: 18/25, below the pick; the state machine is already localised in the `Frame` types, so locality gain is modest.
+
+## abort-eval-fail-helper
+
+- **Status**: dropped
+- **Score**: 15/25 (leverage 2, locality 2, blast radius 1, heat 4)
+- **Files**: ~1 estimated
+- **Modules**: `src/Interpreter.cpp`
+- **Summary**: The `Diag.error(loc, msg); abortEval(); return;` epilogue repeats at ~11 sites; a `return fail(loc, msg)` helper would collapse the 3 lines.
+- **First seen**: 2026-09-11
+- **Reason (dropped)**: Leverage 2 — the interface barely deepens and callers do the same work; a cosmetic epilogue collapse, not a deepening. Recorded so the next run does not re-derive it.

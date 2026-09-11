@@ -6,6 +6,8 @@
 #include <memory>
 #include <utility>
 
+#include <llvm/Support/Casting.h>
+
 #include "AST.h"
 #include "nora_rt.h"
 
@@ -107,11 +109,26 @@ public:
     materializeLegacy();
     return Legacy ? Legacy.get() : Shared.get();
   }
+  // Borrow the held value as a specific ValueNode subtype, without consuming or
+  // cloning it. Like get(), a non-consuming peek: a Shared handle hands back
+  // the very node its binding shares (pointer identity preserved), and an
+  // engaged immediate is materialized into Legacy exactly as get() does.
+  // Returns nullptr if the handle is unengaged or the held node is not a T.
+  // This is the typed peek used wherever an arm only inspects the register;
+  // ownership transfer stays on the loud consuming paths
+  // (takeLegacy()/toShared()).
+  template <std::derived_from<ast::ValueNode> T>
+  [[nodiscard]] const T *as() const {
+    return llvm::dyn_cast_or_null<T>(get());
+  }
   // Move the value out as an exclusively-owned legacy pointer, emptying this
   // handle. If Legacy is engaged (or an immediate just materialized into it)
   // this is a plain move (no extra cost). If Shared is engaged, the caller
-  // needs exclusive ownership (e.g. to store into a still-unique_ptr-typed
-  // Frame slot), so materialize a private copy.
+  // needs exclusive ownership, so materialize a private copy — this is the only
+  // path that clones. Reserved for splicing a value into a unique_ptr<ExprNode>
+  // AST-child slot (ast::Values / ast::List); to hand a value to a sink that
+  // already takes a Value (deliver/envSet/Environment::add/toShared) move the
+  // whole handle, and to inspect it use get()/as<T>().
   [[nodiscard]] std::unique_ptr<ast::ValueNode> takeLegacy() {
     materializeLegacy();
     if (Legacy) {

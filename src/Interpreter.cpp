@@ -64,7 +64,7 @@ bool Interpreter::bindValues(llvm::SMLoc Loc, Environment &Vars,
     return true;
   }
 
-  auto *Vs = llvm::dyn_cast_or_null<ast::Values>(Val.get());
+  const auto *Vs = Val.as<ast::Values>();
   if (!Vs) {
     Diag.error(Loc, "let-values binding expected multiple values");
     return false;
@@ -195,8 +195,7 @@ void Interpreter::step(Frame::IfBranch &K) {
     // Fallback: a value that round-tripped through Environment/toShared()
     // (e.g. a bound #f) is a materialized ast::BooleanLiteral, not an
     // immediate.
-    std::unique_ptr<ast::ValueNode> Legacy = Cond.takeLegacy();
-    auto *B = llvm::dyn_cast_or_null<ast::BooleanLiteral>(Legacy.get());
+    const auto *B = Cond.as<ast::BooleanLiteral>();
     Falsy = B && !B->value();
   }
   Control = Falsy ? ElseE : ThenE;
@@ -303,15 +302,14 @@ void Interpreter::step(Frame::LetRec &K) {
 void Interpreter::step(Frame::Define &K) {
   const ast::DefineValues *DV = K.Def;
   EnvPtr DefEnv = K.DefEnv;
-  std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
   Kont.pop_back();
 
   if (DV->countIds() == 1) {
-    DefEnv->Vars.add(DV->getIds()[0], std::move(V));
+    DefEnv->Vars.add(DV->getIds()[0], std::move(Val));
     deliver(Value::immediate(NR_VOID));
     return;
   }
-  auto *Vs = llvm::dyn_cast_or_null<ast::Values>(V.get());
+  const auto *Vs = Val.as<ast::Values>();
   if (!Vs) {
     Diag.error(DV->getLoc(),
                "define-values expected multiple values from its body");
@@ -338,9 +336,8 @@ void Interpreter::step(Frame::Define &K) {
 void Interpreter::step(Frame::Set &K) {
   const ast::Identifier *Id = K.SetId;
   EnvPtr E = K.Env;
-  std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
   Kont.pop_back();
-  if (!envSet(E, *Id, std::move(V))) {
+  if (!envSet(E, *Id, std::move(Val))) {
     Diag.error(Id->getLoc(),
                llvm::Twine("cannot set unbound identifier: ") + Id->getName());
     abortEval();
@@ -397,17 +394,15 @@ void Interpreter::step(Frame::WcmVal &K) {
 void Interpreter::step(Frame::WcmMark & /*K*/) {
   // The result expression has produced a value; discard the mark frame and
   // pass the value through to the enclosing continuation.
-  std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
   Kont.pop_back();
-  deliver(std::move(V));
+  deliver(std::move(Val));
 }
 
 void Interpreter::step(Frame::Call & /*K*/) {
   // The activation's body has produced a value; its frame (and marks) is
   // discarded and the value flows to the caller's continuation.
-  std::unique_ptr<ast::ValueNode> V = Val.takeLegacy();
   Kont.pop_back();
-  deliver(std::move(V));
+  deliver(std::move(Val));
 }
 
 void Interpreter::step(Frame::Halt & /*K*/) {
@@ -429,7 +424,7 @@ void Interpreter::applyProcedure(std::vector<Value> Vals, llvm::SMLoc AppLoc,
     return;
   }
 
-  if (auto *RF = llvm::dyn_cast<ast::RuntimeFunction>(Op.get())) {
+  if (const auto *RF = Op.as<ast::RuntimeFunction>()) {
     const std::string &Name = RF->getName();
     // (current-continuation-marks) needs the machine's continuation, so it is
     // handled here rather than as a plain runtime function.
@@ -458,7 +453,7 @@ void Interpreter::applyProcedure(std::vector<Value> Vals, llvm::SMLoc AppLoc,
   const ast::Lambda *Clause = nullptr;
   EnvPtr Captured;
 
-  if (auto *C = llvm::dyn_cast<ast::Closure>(Op.get())) {
+  if (const auto *C = Op.as<ast::Closure>()) {
     const ast::Formal &F = C->getLambda().getFormals();
     if (F.getType() == ast::Formal::Type::List) {
       size_t N = static_cast<const ast::ListFormal &>(F).size();
@@ -481,7 +476,7 @@ void Interpreter::applyProcedure(std::vector<Value> Vals, llvm::SMLoc AppLoc,
     }
     Clause = &C->getLambda();
     Captured = C->getEnv();
-  } else if (auto *CLC = llvm::dyn_cast<ast::CaseLambdaClosure>(Op.get())) {
+  } else if (const auto *CLC = Op.as<ast::CaseLambdaClosure>()) {
     const ast::CaseLambda &CL = CLC->getCaseLambda();
     for (size_t Idx = 0; Idx < CL.size(); ++Idx) {
       if (formalsAccept(CL[Idx].getFormals(), NArgs)) {
