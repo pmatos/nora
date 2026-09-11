@@ -20,12 +20,17 @@ The register exposes three kinds of access, and picking the right one is what
 keeps a `Shared` value from being cloned for nothing:
 
 - **Borrow (peek)** — read the held value without consuming it: `Value::get()`
-  (untyped `ValueNode*`) or `Value::as<T>()` (typed `const T*`, `nullptr` on a
-  type mismatch). Never clones; the node stays owned by the register.
+  (untyped `ValueNode*`), `Value::as<T>()` (typed `const T*`, `nullptr` on a
+  type mismatch), or, for an engaged immediate specifically, the raw-word fast
+  path `isImmediate()`/`rawImmediate()` (e.g. `step(Frame::IfBranch&)`), which
+  reads the bare `nr_value` word without even materializing it into `Legacy`.
+  Never clones; the node (or word) stays owned by the register.
 
 - **Move into a sink** — hand the whole `Value` to a callee that takes a `Value`
-  by value (`deliver`, `envSet`, `Environment::add`, `Value::toShared`). Transfers
-  ownership by move; never clones.
+  by value (`deliver`, `envSet`, `Environment::add`). Transfers ownership by
+  move; never clones. `Value::toShared()` transfers similarly but is a method
+  called *on* the handle rather than a parameter it's moved into — it consumes
+  `this` and returns a `shared_ptr<ValueNode>`, not a callee taking a `Value`.
 
 - **Clone-out** — `Value::takeLegacy()`, the only path that clones a `Shared`
   value, producing an exclusively-owned `unique_ptr<ValueNode>`. Reserved for
